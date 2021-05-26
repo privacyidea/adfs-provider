@@ -1,0 +1,123 @@
+﻿<div id="loginArea">
+    <form method="post" id="loginForm">
+        <!-- These inputs are required by the presentation framework. Do not modify or remove -->
+        <input id="authMethod" type="hidden" name="AuthMethod" value="%AuthMethod%" />
+        <input id="context" type="hidden" name="Context" value="%Context%" />
+        <!-- End inputs are required by the presentation framework. -->
+
+
+        <p id="pageIntroductionText" style="color:red">#ERROR#</p>
+        <br />
+        <label for="otp" class="block">#MESSAGE#</label>
+        <input id="otp" name="otp" type="password" value="" class="text" placeholder="#OTPTEXT#" size="35" />
+        <div id="submissionArea" class="submitMargin">
+            <input id="submitButton" type="submit" name="Submit" value="#SUBMIT#" />
+        </div>
+
+        <input id="autoSubmit" type="hidden" name="autoSubmit" value="#autoSubmit#" />
+        <input id="mode" type="hidden" name="mode" value="#mode#" />
+        <input id="pushAvailable" type="hidden" name="pushAvailable" value="#pushAvailable#" />
+        <input id="otpAvailable" type="hidden" name="otpAvailable" value="#otpAvailable#" />
+        <input id="webAuthnSignRequest" type="hidden" name="webAuthnSignRequest" value="#webAuthnSignRequest#" />
+        <input id="modeChanged" type="hidden" name="modeChanged" value="#modeChanged#" />
+        <input id="origin" type="hidden" name="origin" value="" />
+
+        <input id="authCounter" type="hidden" name="authCounter" value="#authCounter#" />
+
+        <!-- Extra input to persist the message -->
+        <input id="message" type="hidden" name="message" value="#MESSAGE#" />
+
+        <script>
+            // Helper functions
+            function value(id) {
+                return document.getElementById(id).value;
+            }
+
+            function disable(id) {
+                document.getElementById(id).style.display = "none";
+            }
+
+            function enable(id) {
+                document.getElementById(id).style.display = "initial";
+            }
+
+            function changeMode(newMode) {
+                document.getElementById("mode").value = newMode;
+                document.getElementById("modeChanged").value = "1";
+                document.forms["loginForm"].submit();
+            }
+        </script>
+
+        <div id="alternateTokenDiv" class="groupMargin">
+            Alternate Login Options
+            <br />
+            <input id="useWebAuthnButton" style="background-color: rgb(38, 114, 236); border: none; border-style: solid; border-width: 1px; height: 30px; min-width: 80px; width: auto;
+        color: white; margin-bottom: 8px; user-select: none; padding: 4px 20px 6px 20px;" name="useWebAuthnButton" type="button" value="WebAuthn" onclick="doWebAuthn()" />
+
+            <input id="usePushButton" style="background-color: rgb(38, 114, 236); border: none; border-style: solid; border-width: 1px; height: 30px; min-width: 80px; width: auto;
+        color: white; margin-bottom: 8px; user-select: none; padding: 4px 20px 6px 20px;" name="usePushButton" type="button" value="Push" onclick="changeMode('push')" />
+
+            <input id="useOTPButton" style="background-color: rgb(38, 114, 236); border: none; border-style: solid; border-width: 1px; height: 30px; min-width: 80px; width: auto;
+        color: white; margin-bottom: 8px; user-select: none; padding: 4px 20px 6px 20px;" name="useOTPButton" type="button" value="OTP" onclick="changeMode('otp')" />
+        </div>
+
+    </form>
+
+    <div id="intro" class="groupMargin">
+    </div>
+
+    <script>
+        'use strict';
+        // Set origin
+        if (!window.location.origin) {
+            window.location.origin = window.location.protocol + "//" + window.location.hostname + (window.location.port ? ':' + window.location.port : '');
+        }
+        document.getElementById("origin").value = window.origin;
+
+        if (value("autoSubmit") === "1") {
+            document.forms["loginForm"].submit();
+        }
+
+        // Set alternate token button visibility
+        if (value("webAuthnSignRequest") === "") {
+            disable("useWebAuthnButton");
+        }
+
+        if (value("pushAvailable") === "0") {
+            disable("usePushButton");
+        }
+
+        if (value("pushAvailable") === "0" && value("webAuthnSignRequest") === "") {
+            disable("alternateTokenDiv");
+        }
+
+        // Set UI according to mode
+        if (value("mode") === "push") {
+            const pollingIntervals = [4, 2, 2, 1];
+            disable("submissionArea");
+            disable("otp");
+            disable("usePushButton");
+
+            var refreshTime = 2;
+            if (value("authCounter") > (pollingIntervals.length - 1)) {
+                refreshTime = pollingIntervals[(pollingIntervals.length - 1)];
+            } else {
+                refreshTime = pollingIntervals[Number(value("authCounter")) - 1];
+            }
+            refreshTime *= 1000;
+            setTimeout(() => {
+                document.forms["loginForm"].submit();
+            }, refreshTime);
+        }
+
+        if (value("mode") == "otp") {
+            disable("useOTPButton");
+        }
+
+        // WebAuthn functions
+        function doWebAuthn() {
+
+        }
+
+    </script>
+</div>

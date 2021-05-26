@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    <!-- DEFAULT TEXTS FOR INPUTS -->
+    <Property Id="SERVICEUSER" Value="Username"/>
+    <Property Id="SERVICEPASS" Value="Password"/>
+    
+    <UI>
+      <TextStyle Id="Tahoma_Bold" FaceName="Tahoma" Size="8" Bold="yes"/>
+      <!-- PAGE 1-->
+      <Dialog Id="ConfigurationDlg" Width="370" Height="270" Title="[ProductName] Setup" NoMinimize="yes">
+        <Control Type="CheckBox" Id="cbox_ssl" Width="123" Height="15" X="38" Y="75" Text="Disable SSL Verification" CheckBoxValue="1" Property="DISABLESSL"/>
+        <Control Type="Edit" Id="in_url" Width="164" Height="15" X="90" Y="56" Text="Server URL" Property="URL" Help="Server URL including scheme and path."/>
+        <Control Type="CheckBox" Id="cbox_upn" Width="50" Height="17" X="38" Y="135" Text="Use UPN" CheckBoxValue="1" Property="USEUPN"/>
+        <Control Type="CheckBox" Id="cbox_debuglog" Width="116" Height="17" X="38" Y="214" Text="Activate debug log" CheckBoxValue="1" Property="DEBUGLOG"/>
+        <Control Type="Edit" Id="in_realm" Width="74" Height="15" X="90" Y="98" Text="Realm" Property="REALM"/>
+        
+        <!-- TRIGGER CHALLENGE / SEND PASSWORD CONTROLS -->
+        <!-- The checkboxes are mutually exclusive and the inputs only active if the trigger challenge on is checked -->
+        <Control Type="CheckBox" Id="cbox_trigger" Width="188" Height="17" X="38" Y="154" Text="Trigger challenges using service account" CheckBoxValue="1" Property="TRIGGERCHALLENGES">
+          <Publish Property="SENDEMPTYPASS" Value="{}" Order="1">TRIGGERCHALLENGES</Publish>
+        </Control>
+        
+        <Control Type="CheckBox" Id="cbox_emptypass" Width="236" Height="17" X="38" Y="195" Text="Send empty password" CheckBoxValue="1" Property="SENDEMPTYPASS">
+          <Publish Property="TRIGGERCHALLENGES" Value="{}" Order="1">SENDEMPTYPASS</Publish>
+        </Control>
+        <!-- USERNAME AND PASSWORD INPUT -->
+        <Control Type="Edit" Id="in_serviceuser" Width="78" Height="15" X="38" Y="176" Text="Username" Property="SERVICEUSER"
+                 Help="Username of the service account." ToolTip="Username of the the service account.">
+          <Condition Action="disable">TRIGGERCHALLENGES&lt;&gt;1</Condition>
+          <Condition Action="enable">TRIGGERCHALLENGES=1</Condition>
+        </Control>
+        
+        <Control Type="Edit" Id="in_servicepass" Width="78" Height="15" X="131" Y="176" Text="Password" Property="SERVICEPASS" 
+                 Help="Password of the service account." ToolTip="Password of the service account.">
+          <Condition Action="disable" >TRIGGERCHALLENGES&lt;&gt;1</Condition>
+          <Condition Action="enable" >TRIGGERCHALLENGES=1</Condition>
+        </Control>
+        <!-- END TRIGGER CHALLENGE / SEND PASSWORD CONTROLS -->
+
+        <!-- Bottom Controls -->
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="&amp;Back">
+          <!-- <Publish Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>-->
+        </Control>
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="&amp;Next">
+          <Publish Event="NewDialog" Value="VerifyReadyDlg">URL</Publish>
+          <Publish Event="SpawnDialog" Value="NoServerURLMessageDlg">URL="Server URL"</Publish>
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel">
+          <Publish Event="SpawnDialog" Value="CancelDlg">1</Publish>
+        </Control>
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="WixUI_Bmp_Banner"/>
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="280" Height="15" Transparent="yes" NoPrefix="yes">
+          <Text>Configure server URL and other properties.</Text>
+        </Control>
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0"/>
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="200" Height="15" Transparent="yes" NoPrefix="yes">
+          <Text>{\WixUI_Font_Title}AD FS Provider Configuration</Text>
+        </Control>
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="2"/>
+        <Control Type="Text" Id="label_url" Width="44" Height="9" X="38" Y="58" Text="Server URL"/>
+        <Control Type="Text" Id="label_realm" Width="44" Height="25" X="38" Y="98" Text="Realm (optional)"/>
+      </Dialog>
+      <!-- END PAGE 1-->
+      <Dialog Id="NoServerURLMessageDlg" Width="260" Height="85" Title="[ProductName] Setup" NoMinimize="yes">
+        <!--  <Control Id="Icon" Type="Icon" X="15" Y="15" Width="24" Height="24"
+              ToolTip="Information icon" FixedSize="yes" IconSize="32" Text="ExclamIcon"/>-->
+        <Control Id="Return" Type="PushButton" X="100" Y="57" Width="56" Height="17" Default="yes" Cancel="yes" Text="&amp;Return">
+          <Publish Event="EndDialog" Value="Return">1</Publish>
+        </Control>
+        <Control Id="Text" Type="Text" X="48" Y="15" Width="194" Height="30" TabSkip="no">
+          <Text>
+            The Server URL is mandatory!
+          </Text>
+        </Control>
+      </Dialog>
+    </UI>
+  </Fragment>
+</Wix>

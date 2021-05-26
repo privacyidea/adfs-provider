@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Include>
+  <?define Publisher = "Netknights GmbH" ?>
+  <?define ProductName = "PrivacyIDEA AD FS Provider" ?>
+  <?define AppURLInfoAbout = "https://www.netknights.it" ?>
+  <?define ProductFolderName = "PrivacyIDEA AD FS Provider" ?>
+  <?define SimpleProductName = "PrivacyIDEA-ADFS" ?>
+  <?define Version = !(bind.fileVersion.ProviderDll) ?>
+</Include>
