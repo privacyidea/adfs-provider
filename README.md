@@ -1,7 +1,10 @@
 # Acknowledgement
 This project builds on Stephan Traub's [original provider v1.3.8.2](https://github.com/sbidy/privacyIDEA-ADFSProvider/tree/f66100713e650d134ac50fcbd3965b71ae588d47). 
 
-# Signing
+## Requirements
+To use the provider, the [.NET Framework 4.8](https://dotnet.microsoft.com/download/dotnet-framework/net48) is required on the target machine.
+
+## Signing
 The dll that is created by this solution requires to be signed to be deployed. Change the key file to your own in the project settings of the provider.
 
 ## Windows Server 2019
