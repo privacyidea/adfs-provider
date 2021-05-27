@@ -87,10 +87,10 @@
     </InstallExecuteSequence>
     <!-- END INSTALL EXECUTE SEQUENCE -->
 
-    <!--Set Logos and License -->
+    <!-- Set Logos and License -->
     <WixVariable Id="WixUIDialogBmp" Value="$(var.ProjectDir)\Assets\Dialog.bmp"/>
     <WixVariable Id="WixUIBannerBmp" Value="$(var.ProjectDir)\Assets\Banner.bmp"/>
-    <WixVariable Id="WixUILicenseRtf" Value="$(var.ProjectDir)\Assets\MITLicense.rtf"/>
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.ProjectDir)\Assets\AGPLv3.rtf"/>
 
     <!-- UI Dialogues -->
     <UI Id="MyWixUI_FeatureTree">
