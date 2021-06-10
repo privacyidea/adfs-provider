@@ -259,7 +259,7 @@
 
         // Set UI according to mode
         if (value("mode") === "push") {
-            const pollingIntervals = [4, 2, 2, 1];
+            const pollingIntervals = [3, 2, 2, 1];
             disable("submissionArea");
             disable("otp");
             disable("usePushButton");
@@ -287,6 +287,7 @@
         // WebAuthn functions
         function doWebAuthn() {
             // If mode is push, we have to change it, otherwise the site will refresh while doing webauthn
+            if (value("mode") === "push") {
                 changeMode("webauthn");
             }
 

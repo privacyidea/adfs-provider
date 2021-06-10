@@ -81,6 +81,26 @@ namespace SDKNS
             return PIResponse.FromJSON(response, this);
         }
 
+        public PIResponse ValidateCheckWebAuthn(string user, string transactionid, string webAuthnSignResponse, string origin)
+        {
+            if (string.IsNullOrEmpty(user) || string.IsNullOrEmpty(transactionid) || string.IsNullOrEmpty(webAuthnSignResponse) || string.IsNullOrEmpty(origin))
+            {
+                Log("ValidateCheckWebAuthn called with missing parameter: user=" + user + ", transactionid=" + transactionid
+                    + ", WebAuthnSignResponse=" + webAuthnSignResponse + ", origin=" + origin);
+            }
+
+            var parameters = new List<KeyValuePair<string, string>>();
+            parameters.Add(new KeyValuePair<string, string>("user", user));
+            parameters.Add(new KeyValuePair<string, string>("pass", ""));
+            parameters.Add(new KeyValuePair<string, string>("transaction_id", transactionid));
+
+            var headers = new List<KeyValuePair<string, string>>();
+            headers.Add(new KeyValuePair<string, string>("Origin", origin));
+
+
+            return null;
+        }
+
         internal bool ServiceAccountAvailable()
         {
             return !string.IsNullOrEmpty(serviceuser) && !string.IsNullOrEmpty(servicepass);
@@ -93,7 +113,6 @@ namespace SDKNS
                 list.Add(new KeyValuePair<string, string>(key, optValue));
             }
         }
-
         public PIResponse TriggerChallenges(string username)
         {
             if (!ServiceAccountAvailable())
