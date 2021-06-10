@@ -49,9 +49,7 @@ namespace privacyIDEAADFSProvider
         public IAdapterPresentation BeginAuthentication(Claim identityClaim, HttpListenerRequest request,
             IAuthenticationContext authContext)
         {
-            Log("BeginAuthentication Claim: " + identityClaim.Value);
-
-            Log("QueryStringKeys:" + string.Join(", ", request.QueryString.AllKeys));
+            Log("BeginAuthentication: identityClaim: " + identityClaim.Value);
 
             // seperates the username from the domain
             // TODO: Map the domain to the PI realm
@@ -62,24 +60,18 @@ namespace privacyIDEAADFSProvider
             {
                 username = tmp[1];
                 domain = tmp[0];
-
-                PrincipalContext ctx1 = new PrincipalContext(ContextType.Domain, domain);
-                UserPrincipal user1 = UserPrincipal.FindByIdentity(ctx1, username);
-                upn = user1.UserPrincipalName;
-                Log("Found UPN: " + upn);
-
                 if (use_upn)
                 {
                     // get UPN from sAMAccountName
-                    Log("Getting UPN for user:" + username + " domain: " + domain);
-
+                    Log("Getting UPN for user:" + username + " and domain: " + domain + "...");
                     PrincipalContext ctx = new PrincipalContext(ContextType.Domain, domain);
                     UserPrincipal user = UserPrincipal.FindByIdentity(ctx, username);
                     upn = user.UserPrincipalName;
+                    Log("Found UPN: " + upn);
                 }
                 else
                 {
-                    upn = "not configured";
+                    upn = "not used";
                 }
             }
             else
@@ -100,7 +92,7 @@ namespace privacyIDEAADFSProvider
             // Prepare the form
             var form = new AdapterPresentationForm();
 
-            // trigger challenge
+            // trigger challenges
             // string webAuthnSignRequest = "";
             PIResponse response = null;
 
@@ -135,7 +127,7 @@ namespace privacyIDEAADFSProvider
                 }
                 else if (response.Value)
                 {
-                    // Success in step 1
+                    // Success in step 1, carry this over to the second step so that it will be skipped
                     authContext.Data.Add("authSuccess", "1");
                     form.AutoSubmit = "1";
                 }
@@ -151,16 +143,6 @@ namespace privacyIDEAADFSProvider
             authContext.Data.Add("realm", realm);
 
             return form;
-        }
-
-        private Claim[] Claims()
-        {
-            // Return the required authentication method claim, indicating the particular authentication method used.
-            return new[] {
-                     new Claim(
-                            "http://schemas.microsoft.com/ws/2008/06/identity/claims/authenticationmethod",
-                            "http://schemas.microsoft.com/ws/2012/12/authmethod/otp")
-                        };
         }
 
         /// <summary>
@@ -196,8 +178,8 @@ namespace privacyIDEAADFSProvider
             Dictionary<string, object> proofDict = proofData.Properties;
 
 
-            Log("ProofData: " + string.Join(Environment.NewLine, proofData.Properties));
-            Log("AuthContext: " + string.Join(Environment.NewLine, authContext.Data));
+            Log("ProofData: " + string.Join(", " , proofData.Properties));
+            Log("AuthContext: " + string.Join(" ," , authContext.Data));
             // Prepare form to return, fill with values from proofData
             var form = new AdapterPresentationForm();
 
@@ -297,6 +279,16 @@ namespace privacyIDEAADFSProvider
             return form;
         }
 
+        // Return the required authentication method claim, indicating the particular authentication method used.
+        private Claim[] Claims()
+        {
+            return new[] {
+                     new Claim(
+                            "http://schemas.microsoft.com/ws/2008/06/identity/claims/authenticationmethod",
+                            "http://schemas.microsoft.com/ws/2012/12/authmethod/otp")
+                        };
+        }
+
         private T GetFromDict<T>(Dictionary<string, T> dict, string key, T defaultValue = default(T))
         {
             if (dict.ContainsKey(key))
@@ -319,7 +311,9 @@ namespace privacyIDEAADFSProvider
             System.Diagnostics.FileVersionInfo fvi = System.Diagnostics.FileVersionInfo.GetVersionInfo(assembly.Location);
             string realversion = fvi.FileVersion;
             Log("OnAuthenticationPipelineLoad: Provider Version " + realversion);
-            List<string> configKeys = new List<string>(new string[] { "use_upn", "url", "disable_ssl", "service_user", "service_pass", "service_realm",
+
+            List<string> configKeys = new List<string>(new string[] 
+            { "use_upn", "url", "disable_ssl", "service_user", "service_pass", "service_realm",
                 "realm", "trigger_challenges", "send_empty_pass", "debug_log" });
             var configDict = new Dictionary<string, string>();
             LogFunction log = Log;
@@ -327,7 +321,7 @@ namespace privacyIDEAADFSProvider
             configKeys.ForEach(key =>
             {
                 string value = rr.Read(key);
-                Log("Read value " + value + " for key " + key);
+                Log("Read value '" + value + "' for key '" + key + "'");
                 configDict[key] = value;
             });
 
@@ -340,7 +334,6 @@ namespace privacyIDEAADFSProvider
 
             // Note: the config asks if ssl verify should be disabled, while the constructor parameter indicates if ssl verify should be enabled!
             bool shouldUseSSL = GetFromDict(configDict, "disable_ssl", "0") != "1";
-            Log("Setting SSL to: " + shouldUseSSL);
 
             this.privacyIDEA = new PrivacyIDEA(url, "PrivacyIDEA-ADFS", shouldUseSSL);
 

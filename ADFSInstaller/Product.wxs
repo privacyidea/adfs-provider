@@ -60,7 +60,7 @@
     <CustomAction Id="RunPowerShellUninstall"
                   BinaryKey="WixCA"
                   DllEntry="CAQuietExec"
-                  Execute="commit"
+                  Execute="deferred"
                   Return="check"
                   Impersonate="no"/>
     <!-- END Custom action definitions-->
@@ -112,7 +112,7 @@
       <Custom Action="RunPowerShellInstall" After="InstallInitialize">NOT Installed</Custom>
 
       <Custom Action="SetPowerShellUninstallInput" After="CostFinalize">Installed</Custom>
-      <Custom Action="RunPowerShellUninstall" Before="RemoveFiles">Installed</Custom>
+      <Custom Action="RunPowerShellUninstall" After="InstallInitialize">Installed</Custom>
     </InstallExecuteSequence>
     <!-- END INSTALL EXECUTE SEQUENCE -->
 
@@ -125,7 +125,7 @@
     <UI Id="MyWixUI_FeatureTree">
       <UIRef Id="WixUI_FeatureTree"/>
       <DialogRef Id="ConfigurationDlg"/>
-
+      <!-- Skip the component dialog which is part of this UI set -->
       <Publish Dialog="ConfigurationDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
       <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="ConfigurationDlg">1</Publish>
       <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="ConfigurationDlg" Order="1">NOT Installed OR (WixUI_InstallMode = "Change" AND USER_IS_ADMINISTRATOR = "1" )</Publish>
@@ -167,7 +167,7 @@
       </Component>
 
       <!-- PROVIDER DLL COMPONENT (NO GAC) -->
-      <Component Id='ProviderDll' Guid='{26543458-C9DE-4A4A-95E7-AE8AE0C81522}' DiskId='1'>
+      <Component Id='ProviderDll' Guid='{539D96DC-692A-4BF3-B74A-31CEC8700A4B}' DiskId='1'>
         <File Id="ProviderDll"
                    Name="$(var.privacyIDEAADFSProvider.TargetFileName)"
                    Source="$(var.privacyIDEAADFSProvider.TargetPath)"
@@ -175,7 +175,7 @@
       </Component>
 
       <!-- NEWTONSOFT JSON COMPONENT (GAC) -->
-      <Component Id='NewtonsoftJsonDll' Guid='{A9474B9F-B8B5-4076-B3E0-017AFE46A0B9}' DiskId='1'>
+      <Component Id='NewtonsoftJsonDll' Guid='{CC78BE32-EB49-4008-8EFC-5DE7F7F862FA}' DiskId='1'>
         <File Id="NewtonsoftJsonDll"
                    Name="Newtonsoft.Json.dll"
                    Source="$(var.privacyIDEAADFSProvider.TargetDir)\Newtonsoft.Json.dll"
@@ -184,14 +184,14 @@
       </Component>
 
       <!-- INSTALL SCRIPT -->
-      <Component Id="InstallScript" Guid="{E29E0C5D-BF16-4C7D-98DD-9A08A59869D1}" DiskId="1">
+      <Component Id="InstallScript" Guid="{3F012B01-1F99-414D-86B7-A4B33372EEAD}" DiskId="1">
         <File Id="InstallScript"
               Name="Install.ps1"
               Source ="$(var.privacyIDEAADFSProvider.ProjectDir)\Install.ps1"/>
       </Component>
 
       <!-- UNINSTALL SCRIPT -->
-      <Component Id="UninstallScript" Guid="{93BDFBB0-CF92-458A-A6B9-D864825CD622}" DiskId="1">
+      <Component Id="UninstallScript" Guid="{0E2A4A57-C01D-4652-8FBF-E128D07B36B4}" DiskId="1">
         <File Id="UninstallScript"
               Name="Uninstall.ps1"
               Source ="$(var.privacyIDEAADFSProvider.ProjectDir)\Uninstall.ps1"/>
