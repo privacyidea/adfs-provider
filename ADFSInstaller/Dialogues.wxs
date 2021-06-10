@@ -1,18 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Fragment>
-    <!-- DEFAULT TEXTS FOR INPUTS -->
-    <Property Id="SERVICEUSER" Value="Username"/>
-    <Property Id="SERVICEPASS" Value="Password"/>
-    
     <UI>
       <TextStyle Id="Tahoma_Bold" FaceName="Tahoma" Size="8" Bold="yes"/>
       <!-- PAGE 1-->
       <Dialog Id="ConfigurationDlg" Width="370" Height="270" Title="[ProductName] Setup" NoMinimize="yes">
-        <Control Type="CheckBox" Id="cbox_ssl" Width="123" Height="15" X="38" Y="75" Text="Disable SSL Verification" CheckBoxValue="1" Property="DISABLESSL"/>
+        <!-- MAIN -->
         <Control Type="Edit" Id="in_url" Width="164" Height="15" X="90" Y="56" Text="Server URL" Property="URL" Help="Server URL including scheme and path."/>
-        <Control Type="CheckBox" Id="cbox_upn" Width="50" Height="17" X="38" Y="135" Text="Use UPN" CheckBoxValue="1" Property="USEUPN"/>
-        <Control Type="CheckBox" Id="cbox_debuglog" Width="116" Height="17" X="38" Y="214" Text="Activate debug log" CheckBoxValue="1" Property="DEBUGLOG"/>
+        <Control Type="CheckBox" Id="cbox_ssl" Width="123" Height="15" X="38" Y="75" Text="Disable SSL Verification" CheckBoxValue="1" Property="DISABLESSL"/>
+ 
         <Control Type="Edit" Id="in_realm" Width="74" Height="15" X="90" Y="98" Text="Realm" Property="REALM"/>
         
         <!-- TRIGGER CHALLENGE / SEND PASSWORD CONTROLS -->
@@ -37,7 +33,11 @@
           <Condition Action="enable" >TRIGGERCHALLENGES=1</Condition>
         </Control>
         <!-- END TRIGGER CHALLENGE / SEND PASSWORD CONTROLS -->
-
+        
+        <Control Type="CheckBox" Id="cbox_upn" Width="50" Height="17" X="38" Y="135" Text="Use UPN" CheckBoxValue="1" Property="USEUPN"/>
+        
+        <Control Type="CheckBox" Id="cbox_debuglog" Width="116" Height="17" X="38" Y="214" Text="Activate debug log" CheckBoxValue="1" Property="DEBUGLOG"/>
+        <!-- END MAIN -->
         <!-- Bottom Controls -->
         <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="&amp;Back">
           <!-- <Publish Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>-->

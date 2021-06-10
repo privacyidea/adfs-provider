@@ -65,15 +65,44 @@
                   Impersonate="no"/>
     <!-- END Custom action definitions-->
 
-    <!-- Lookup configuration values in registry to prefill fields (in case of change) -->
-    <Property Id="URL" Value = "Server URL">
-     <!-- <RegistrySearch Id="SearchHostname"              
-                      Root="HKLM" 
-                      Key="SOFTWARE\$(var.Manufacturer)\$(var.SimpleProductName)" 
-                      Name="hostname"               
-                      Win64="$(var.Win64)" 
-                      Type="raw"/>-->
+    <!-- Lookup configuration values in registry to prefill fields -->
+    <Property Id="URL">
+      <RegistrySearch Id="SearchHostname" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+                      Name="url" Win64="yes" Type="raw"/>
     </Property>
+    <Property Id="DISABLESSL">
+      <RegistrySearch Id="SearchDisableSSL" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+                      Name="disable_ssl" Win64="yes" Type="raw"/>
+    </Property>
+    <Property Id="REALM">
+      <RegistrySearch Id="SearchRealm" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+                      Name="realm" Win64="yes" Type="raw"/>
+    </Property>
+    <Property Id="USEUPN">
+      <RegistrySearch Id="SearchUseUPN" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+                      Name="use_upn" Win64="yes" Type="raw"/>
+    </Property>
+    <Property Id="SERVICEUSER">
+      <RegistrySearch Id="SearchServiceUser" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+                      Name="service_user" Win64="yes" Type="raw"/>
+    </Property>
+    <Property Id="SERVICEPASS">
+      <RegistrySearch Id="SearchServicePass" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+                      Name="service_pass" Win64="yes" Type="raw"/>
+    </Property>
+    <Property Id="TRIGGERCHALLENGES">
+      <RegistrySearch Id="SearchTriggerChallenges" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+                      Name="trigger_challenges" Win64="yes" Type="raw"/>
+    </Property>
+    <Property Id="SENDEMPTYPASS">
+      <RegistrySearch Id="SearchSendEmptyPass" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+                      Name="send_empty_pass" Win64="yes" Type="raw"/>
+    </Property>
+    <Property Id="DEBUGLOG">
+      <RegistrySearch Id="SearchDebugLog" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+                      Name="debug_log" Win64="yes" Type="raw"/>
+    </Property>
+    <!-- END LOOKUP -->
     
     <!-- INSTALL EXECUTE SEQUENCE -->
     <InstallExecuteSequence>
@@ -96,7 +125,7 @@
     <UI Id="MyWixUI_FeatureTree">
       <UIRef Id="WixUI_FeatureTree"/>
       <DialogRef Id="ConfigurationDlg"/>
-      
+
       <Publish Dialog="ConfigurationDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
       <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="ConfigurationDlg">1</Publish>
       <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="ConfigurationDlg" Order="1">NOT Installed OR (WixUI_InstallMode = "Change" AND USER_IS_ADMINISTRATOR = "1" )</Publish>

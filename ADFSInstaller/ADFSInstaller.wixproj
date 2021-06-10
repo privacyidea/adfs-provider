@@ -6,7 +6,7 @@
     <ProductVersion>3.10</ProductVersion>
     <ProjectGuid>9edae53b-0cc3-4e1c-8f94-48a8176f6850</ProjectGuid>
     <SchemaVersion>2.0</SchemaVersion>
-    <OutputName>ADFSInstaller</OutputName>
+    <OutputName>PrivacyIDEA-ADFS-Provider</OutputName>
     <OutputType>Package</OutputType>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
