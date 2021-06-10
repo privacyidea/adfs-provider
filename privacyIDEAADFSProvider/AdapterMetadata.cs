@@ -72,7 +72,7 @@ namespace privacyIDEAADFSProvider
                 }
                 */
                 if ((_friendlyNames.Count == 0) | (!HasDefault))
-                    _friendlyNames.Add(1033, "privacyIDEA AD FS provider");
+                    _friendlyNames.Add(1033, "privacyIDEA AD FS Provider");
 
                 return _friendlyNames;
             }

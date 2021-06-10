@@ -1,8 +1,6 @@
 #Requires -RunAsAdministrator
 # Install the provider
 
-#New-Item -Path . -Name "testfile.txt" -ItemType "file"
-
 Set-Location -Path "C:\Program Files\PrivacyIDEA AD FS"
 
 $myPath = Get-Location

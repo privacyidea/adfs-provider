@@ -413,7 +413,7 @@ namespace privacyIDEAADFSProvider
                 // TODO catch missing file access etc
                 try
                 {
-                    using (StreamWriter streamWriter = new StreamWriter("C:\\adfslog.txt", append: true))
+                    using (StreamWriter streamWriter = new StreamWriter("C:\\PrivacyIDEA-ADFS log.txt", append: true))
                     {
                         await streamWriter.WriteLineAsync(msg);
                     }
