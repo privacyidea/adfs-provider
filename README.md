@@ -15,11 +15,16 @@ If you use a Windows Server 2019 please activate TLS 1.x for your .NET because T
 Adding `"SchUseStrongCrypto"=dword:00000001` to `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft.NETFramework\v4.0.30319`
 and `HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft.NETFramework\v4.0.30319` fixes the problem.
 
+## Installation
+Run the MSI.
+
 ## Event Log
 Errors will be written to the Windows Event Log in the `AD FS/Admin` category. To get a more detailed log, activate the `debug_log` setting as explained in the next section.
 
 ## Configuration
 The provider is configured using the registry. The keys are located at `HKEY_LOCAL_MACHINE\SOFTWARE\NetKnights GmbH\PrivacyIDEA-ADFS`.
+After changing the configuration, the AD FS Service has to be restarted for the changes to become active. This can be done using the PowerShell command `Restart-Service adfssrv`.
+
 | Key Name | Explanation |
 | ----- | ----- |
 | url | The url of the privacyIDEA server. Has to include https://! |
