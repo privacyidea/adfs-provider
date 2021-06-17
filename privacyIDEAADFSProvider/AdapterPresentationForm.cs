@@ -1,11 +1,10 @@
 ﻿using Microsoft.IdentityServer.Web.Authentication.External;
-using System.Diagnostics;
+using PrivacyIDEASDK;
 
 namespace privacyIDEAADFSProvider
 {
     class AdapterPresentationForm : IAdapterPresentationForm
     {
-        //public UITranslation[] translations;
         public string ErrorMessage { get; set; } = "";
         public string Message { get; set; } = "";
         public string PushMessage { get; set; } = "";
@@ -16,9 +15,8 @@ namespace privacyIDEAADFSProvider
         public string OtpAvailable { get; set; } = "1";
         public string AuthCounter { get; set; } = "0";
 
-        public AdapterPresentationForm(/*UITranslation[] translations*/)
+        public AdapterPresentationForm()
         {
-            //this.translations = translations;
         }
 
         /// Returns the HTML Form fragment that contains the adapter user interface. This data will be included in the web page that is presented
@@ -28,23 +26,6 @@ namespace privacyIDEAADFSProvider
             string otptext = "One-Time-Password";
             string submittext = "Submit";
             string htmlTemplate = Resources.AuthPage;
-            /*
-            if (translations != null)
-            {
-                foreach (UITranslation translation in translations)
-                {
-                    Debug.WriteLine("ID3A_ADFSadapter: Detected language LCID:" + lcid);
-
-                    if ((int)translation.LCID == (int)lcid)
-                    {
-                        if (!string.IsNullOrEmpty(translation.errormessage)) errormessage = translation.errormessage;
-                        if (!string.IsNullOrEmpty(translation.otptext)) otptext = translation.otptext;
-                        if (!string.IsNullOrEmpty(translation.submittext)) submittext = translation.submittext;
-                        break;
-                    }
-                }
-            }
-            */
             htmlTemplate = htmlTemplate.Replace("#ERROR#", !string.IsNullOrEmpty(this.ErrorMessage) ? this.ErrorMessage : "");
             htmlTemplate = htmlTemplate.Replace("#OTPTEXT#", otptext);
             htmlTemplate = htmlTemplate.Replace("#SUBMIT#", submittext);
@@ -53,7 +34,8 @@ namespace privacyIDEAADFSProvider
             htmlTemplate = htmlTemplate.Replace("#mode#", Mode);
             htmlTemplate = htmlTemplate.Replace("#pushAvailable#", PushAvailable);
             htmlTemplate = htmlTemplate.Replace("#otpAvailable#", OtpAvailable);
-            htmlTemplate = htmlTemplate.Replace("#webAuthnSignRequest#", WebAuthnSignRequest);
+            // Replace the quotes of the WebAuthnSignRequest json string with the entity name for html
+            htmlTemplate = htmlTemplate.Replace("#webAuthnSignRequest#", WebAuthnSignRequest.Replace("\"", "&quot;"));
             htmlTemplate = htmlTemplate.Replace("#pushMessage#", PushMessage);
             htmlTemplate = htmlTemplate.Replace("#modeChanged#", "0");
             htmlTemplate = htmlTemplate.Replace("#pollInterval#", "1");

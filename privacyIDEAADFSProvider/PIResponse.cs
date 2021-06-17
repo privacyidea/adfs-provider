@@ -1,18 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using SDKNS;
 
-namespace SDK
+namespace PrivacyIDEASDK
 {
     public class PIResponse
     {
-        //string transactionID = "", message = "", errorMessage = "", type = "";
-
         public string TransactionID { get; set; } = "";
         public string Message { get; set; } = "";
         public string ErrorMessage { get; set; } = "";
@@ -22,8 +16,8 @@ namespace SDK
         public bool Value { get; set; } = false;
 
         public string Raw { get; set; } = "";
-        public List<PIChallenge> MultiChallenge { get; set; } = new List<PIChallenge>(); 
-        private PIResponse() {}
+        public List<PIChallenge> MultiChallenge { get; set; } = new List<PIChallenge>();
+        private PIResponse() { }
 
         public List<string> TriggeredTokenTypes()
         {
@@ -35,11 +29,30 @@ namespace SDK
             return MultiChallenge.First(challenge => challenge.Type == "push").Message;
         }
 
+        public string WebAuthnSignRequest()
+        {
+            // Currently get only the first one that was triggered
+            string ret = "";
+            foreach (PIChallenge challenge in MultiChallenge)
+            {
+                if (challenge.Type == "webauthn")
+                {
+                    ret = (challenge as PIWebAuthnSignRequest).WebAuthnSignRequest;
+                    break;
+                }
+            }
+
+            return ret;
+        }
+
         public static PIResponse FromJSON(string json, PrivacyIDEA privacyIDEA)
         {
             if (string.IsNullOrEmpty(json))
             {
-                privacyIDEA.Error("Json to parse is empty!");
+                if (privacyIDEA != null)
+                {
+                    privacyIDEA.Error("Json to parse is empty!");
+                }
                 return null;
             }
 
@@ -68,17 +81,46 @@ namespace SDK
                     ret.Message = (string)detail["message"];
                     ret.Type = (string)detail["type"];
 
-                    JToken multiChallenge = detail["multi_challenge"];
-                    if (multiChallenge!= null)
+                    JArray multiChallenge = detail["multi_challenge"] as JArray;
+                    if (multiChallenge != null)
                     {
-                        ret.MultiChallenge = multiChallenge.ToObject<List<PIChallenge>>();
+                        foreach (JToken element in multiChallenge.Children())
+                        {
+                            string message = (string)element["message"];
+                            string transactionid = (string)element["transaction_id"];
+                            string type = (string)element["type"];
+                            string serial = (string)element["serial"];
+                            if (type == "webauthn")
+                            {
+                                PIWebAuthnSignRequest tmp = new PIWebAuthnSignRequest();
+                                JToken attr = element["attributes"];
+                                tmp.WebAuthnSignRequest = attr["webAuthnSignRequest"].ToString(Formatting.None);
+                                tmp.WebAuthnSignRequest.Replace("\n", "");
+                                tmp.Message = message;
+                                tmp.Serial = serial;
+                                tmp.TransactionID = transactionid;
+                                tmp.Type = type;
+                                ret.MultiChallenge.Add(tmp);
+                            }
+                            else
+                            {
+                                PIChallenge tmp = new PIChallenge();
+                                tmp.Message = message;
+                                tmp.Serial = serial;
+                                tmp.TransactionID = transactionid;
+                                tmp.Type = type;
+                                ret.MultiChallenge.Add(tmp);
+                            }
+                        }
                     }
                 }
-
             }
             catch (JsonException je)
             {
-                privacyIDEA.Error(je);
+                if (privacyIDEA != null)
+                {
+                    privacyIDEA.Error(je);
+                }
                 return null;
             }
 

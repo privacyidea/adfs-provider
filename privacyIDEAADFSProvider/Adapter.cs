@@ -2,13 +2,10 @@
 using Microsoft.IdentityServer.Web.Authentication.External;
 using Claim = System.Security.Claims.Claim;
 using System.IO;
-using System.Text;
 using System.Diagnostics;
-using System.Xml.Serialization;
 using System.DirectoryServices.AccountManagement;
 using System;
-using SDKNS;
-using SDK;
+using PrivacyIDEASDK;
 using System.Collections.Generic;
 
 namespace privacyIDEAADFSProvider
@@ -27,7 +24,6 @@ namespace privacyIDEAADFSProvider
         private PrivacyIDEA privacyIDEA;
         private bool debuglog = false;
 
-        // TODO disable debug logging
         public IAuthenticationAdapterMetadata Metadata
         {
             //get { return new <instance of IAuthenticationAdapterMetadata derived class>; }
@@ -92,19 +88,17 @@ namespace privacyIDEAADFSProvider
             // Prepare the form
             var form = new AdapterPresentationForm();
 
-            // trigger challenges
-            // string webAuthnSignRequest = "";
+            // trigger challenges with service account or empty pass if configured
             PIResponse response = null;
 
             if (privacyIDEA != null)
             {
-                if (triggerChallenge)
+                if (this.triggerChallenge)
                 {
                     response = privacyIDEA.TriggerChallenges(username);
                 }
-                else if (sendEmptyPassword)
+                else if (this.sendEmptyPassword)
                 {
-                    // TODO get the password from first step, if not possible send empty pass?
                     response = privacyIDEA.ValidateCheck(username, "");
                 }
             }
@@ -113,16 +107,24 @@ namespace privacyIDEAADFSProvider
                 Error("privacyIDEA not initialized!");
             }
 
+            // Evaluate the response for triggered token and prepare the form accordingly
             if (response != null)
             {
                 if (response.MultiChallenge.Count > 0)
                 {
                     authContext.Data.Add("transactionid", response.TransactionID);
                     form.Message = response.Message;
+                    
                     if (response.TriggeredTokenTypes().Contains("push"))
                     {
                         form.PushAvailable = "1";
                         form.PushMessage = response.PushMessage();
+                    }
+
+                    if (response.TriggeredTokenTypes().Contains("webauthn"))
+                    {
+                        string webAuthnSignRequest = response.WebAuthnSignRequest();
+                        form.WebAuthnSignRequest = webAuthnSignRequest;
                     }
                 }
                 else if (response.Value)
@@ -174,20 +176,25 @@ namespace privacyIDEAADFSProvider
                 throw new ExternalAuthenticationException("Error - ProofData is empty", authContext);
             }
 
+            if (this.privacyIDEA == null)
+            {
+                Error("PrivacyIDEA is not initialized!");
+                throw new ExternalAuthenticationException("PrivacyIDEA is not initialized!", authContext);
+            }
+
             Dictionary<string, object> contextDict = authContext.Data;
             Dictionary<string, object> proofDict = proofData.Properties;
+            Log("ProofData: " + string.Join(", ", proofData.Properties));
+            Log("AuthContext: " + string.Join(" ,", authContext.Data));
 
-
-            Log("ProofData: " + string.Join(", " , proofData.Properties));
-            Log("AuthContext: " + string.Join(" ," , authContext.Data));
             // Prepare form to return, fill with values from proofData
             var form = new AdapterPresentationForm();
-
             string otp = (string)GetFromDict(proofDict, "otp");
             string mode = (string)GetFromDict(proofDict, "mode");
             string modeChanged = (string)GetFromDict(proofDict, "modeChanged");
             string pushAvailable = (string)GetFromDict(proofDict, "pushAvailable");
             string message = (string)GetFromDict(proofDict, "message");
+            string webAuthnSignRequest = (string)GetFromDict(proofDict, "webAuthnSignRequest");
 
             string strAuthCounter = (string)GetFromDict(proofDict, "authCounter", "0");
             if (!string.IsNullOrEmpty(strAuthCounter))
@@ -199,9 +206,12 @@ namespace privacyIDEAADFSProvider
             form.Mode = mode;
             form.PushAvailable = pushAvailable;
 
+            if (!string.IsNullOrEmpty(webAuthnSignRequest))
+            {
+                form.WebAuthnSignRequest = webAuthnSignRequest;
+            }
+
             string transactionid = (string)GetFromDict(contextDict, "transactionid");
-            // TODO realm usage
-            string realm = (string)GetFromDict(contextDict, "realm");
             string user = (string)GetFromDict(contextDict, "userid");
 
             if (modeChanged == "1")
@@ -210,64 +220,71 @@ namespace privacyIDEAADFSProvider
             }
 
             // Do the authentication according to the mode we are in
-            if (privacyIDEA != null)
+            PIResponse response = null;
+            if (mode == "push")
             {
-                PIResponse response = null;
-                if (mode == "push")
+                if (privacyIDEA.PollTransaction(transactionid))
                 {
-                    if (privacyIDEA.PollTransaction(transactionid))
-                    {
-                        // Push confirmed, finish the authentication via /validate/check using an empty otp
-                        // https://privacyidea.readthedocs.io/en/latest/tokens/authentication_modes.html#outofband-mode
-                        response = privacyIDEA.ValidateCheck(user, "", transactionid);
-                        if (response != null && response.Value)
-                        {
-                            outgoingClaims = Claims();
-                            return null;
-                        }
-                    }
-                    else
-                    {
-                        // Else push not confirmed yet
-                        form.ErrorMessage = "Authenication not confirmed yet!";
-                    }
-                }
-                else if (mode == "webauthn")
-                {
-                    // TODO webauthn implementaiton
+                    // Push confirmed, finish the authentication via /validate/check using an empty otp
+                    // https://privacyidea.readthedocs.io/en/latest/tokens/authentication_modes.html#outofband-mode
+                    response = privacyIDEA.ValidateCheck(user, "", transactionid);
                 }
                 else
                 {
-                    // Mode == OTP
-                    response = privacyIDEA.ValidateCheck(user, otp, transactionid);
-                    if (response != null && response.Value)
-                    {
-                        outgoingClaims = Claims();
-                        return null;
-                    }
+                    // Else push not confirmed yet
+                    form.ErrorMessage = "Authenication not confirmed yet!";
                 }
+            }
+            else if (mode == "webauthn")
+            {
+                string origin = (string)GetFromDict(proofDict, "origin");
+                string webauthnresponse = (string)GetFromDict(proofDict, "webAuthnSignResponse");
 
-                // If we get this far, the login data provided was wrong or an error occured.
-                if (response != null)
+                if (string.IsNullOrEmpty(origin) || string.IsNullOrEmpty(webauthnresponse))
+                {
+                    Error("Incomplete data for WebAuthn authentication: WebAuthnSignResponse or Origin is missing!");
+                    form.ErrorMessage = "Could not complete WebAuthn authentication. Try again or use another token type.";
+                }
+                else
+                {
+                    response = privacyIDEA.ValidateCheckWebAuthn(user, transactionid, webauthnresponse, origin);
+                }
+            }
+            else
+            {
+                // Mode == OTP
+                response = privacyIDEA.ValidateCheck(user, otp, transactionid);
+            }
+
+            // If we get this far, the login data provided was wrong or an error occured.
+            if (response != null)
+            {
+                if (response.MultiChallenge.Count > 0)
+                {
+                    // TODO 
+                    Log("multichallenge > 0");
+                }
+                else if (response.Value)
+                {
+                    outgoingClaims = Claims();
+                    return null;
+                }
+                else
                 {
                     Error("Response value was false!");
                     // Set the error message from the response or a default
                     form.ErrorMessage = (!string.IsNullOrEmpty(response.ErrorMessage)) ? response.ErrorMessage + " (" + response.ErrorCode + ")"
                         : "Wrong OTP value!";
                 }
-                else
-                {
-                    // In case of unconfirmed push, response will be null too. Therefore, set the message only if there is none yet.
-                    if (string.IsNullOrEmpty(form.ErrorMessage))
-                    {
-                        form.ErrorMessage = "The authentication server could not be reached.";
-                        Error("Reponse from server was null!");
-                    }
-                }
             }
             else
             {
-                Error("privacyIDEA not initalized!");
+                // In case of unconfirmed push, response will be null too. Therefore, set the message only if there is none yet.
+                if (string.IsNullOrEmpty(form.ErrorMessage))
+                {
+                    form.ErrorMessage = "The authentication server could not be reached.";
+                    Error("Reponse from server was null!");
+                }
             }
 
             // Set a generic error if none was set yet
@@ -312,7 +329,7 @@ namespace privacyIDEAADFSProvider
             string realversion = fvi.FileVersion;
             Log("OnAuthenticationPipelineLoad: Provider Version " + realversion);
 
-            List<string> configKeys = new List<string>(new string[] 
+            List<string> configKeys = new List<string>(new string[]
             { "use_upn", "url", "disable_ssl", "service_user", "service_pass", "service_realm",
                 "realm", "trigger_challenges", "send_empty_pass", "debug_log" });
             var configDict = new Dictionary<string, string>();
@@ -336,6 +353,7 @@ namespace privacyIDEAADFSProvider
             bool shouldUseSSL = GetFromDict(configDict, "disable_ssl", "0") != "1";
 
             this.privacyIDEA = new PrivacyIDEA(url, "PrivacyIDEA-ADFS", shouldUseSSL);
+            this.privacyIDEA.Logger = this;
 
             string serviceUser = GetFromDict(configDict, "service_user", "");
             string servicePass = GetFromDict(configDict, "service_pass", "");
@@ -349,6 +367,7 @@ namespace privacyIDEAADFSProvider
             this.debuglog = GetFromDict(configDict, "debug_log", "0") == "1";
 
             this.triggerChallenge = GetFromDict(configDict, "trigger_challenges", "0") == "1";
+            Log("Setting trigger challenge to: " + this.triggerChallenge);
             if (!this.triggerChallenge)
             {
                 // Only if triggerChallenge is disabled, sendEmptyPassword COULD be set
@@ -373,7 +392,9 @@ namespace privacyIDEAADFSProvider
         public IAdapterPresentation OnError(HttpListenerRequest request, ExternalAuthenticationException ex)
         {
             Log("OnError, ExternalAuthenticationException: " + ex.Message);
-            return new AdapterPresentationForm();
+            var form = new AdapterPresentationForm();
+            form.ErrorMessage = ex.Message;
+            return form;
         }
         public void Log(string message)
         {
@@ -382,13 +403,18 @@ namespace privacyIDEAADFSProvider
 
         public void Error(string message)
         {
+            // write error to both
             this.EventError(message);
+            this.LogImpl(message);
         }
 
         public void Error(Exception exception)
         {
-            this.EventError(exception.Message + ":\n" +
-                exception.StackTrace);
+            string message = exception.Message + ":\n" +
+                exception.StackTrace;
+            // Write error to both
+            this.EventError(message);
+            this.LogImpl(message);
         }
 
         private void EventError(string message)
@@ -403,7 +429,6 @@ namespace privacyIDEAADFSProvider
         {
             if (this.debuglog || true)
             {
-                // TODO catch missing file access etc
                 try
                 {
                     using (StreamWriter streamWriter = new StreamWriter("C:\\PrivacyIDEA-ADFS log.txt", append: true))
@@ -413,7 +438,7 @@ namespace privacyIDEAADFSProvider
                 }
                 catch (Exception e)
                 {
-                    Error("Error while trying to write to logfile: " + e.Message);
+                    EventError("Error while trying to write to logfile: " + e.Message);
                 }
             }
         }
