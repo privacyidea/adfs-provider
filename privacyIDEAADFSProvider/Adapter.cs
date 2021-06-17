@@ -256,7 +256,7 @@ namespace privacyIDEAADFSProvider
                 response = privacyIDEA.ValidateCheck(user, otp, transactionid);
             }
 
-            // If we get this far, the login data provided was wrong or an error occured.
+            // If we get this far, the login data provided was wrong, an error occured or another challenge was triggered.
             if (response != null)
             {
                 if (response.MultiChallenge.Count > 0)
@@ -367,7 +367,6 @@ namespace privacyIDEAADFSProvider
             this.debuglog = GetFromDict(configDict, "debug_log", "0") == "1";
 
             this.triggerChallenge = GetFromDict(configDict, "trigger_challenges", "0") == "1";
-            Log("Setting trigger challenge to: " + this.triggerChallenge);
             if (!this.triggerChallenge)
             {
                 // Only if triggerChallenge is disabled, sendEmptyPassword COULD be set
