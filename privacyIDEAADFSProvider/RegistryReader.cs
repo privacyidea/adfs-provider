@@ -1,7 +1,7 @@
 ﻿using System;
 using Microsoft.Win32;
 
-namespace privacyIDEAADFSProvider
+namespace PrivacyIDEASDK
 {
 
     public delegate void LogFunction(string message);

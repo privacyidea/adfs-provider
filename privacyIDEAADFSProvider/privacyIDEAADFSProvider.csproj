@@ -7,7 +7,7 @@
     <ProjectGuid>{3A9A54D7-F23B-469C-BA61-8C69CBAF50F5}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>privacyIDEAADFSProvider</RootNamespace>
+    <RootNamespace>PrivacyIDEAADFSProvider</RootNamespace>
     <AssemblyName>privacyIDEA-ADFSProvider</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
@@ -63,6 +63,7 @@
     <Compile Include="PIChallenge.cs" />
     <Compile Include="PILog.cs" />
     <Compile Include="PIResponse.cs" />
+    <Compile Include="PIWebAuthnSignRequest.cs" />
     <Compile Include="PrivacyIDEA.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RegistryReader.cs" />

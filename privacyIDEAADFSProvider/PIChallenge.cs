@@ -1,10 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Collections.Generic;
 
-namespace SDK
+namespace PrivacyIDEASDK
 {
     public class PIChallenge
     {
@@ -12,6 +8,6 @@ namespace SDK
         public string Message { get; set; } = "";
         public string TransactionID { get; set; } = "";
         public string Type { get; set; } = "";
-        public List<string> attributes { get; set; } = new List<string>();
+        public Dictionary<string, object> Attributes { get; set; } = new Dictionary<string, object>();
     }
 }
