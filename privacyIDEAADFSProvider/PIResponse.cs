@@ -16,24 +16,24 @@ namespace PrivacyIDEASDK
         public bool Value { get; set; } = false;
 
         public string Raw { get; set; } = "";
-        public List<PIChallenge> MultiChallenge { get; set; } = new List<PIChallenge>();
+        public List<PIChallenge> Challenges { get; set; } = new List<PIChallenge>();
         private PIResponse() { }
 
         public List<string> TriggeredTokenTypes()
         {
-            return MultiChallenge.Select(challenge => challenge.Type).Distinct().ToList();
+            return Challenges.Select(challenge => challenge.Type).Distinct().ToList();
         }
 
         public string PushMessage()
         {
-            return MultiChallenge.First(challenge => challenge.Type == "push").Message;
+            return Challenges.First(challenge => challenge.Type == "push").Message;
         }
 
         public string WebAuthnSignRequest()
         {
             // Currently get only the first one that was triggered
             string ret = "";
-            foreach (PIChallenge challenge in MultiChallenge)
+            foreach (PIChallenge challenge in Challenges)
             {
                 if (challenge.Type == "webauthn")
                 {
@@ -64,8 +64,13 @@ namespace PrivacyIDEASDK
                 JToken result = jobj["result"];
                 if (result != null)
                 {
-                    ret.Status = (bool)jobj["result"]["status"];
-                    ret.Value = (bool)jobj["result"]["value"];
+                    ret.Status = (bool)result["status"];
+                    
+                    JToken jVal = result["value"];
+                    if (jVal != null)
+                    {
+                        ret.Value = (bool)jVal;
+                    }
 
                     JToken error = result["error"];
                     if (error != null)
@@ -74,8 +79,9 @@ namespace PrivacyIDEASDK
                         ret.ErrorMessage = (string)error["message"];
                     }
                 }
+
                 JToken detail = jobj["detail"];
-                if (detail != null)
+                if (detail != null && detail.Type != JTokenType.Null)
                 {
                     ret.TransactionID = (string)detail["transaction_id"];
                     ret.Message = (string)detail["message"];
@@ -100,7 +106,7 @@ namespace PrivacyIDEASDK
                                 tmp.Serial = serial;
                                 tmp.TransactionID = transactionid;
                                 tmp.Type = type;
-                                ret.MultiChallenge.Add(tmp);
+                                ret.Challenges.Add(tmp);
                             }
                             else
                             {
@@ -109,7 +115,7 @@ namespace PrivacyIDEASDK
                                 tmp.Serial = serial;
                                 tmp.TransactionID = transactionid;
                                 tmp.Type = type;
-                                ret.MultiChallenge.Add(tmp);
+                                ret.Challenges.Add(tmp);
                             }
                         }
                     }

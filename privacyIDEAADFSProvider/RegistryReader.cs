@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using Microsoft.Win32;
 
 namespace PrivacyIDEASDK
@@ -6,9 +7,10 @@ namespace PrivacyIDEASDK
 
     public delegate void LogFunction(string message);
 
-    class RegistryReader
+    public class RegistryReader
     {
-        private string subKey = "SOFTWARE\\Netknights GmbH\\PrivacyIDEA-ADFS";
+        private static string registryPath = "SOFTWARE\\Netknights GmbH\\PrivacyIDEA-ADFS";
+        private static string realmMapPath = registryPath + "\\realm-mapping";
 
         private LogFunction LogFunc;
 
@@ -21,7 +23,7 @@ namespace PrivacyIDEASDK
         {
             try
             {
-                using (RegistryKey key = Registry.LocalMachine.OpenSubKey(subKey))
+                using (RegistryKey key = Registry.LocalMachine.OpenSubKey(registryPath))
                 {
                     if (key != null)
                     {
@@ -46,5 +48,29 @@ namespace PrivacyIDEASDK
             return "";
         }
 
+        public Dictionary<string, string> GetRealmMapping()
+        {
+            var ret = new Dictionary<string, string>();
+            try
+            {
+                using (RegistryKey key = Registry.LocalMachine.OpenSubKey(realmMapPath))
+                {
+                    if (key != null)
+                    {
+                        foreach (var name in key.GetValueNames())
+                        {
+                            ret.Add(name, (string)key.GetValue(name));
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                // The subkey might not exist if no realm mapping is configured
+                LogFunc("Exception while loading realm map: " + e.Message);
+            }
+
+            return ret;
+        }
     }
 }
