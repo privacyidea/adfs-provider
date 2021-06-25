@@ -14,6 +14,8 @@ namespace PrivacyIDEASDK
     {
         public string Url { get; set; } = "";
         public string Realm { get; set; } = "";
+        public Dictionary<string, string> RealmMap { get; set; } = new Dictionary<string, string>();
+
         private bool _sslVerify = true;
         public bool SSLVerify
         {
@@ -42,8 +44,16 @@ namespace PrivacyIDEASDK
         private HttpClient httpClient;
         private bool disposedValue;
         private string serviceuser, servicepass, servicerealm, useragent;
-
+        private bool logServerResponse = true;
         public PILog Logger { get; set; } = null;
+
+        // The webauthn parameters should not be url encoded because they already have the correct format.
+        private static List<String> exludeFromURIEscape = new List<string>(new string[]
+           { "credentialid", "clientdata", "signaturedata", "authenticatordata", "userhandle", "assertionclientextensions" });
+
+        private static List<String> logExcludedEndpoints = new List<string>(new string[]
+           { "/auth", "/validate/polltransaction" });
+
         public PrivacyIDEA(string url, string useragent, bool sslVerify = true)
         {
             this.Url = url;
@@ -59,123 +69,13 @@ namespace PrivacyIDEASDK
             httpClient.DefaultRequestHeaders.Add("User-Agent", useragent);
         }
 
-        public void SetServiceAccount(string user, string pass, string realm = "")
-        {
-            serviceuser = user;
-            servicepass = pass;
-            if (!string.IsNullOrEmpty(realm))
-            {
-                servicerealm = realm;
-            }
-        }
-        public PIResponse ValidateCheck(string user, string otp, string transactionid = null)
-        {
-            var parameters = new Dictionary<string, string>
-            {
-                { "user", user },
-                { "pass", otp }
-            };
-
-            if (transactionid != null)
-            {
-                parameters.Add("transaction_id", transactionid);
-            }
-
-            string response = SendRequest("/validate/check", parameters, new List<KeyValuePair<string, string>>());
-            Log("/validate/check:\n" + JToken.Parse(response).ToString(Formatting.Indented));
-            return PIResponse.FromJSON(response, this);
-        }
-
-        public PIResponse ValidateCheckWebAuthn(string user, string transactionid, string webAuthnSignResponse, string origin)
-        {
-            if (string.IsNullOrEmpty(user) || string.IsNullOrEmpty(transactionid) || string.IsNullOrEmpty(webAuthnSignResponse) || string.IsNullOrEmpty(origin))
-            {
-                Log("ValidateCheckWebAuthn called with missing parameter: user=" + user + ", transactionid=" + transactionid
-                    + ", WebAuthnSignResponse=" + webAuthnSignResponse + ", origin=" + origin);
-                return null;
-            }
-
-            // Parse the WebAuthnSignResponse and add mandatory parameters
-            JToken root;
-            try
-            {
-                root = JToken.Parse(webAuthnSignResponse);
-            }
-            catch (JsonReaderException jex)
-            {
-                Error("WebAuthnSignRequest does not have the required format! " + jex.Message);
-                return null;
-            }
-
-            string credentialid = (string)root["credentialid"];
-            string clientdata = (string)root["clientdata"];
-            string signaturedata = (string)root["signaturedata"];
-            string authenticatordata = (string)root["authenticatordata"];
-
-            var paramDict = new Dictionary<string, string>
-            {
-                { "user", user },
-                { "pass", "" },
-                { "transaction_id", transactionid },
-                { "credentialid", credentialid },
-                { "clientdata", clientdata },
-                { "signaturedata", signaturedata },
-                { "authenticatordata", authenticatordata }
-            };
-
-            // Optionally add UserHandle and AssertionClientExtensions
-            string userhandle = (string)root["userhandle"];
-            if (!string.IsNullOrEmpty(userhandle))
-            {
-                paramDict.Add("userhandle", userhandle);
-            }
-
-            string ace = (string)root["assertionclientextensions"];
-            if (!string.IsNullOrEmpty(ace))
-            {
-                paramDict.Add("assertionclientextensions", ace);
-            }
-
-            // The origin has to be set in the header for WebAuthn authentication
-            var headers = new List<KeyValuePair<string, string>>
-            {
-                new KeyValuePair<string, string>("Origin", origin)
-            };
-
-            string response = SendRequest("/validate/check", paramDict, headers);
-            Log("/validate/check webauthn response:\n" + JToken.Parse(response).ToString(Formatting.Indented));
-            return PIResponse.FromJSON(response, this);
-        }
-
-        private static List<String> exludeFromURIEscape = new List<string>(new string[]
-            { "credentialid", "clientdata", "signaturedata", "authenticatordata", "userhandle", "assertionclientextensions" });
-        internal StringContent DictToEncodedStringContent(Dictionary<string, string> dict)
-        {
-            StringBuilder sb = new StringBuilder();
-
-            foreach (var element in dict)
-            {
-                sb.Append(element.Key).Append("=");
-                sb.Append((exludeFromURIEscape.Contains(element.Key)) ? element.Value : Uri.EscapeDataString(element.Value));
-                sb.Append("&");
-            }
-            // Remove tailing &
-            if (sb.Length > 0)
-            {
-                sb.Remove(sb.Length - 1, 1);
-            }
-
-            string ret = sb.ToString();
-            //Log("Built string: " + ret);
-            return new StringContent(ret, Encoding.UTF8, "application/x-www-form-urlencoded"); ;
-        }
-
-        internal bool ServiceAccountAvailable()
-        {
-            return !string.IsNullOrEmpty(serviceuser) && !string.IsNullOrEmpty(servicepass);
-        }
-
-        public PIResponse TriggerChallenges(string username)
+        /// <summary>
+        /// Trigger challenges for the given user using a service account.
+        /// </summary>
+        /// <param name="username">username to trigger challenges for</param>
+        /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
+        /// <returns>PIResponse object or null on error</returns>
+        public PIResponse TriggerChallenges(string username, string domain = null)
         {
             if (!GetAuthToken())
             {
@@ -187,13 +87,19 @@ namespace PrivacyIDEASDK
                 { "user", username }
             };
 
+            AddRealmForDomain(domain, parameters);
+
             string response = SendRequest("/validate/triggerchallenge", parameters);
-            Log("/validate/triggerchallenge response:\n" + JToken.Parse(response).ToString(Formatting.Indented));
             PIResponse ret = PIResponse.FromJSON(response, this);
 
             return ret;
         }
 
+        /// <summary>
+        /// Check if the challenge for the given transaction id has been answered yet. This is done using the /validate/polltransaction endpoint.
+        /// </summary>
+        /// <param name="transactionid"></param>
+        /// <returns>true if challenge was answered. false if not or error</returns>
         public bool PollTransaction(string transactionid)
         {
             if (!string.IsNullOrEmpty(transactionid))
@@ -227,6 +133,111 @@ namespace PrivacyIDEASDK
             return false;
         }
 
+        /// <summary>
+        /// Authenticate using the /validate/check endpoint with the username and OTP value. 
+        /// Optionally, a transaction id can be provided if authentication is done using challenge-response.
+        /// </summary>
+        /// <param name="user">username</param>
+        /// <param name="otp">OTP</param>
+        /// <param name="transactionid">optional transaction id to refer to a challenge</param>
+        /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
+        /// <returns>PIResponse object or null on error</returns>
+        public PIResponse ValidateCheck(string user, string otp, string transactionid = null, string domain = null)
+        {
+            var parameters = new Dictionary<string, string>
+            {
+                { "user", user },
+                { "pass", otp }
+            };
+
+            if (transactionid != null)
+            {
+                parameters.Add("transaction_id", transactionid);
+            }
+
+            AddRealmForDomain(domain, parameters);
+
+            string response = SendRequest("/validate/check", parameters, new List<KeyValuePair<string, string>>());
+            return PIResponse.FromJSON(response, this);
+        }
+
+        /// <summary>
+        /// Authenticate at the /validate/check endpoint using a WebAuthn token instead of the usual OTP value.
+        /// This requires the WebAuthnSignResponse and the Origin from the browser.
+        /// </summary>
+        /// <param name="user">username</param>
+        /// <param name="transactionid">transaction id of the webauthn challenge</param>
+        /// <param name="webAuthnSignResponse">the WebAuthnSignResponse string in json format as returned from the browser</param>
+        /// <param name="origin">origin also returned by the browser</param>
+        /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
+        /// <returns>PIResponse object or null on error</returns>
+        public PIResponse ValidateCheckWebAuthn(string user, string transactionid, string webAuthnSignResponse, string origin, string domain = null)
+        {
+            if (string.IsNullOrEmpty(user) || string.IsNullOrEmpty(transactionid) || string.IsNullOrEmpty(webAuthnSignResponse) || string.IsNullOrEmpty(origin))
+            {
+                Log("ValidateCheckWebAuthn called with missing parameter: user=" + user + ", transactionid=" + transactionid
+                    + ", WebAuthnSignResponse=" + webAuthnSignResponse + ", origin=" + origin);
+                return null;
+            }
+
+            // Parse the WebAuthnSignResponse and add mandatory parameters
+            JToken root;
+            try
+            {
+                root = JToken.Parse(webAuthnSignResponse);
+            }
+            catch (JsonReaderException jex)
+            {
+                Error("WebAuthnSignRequest does not have the required format! " + jex.Message);
+                return null;
+            }
+
+            string credentialid = (string)root["credentialid"];
+            string clientdata = (string)root["clientdata"];
+            string signaturedata = (string)root["signaturedata"];
+            string authenticatordata = (string)root["authenticatordata"];
+
+            var parameters = new Dictionary<string, string>
+            {
+                { "user", user },
+                { "pass", "" },
+                { "transaction_id", transactionid },
+                { "credentialid", credentialid },
+                { "clientdata", clientdata },
+                { "signaturedata", signaturedata },
+                { "authenticatordata", authenticatordata }
+            };
+
+            // Optionally add UserHandle and AssertionClientExtensions
+            string userhandle = (string)root["userhandle"];
+            if (!string.IsNullOrEmpty(userhandle))
+            {
+                parameters.Add("userhandle", userhandle);
+            }
+
+            string ace = (string)root["assertionclientextensions"];
+            if (!string.IsNullOrEmpty(ace))
+            {
+                parameters.Add("assertionclientextensions", ace);
+            }
+
+            AddRealmForDomain(domain, parameters);
+
+            // The origin has to be set in the header for WebAuthn authentication
+            var headers = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("Origin", origin)
+            };
+
+            string response = SendRequest("/validate/check", parameters, headers);
+            return PIResponse.FromJSON(response, this);
+        }
+
+        /// <summary>
+        /// Gets an auth token from the privacyIDEA server using the service account.
+        /// Afterward, the token is set as the default authentication header for the HttpClient.
+        /// </summary>
+        /// <returns>true if success, false otherwise</returns>
         private bool GetAuthToken()
         {
             if (!ServiceAccountAvailable())
@@ -240,6 +251,11 @@ namespace PrivacyIDEASDK
                 { "username", serviceuser },
                 { "password", servicepass }
             };
+
+            if (!string.IsNullOrEmpty(servicerealm))
+            {
+                map.Add("realm", servicerealm);
+            }
 
             string response = SendRequest("/auth", map);
 
@@ -266,6 +282,16 @@ namespace PrivacyIDEASDK
                 return true;
             }
             return false;
+        }
+
+        public void SetServiceAccount(string user, string pass, string realm = "")
+        {
+            serviceuser = user;
+            servicepass = pass;
+            if (!string.IsNullOrEmpty(realm))
+            {
+                servicerealm = realm;
+            }
         }
 
         private String SendRequest(string endpoint, Dictionary<string, string> parameters, List<KeyValuePair<string, string>> headers = null, string method = "POST")
@@ -302,11 +328,87 @@ namespace PrivacyIDEASDK
             if (responseMessage.StatusCode != HttpStatusCode.OK)
             {
                 Error("The request to " + endpoint + " returned HttpStatusCode " + responseMessage.StatusCode);
-                return "";
+                //return "";
             }
 
-            string body = responseMessage.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-            return body;
+            string ret = "";
+            try
+            {
+                ret = responseMessage.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            }
+            catch (Exception e)
+            {
+                Error(e.Message);
+            }
+
+            if (logServerResponse && !string.IsNullOrEmpty(ret) && !logExcludedEndpoints.Contains(endpoint))
+            {
+                Log(endpoint + " response:\n" + JToken.Parse(ret).ToString(Formatting.Indented));
+            }
+
+            return ret;
+        }
+
+        /// <summary>
+        /// Evaluates which realm to use for a given domain and adds it to the parameter dictionary.
+        /// The realm mapping takes precedence over the general realm that can be set. If no realm is found, the parameter is omitted.
+        /// </summary>
+        /// <param name="domain"></param>
+        /// <param name="parameters"></param>
+        private void AddRealmForDomain(string domain, Dictionary<string, string> parameters)
+        {
+            if (!string.IsNullOrEmpty(domain))
+            {
+                string r = "";
+                string d = domain.ToUpper();
+                Log("Searching realm for domain " + d);
+                if (RealmMap.ContainsKey(d))
+                {
+                    r = RealmMap[d];
+                    Log("Found realm in mapping: " + r);
+                }
+
+                if (string.IsNullOrEmpty(r) && !string.IsNullOrEmpty(Realm))
+                {
+                    r = Realm;
+                    Log("Using default realm " + r);
+                }
+
+                if (!string.IsNullOrEmpty(r))
+                {
+                    parameters.Add("realm", r);
+                }
+                else
+                {
+                    Log("No realm configured for domain " + d);
+                }
+            }
+        }
+
+        internal StringContent DictToEncodedStringContent(Dictionary<string, string> dict)
+        {
+            StringBuilder sb = new StringBuilder();
+
+            foreach (var element in dict)
+            {
+                sb.Append(element.Key).Append("=");
+                sb.Append((exludeFromURIEscape.Contains(element.Key)) ? element.Value : Uri.EscapeDataString(element.Value));
+                sb.Append("&");
+            }
+            // Remove tailing &
+            if (sb.Length > 0)
+            {
+                sb.Remove(sb.Length - 1, 1);
+            }
+
+            string ret = sb.ToString();
+            //Log("Built string: " + ret);
+            return new StringContent(ret, Encoding.UTF8, "application/x-www-form-urlencoded"); ;
+        }
+
+        internal bool ServiceAccountAvailable()
+        {
+            return !string.IsNullOrEmpty(serviceuser) && !string.IsNullOrEmpty(servicepass);
         }
 
         internal void Log(string message)

@@ -38,6 +38,9 @@ After changing the configuration, the AD FS Service has to be restarted for the 
 | send_empty_pass | Set this to `1` to send a request to validate/check with the username and an empty pass prior to the login. This can be used to trigger challenges depending on the configuration in privacyIDEA and **requires no service account**. If `trigger_challenges` is enabled, this setting has no effect. |
 | use_upn | Set this to `1` to use the Windows UPN (person@company.com) as the username for requests to privacyIDEA. |
 
+### Domain to Realm Mapping
+It is possible to map different Windows domains to different privacyIDEA realms. To achieve this, add the subkey `HKLM\SOFTWARE\Netknights GmbH\PrivacyIDEA-ADFS\realm-mapping`. Now you can add REG_SZ entries that have the name of the Windows domain and the value of the corresponding privacyIDEA realm. Note that the realm mapping takes precedence over the general realm that can be configured as explained in the previous section.
+
 ## Debugging
 Errors in the provider can be found by looking at the Windows Event Log or activating the `debug_log` setting.
 If the installer fails to install/uninstall the Provider, a logfile for that process can be created using the `cmd`:
