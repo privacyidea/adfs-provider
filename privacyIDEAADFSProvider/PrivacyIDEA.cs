@@ -357,23 +357,31 @@ namespace PrivacyIDEASDK
         /// <param name="parameters"></param>
         private void AddRealmForDomain(string domain, Dictionary<string, string> parameters)
         {
-            string r = "";
-            Log("Searching realm for domain " + domain);
-            if (domain != null && RealmMap.ContainsKey(domain))
+            if (!string.IsNullOrEmpty(domain))
             {
-                r = RealmMap[domain];
-                Log("Found realm in mapping: " + r);
-            }
+                string r = "";
+                string d = domain.ToUpper();
+                Log("Searching realm for domain " + d);
+                if (RealmMap.ContainsKey(d))
+                {
+                    r = RealmMap[d];
+                    Log("Found realm in mapping: " + r);
+                }
 
-            if (string.IsNullOrEmpty(r) && !string.IsNullOrEmpty(Realm))
-            {
-                r = Realm;
-                Log("Using default realm " + r);
-            }
+                if (string.IsNullOrEmpty(r) && !string.IsNullOrEmpty(Realm))
+                {
+                    r = Realm;
+                    Log("Using default realm " + r);
+                }
 
-            if (!string.IsNullOrEmpty(r))
-            {
-                parameters.Add("realm", r);
+                if (!string.IsNullOrEmpty(r))
+                {
+                    parameters.Add("realm", r);
+                }
+                else
+                {
+                    Log("No realm configured for domain " + d);
+                }
             }
         }
 

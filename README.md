@@ -39,7 +39,7 @@ After changing the configuration, the AD FS Service has to be restarted for the 
 | use_upn | Set this to `1` to use the Windows UPN (person@company.com) as the username for requests to privacyIDEA. |
 
 ### Domain to Realm Mapping
-It is possible to map different Windows domains to different privacyIDEA realms. To achieve this, add the subkey `HKLM\SOFTWARE\Netknights GmbH\PrivacyIDEA-ADFS\realm-mapping`. Now you can add REG_SZ entries that have the name of the Windows domain and the value of the corresponding privacyIDEA realm. The naming has to be case sensitive! Note that the realm mapping takes precedence over the general realm that can be configured as explained in the previous section.
+It is possible to map different Windows domains to different privacyIDEA realms. To achieve this, add the subkey `HKLM\SOFTWARE\Netknights GmbH\PrivacyIDEA-ADFS\realm-mapping`. Now you can add REG_SZ entries that have the name of the Windows domain and the value of the corresponding privacyIDEA realm. Note that the realm mapping takes precedence over the general realm that can be configured as explained in the previous section.
 
 ## Debugging
 Errors in the provider can be found by looking at the Windows Event Log or activating the `debug_log` setting.

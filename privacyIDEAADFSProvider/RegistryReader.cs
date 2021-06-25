@@ -57,9 +57,9 @@ namespace PrivacyIDEASDK
                 {
                     if (key != null)
                     {
-                        foreach (var name in key.GetValueNames())
+                        foreach (string name in key.GetValueNames())
                         {
-                            ret.Add(name, (string)key.GetValue(name));
+                            ret.Add(name.ToUpper(), (string)key.GetValue(name));
                         }
                     }
                 }

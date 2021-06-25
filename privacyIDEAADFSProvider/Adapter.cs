@@ -305,14 +305,16 @@ namespace privacyIDEAADFSProvider
         {
             Log("OnAuthenticationPipelineLoad: Provider Version " + version);
 
+            RegistryReader rr = new RegistryReader(Log);
+            // Read logging entry first to be able to log the reading of the rest if needed
+            this.debuglog = rr.Read("debug_log") == "1";
+            
+            // Read the other defined keys into a dict
             List<string> configKeys = new List<string>(new string[]
             { "use_upn", "url", "disable_ssl", "service_user", "service_pass", "service_realm",
-                "realm", "trigger_challenges", "send_empty_pass", "debug_log" });
+                "realm", "trigger_challenges", "send_empty_pass" });
 
             var configDict = new Dictionary<string, string>();
-            LogFunction log = Log;
-            RegistryReader rr = new RegistryReader(log);
-
             configKeys.ForEach(key =>
             {
                 string value = rr.Read(key);
@@ -342,7 +344,6 @@ namespace privacyIDEAADFSProvider
             }
 
             this.use_upn = GetFromDict(configDict, "use_upn", "0") == "1";
-            this.debuglog = GetFromDict(configDict, "debug_log", "0") == "1";
 
             this.triggerChallenge = GetFromDict(configDict, "trigger_challenges", "0") == "1";
             if (!this.triggerChallenge)
