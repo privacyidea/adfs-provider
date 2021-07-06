@@ -308,7 +308,7 @@ namespace privacyIDEAADFSProvider
             RegistryReader rr = new RegistryReader(Log);
             // Read logging entry first to be able to log the reading of the rest if needed
             this.debuglog = rr.Read("debug_log") == "1";
-            
+
             // Read the other defined keys into a dict
             List<string> configKeys = new List<string>(new string[]
             { "use_upn", "url", "disable_ssl", "service_user", "service_pass", "service_realm",

@@ -48,6 +48,6 @@ $appFullName = ([system.reflection.assembly]::loadfile($myDllFullName)).FullName
 
 $typeName = "privacyIDEAADFSProvider.Adapter, "+$appFullName
 
-Register-AdfsAuthenticationProvider -TypeName $typeName -Name "privacyIDEA-ADFSProvider"
+Register-AdfsAuthenticationProvider -TypeName $typeName -Name "privacyIDEAADFSProvider"
 
 Restart-Service adfssrv

@@ -31,6 +31,8 @@
     <Property Id="ARPPRODUCTICON" Value="icon.ico"/>
 
     <Property Id="ARPURLINFOABOUT" Value="$(var.AppURLInfoAbout)"/>
+    <Property Id="ARPNOREPAIR" Value="yes" Secure="yes" />
+    <Property Id="ARPNOMODIFY" Value="yes" Secure="yes" />
 
     <Condition Message="You need to be an administrator to install this product.">Privileged</Condition>
 
