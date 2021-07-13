@@ -11,6 +11,7 @@ namespace PrivacyIDEASDK
         public string Message { get; set; } = "";
         public string ErrorMessage { get; set; } = "";
         public string Type { get; set; } = "";
+        public string Serial { get; set; } = "";
         public int ErrorCode { get; set; } = 0;
         public bool Status { get; set; } = false;
         public bool Value { get; set; } = false;
@@ -86,6 +87,7 @@ namespace PrivacyIDEASDK
                     ret.TransactionID = (string)detail["transaction_id"];
                     ret.Message = (string)detail["message"];
                     ret.Type = (string)detail["type"];
+                    ret.Serial = (string)detail["serial"];
 
                     JArray multiChallenge = detail["multi_challenge"] as JArray;
                     if (multiChallenge != null)
