@@ -1,3 +1,8 @@
+## 20-07-2021 v1.0.0
+
+# Fixes
+* Fixed an issue that would prevent multiple consecutive challenges from working
+
 ## 06-07-2021 v0.10.0
 
 # Features
