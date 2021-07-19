@@ -261,7 +261,7 @@ namespace privacyIDEAADFSProvider
                 }
                 else
                 {
-                    Error("Response value was false!");
+                    Log("Response value was false!");
                     // Set the error message from the response or a default
                     form.ErrorMessage = (!string.IsNullOrEmpty(response.ErrorMessage)) ? response.ErrorMessage + " (" + response.ErrorCode + ")"
                         : "Wrong OTP value!";
@@ -384,7 +384,9 @@ namespace privacyIDEAADFSProvider
 
         private void ExtractChallengeDataToForm(PIResponse response, AdapterPresentationForm form, IAuthenticationContext authContext)
         {
-            authContext.Data.Add("transactionid", response.TransactionID);
+            // explicitly overwrite here. If another challenge was triggered, it will have a different transaction_id.
+            authContext.Data["transactionid"] = response.TransactionID;
+            
             form.Message = response.Message;
 
             if (response.TriggeredTokenTypes().Contains("push"))
