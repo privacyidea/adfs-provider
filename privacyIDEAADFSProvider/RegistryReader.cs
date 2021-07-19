@@ -42,7 +42,10 @@ namespace PrivacyIDEASDK
             }
             catch (Exception ex)
             {
-                LogFunc("registryreader: " + ex.Message);
+                if (LogFunc != null)
+                {
+                    LogFunc("registryreader: " + ex.Message);
+                }
             }
 
             return "";
@@ -67,7 +70,10 @@ namespace PrivacyIDEASDK
             catch (Exception e)
             {
                 // The subkey might not exist if no realm mapping is configured
-                LogFunc("Exception while loading realm map: " + e.Message);
+                if (LogFunc != null)
+                {
+                    LogFunc("Exception while loading realm map: " + e.Message);
+                }
             }
 
             return ret;

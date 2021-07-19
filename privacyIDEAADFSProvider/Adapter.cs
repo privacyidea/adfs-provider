@@ -20,6 +20,7 @@ namespace privacyIDEAADFSProvider
 
         private PrivacyIDEA privacyIDEA;
         private bool debuglog = false;
+
         public IAuthenticationAdapterMetadata Metadata
         {
             get
@@ -106,7 +107,7 @@ namespace privacyIDEAADFSProvider
             {
                 if (response.Challenges.Count > 0)
                 {
-                    ExtractChallengeData(response, form, authContext);
+                    ExtractChallengeDataToForm(response, form, authContext);
                 }
                 else if (response.Value)
                 {
@@ -172,7 +173,7 @@ namespace privacyIDEAADFSProvider
             Dictionary<string, object> contextDict = authContext.Data;
             Dictionary<string, object> proofDict = proofData.Properties;
             Log("ProofData: " + string.Join(", ", proofData.Properties));
-            Log("AuthContext: " + string.Join(" ,", authContext.Data));
+            Log("AuthContext: " + string.Join(", ", authContext.Data));
 
             // Prepare form to return, fill with values from proofData
             var form = new AdapterPresentationForm();
@@ -251,7 +252,7 @@ namespace privacyIDEAADFSProvider
                 if (response.Challenges.Count > 0)
                 {
                     newChallenge = true;
-                    ExtractChallengeData(response, form, authContext);
+                    ExtractChallengeDataToForm(response, form, authContext);
                 }
                 else if (response.Value)
                 {
@@ -305,9 +306,10 @@ namespace privacyIDEAADFSProvider
         {
             Log("OnAuthenticationPipelineLoad: Provider Version " + version);
 
-            RegistryReader rr = new RegistryReader(Log);
+            var registryReader = new RegistryReader(Log);
+
             // Read logging entry first to be able to log the reading of the rest if needed
-            this.debuglog = rr.Read("debug_log") == "1";
+            this.debuglog = registryReader.Read("debug_log") == "1";
 
             // Read the other defined keys into a dict
             List<string> configKeys = new List<string>(new string[]
@@ -317,7 +319,7 @@ namespace privacyIDEAADFSProvider
             var configDict = new Dictionary<string, string>();
             configKeys.ForEach(key =>
             {
-                string value = rr.Read(key);
+                string value = registryReader.Read(key);
                 Log("Read value '" + value + "' for key '" + key + "'");
                 configDict[key] = value;
             });
@@ -353,7 +355,7 @@ namespace privacyIDEAADFSProvider
             }
 
             this.privacyIDEA.Realm = GetFromDict(configDict, "realm", "");
-            var realmmap = rr.GetRealmMapping();
+            var realmmap = registryReader.GetRealmMapping();
             Log("realmmapping: " + string.Join(" , ", realmmap));
             this.privacyIDEA.RealmMap = realmmap;
         }
@@ -380,7 +382,7 @@ namespace privacyIDEAADFSProvider
             return form;
         }
 
-        private void ExtractChallengeData(PIResponse response, AdapterPresentationForm form, IAuthenticationContext authContext)
+        private void ExtractChallengeDataToForm(PIResponse response, AdapterPresentationForm form, IAuthenticationContext authContext)
         {
             authContext.Data.Add("transactionid", response.TransactionID);
             form.Message = response.Message;
