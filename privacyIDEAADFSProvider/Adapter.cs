@@ -107,11 +107,11 @@ namespace privacyIDEAADFSProvider
             {
                 if (response.Challenges.Count > 0)
                 {
-                    ExtractChallengeDataToForm(response, form, authContext);
+                    form = ExtractChallengeDataToForm(response, form, authContext);
                 }
                 else if (response.Value)
                 {
-                    // Success in step 1, carry this over to the second step so that it will be skipped
+                    // Success in step 1, carry this over to the second step so that step will be skipped
                     authContext.Data.Add("authSuccess", "1");
                     form.AutoSubmit = "1";
                 }
@@ -252,7 +252,7 @@ namespace privacyIDEAADFSProvider
                 if (response.Challenges.Count > 0)
                 {
                     newChallenge = true;
-                    ExtractChallengeDataToForm(response, form, authContext);
+                    form = ExtractChallengeDataToForm(response, form, authContext);
                 }
                 else if (response.Value)
                 {
@@ -353,7 +353,6 @@ namespace privacyIDEAADFSProvider
                 // Only if triggerChallenge is disabled, sendEmptyPassword COULD be set
                 this.sendEmptyPassword = GetFromDict(configDict, "send_empty_pass", "0") == "1";
             }
-
             this.privacyIDEA.Realm = GetFromDict(configDict, "realm", "");
             var realmmap = registryReader.GetRealmMapping();
             Log("realmmapping: " + string.Join(" , ", realmmap));
@@ -382,11 +381,11 @@ namespace privacyIDEAADFSProvider
             return form;
         }
 
-        private void ExtractChallengeDataToForm(PIResponse response, AdapterPresentationForm form, IAuthenticationContext authContext)
+        private AdapterPresentationForm ExtractChallengeDataToForm(PIResponse response, AdapterPresentationForm form, IAuthenticationContext authContext)
         {
             // explicitly overwrite here. If another challenge was triggered, it will have a different transaction_id.
             authContext.Data["transactionid"] = response.TransactionID;
-            
+
             form.Message = response.Message;
 
             if (response.TriggeredTokenTypes().Contains("push"))
@@ -400,6 +399,7 @@ namespace privacyIDEAADFSProvider
                 string webAuthnSignRequest = response.WebAuthnSignRequest();
                 form.WebAuthnSignRequest = webAuthnSignRequest;
             }
+            return form;
         }
 
         /// <summary>
