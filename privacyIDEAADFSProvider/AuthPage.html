@@ -29,19 +29,40 @@
         <script>
             // Helper functions
             function value(id) {
-                return document.getElementById(id).value;
+                var element = document.getElementById(id);
+                if (element != null) {
+                    return element.value;
+                } else {
+                    console.log(id + " is null!");
+                }
+                return "";
             }
 
             function set(id, value) {
-                document.getElementById(id).value = value;
+                var element = document.getElementById(id);
+                if (element != null) {
+                    element.value = value;
+                } else {
+                    console.log(id + " is null!");
+                }
             }
 
             function disable(id) {
-                document.getElementById(id).style.display = "none";
+                var element = document.getElementById(id)
+                if (element != null) {
+                    element.style.display = "none";
+                } else {
+                    console.log(id + " is null!");
+                }
             }
 
             function enable(id) {
-                document.getElementById(id).style.display = "initial";
+                var element = document.getElementById(id);
+                if (element != null) {
+                    element.style.display = "initial";
+                } else {
+                    console.log(id + " is null!");
+                }
             }
 
             function changeMode(newMode) {
@@ -301,6 +322,9 @@
             // END WEBAUTHN FUNCTIONS
         </script>
 
+        <div id="intro" class="groupMargin">
+        </div>
+
         <div id="alternateTokenDiv" class="groupMargin">
             Alternate Login Options
             <br />
@@ -315,9 +339,6 @@
         </div>
 
     </form>
-
-    <div id="intro" class="groupMargin">
-    </div>
 
     <script>
         'use strict';
@@ -342,7 +363,6 @@
         // Set UI according to mode
         if (value("mode") === "push") {
             const pollingIntervals = [3, 2, 2, 1];
-            disable("submissionArea");
             disable("otp");
             disable("usePushButton");
 
