@@ -7,6 +7,7 @@ using System.DirectoryServices.AccountManagement;
 using System;
 using PrivacyIDEASDK;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace privacyIDEAADFSProvider
 {
@@ -18,6 +19,7 @@ namespace privacyIDEAADFSProvider
         private bool triggerChallenge = false;
         private bool sendEmptyPassword = false;
         private bool enrollmentEnabled = false;
+        private List<string> enrollmentApps = new List<string>();
 
         private PrivacyIDEA privacyIDEA;
         private bool debuglog = false;
@@ -138,6 +140,10 @@ namespace privacyIDEAADFSProvider
             if (enrollmentEnabled && privacyIDEA.UserHasToken(username, domain) == false)
             {
                 PIEnrollResponse res = privacyIDEA.TokenInit(username, domain);
+                if (enrollmentApps.Any())
+                {
+                    form.EnrollmentApps = enrollmentApps;
+                }
                 form.EnrollmentUrl = res.TotpUrl;
                 form.EnrollmentImg = res.Base64TotpImage;
             }
@@ -357,6 +363,7 @@ namespace privacyIDEAADFSProvider
             this.use_upn = GetFromDict(configDict, "use_upn", "0") == "1";
 
             this.enrollmentEnabled = GetFromDict(configDict, "enable_enrollment", "0") == "1";
+            this.enrollmentApps = registryReader.ReadMultiValue("enrollment-apps");
 
             this.triggerChallenge = GetFromDict(configDict, "trigger_challenges", "0") == "1";
             if (!this.triggerChallenge)
