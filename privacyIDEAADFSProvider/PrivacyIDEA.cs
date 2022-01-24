@@ -141,6 +141,11 @@ namespace PrivacyIDEASDK
         /// <returns>true if token exists. false if not or error</returns>
         public bool UserHasToken(string user, string domain = null)
         {
+            if (!GetAuthToken())
+            {
+                Error("Unable to lookup tokens without an auth token!");
+                return false;
+            }
             var parameters = new Dictionary<string, string>
             {
                 { "user", user }
