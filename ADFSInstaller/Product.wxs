@@ -84,6 +84,10 @@
       <RegistrySearch Id="SearchUseUPN" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
                       Name="use_upn" Win64="yes" Type="raw"/>
     </Property>
+	<Property Id="ENABLEENROLL">
+      <RegistrySearch Id="SearchEnableEnrollment" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+                      Name="enable_enrollment" Win64="yes" Type="raw"/>
+	</Property>
     <Property Id="SERVICEUSER">
       <RegistrySearch Id="SearchServiceUser" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
                       Name="service_user" Win64="yes" Type="raw"/>
@@ -157,6 +161,7 @@
         <RegistryKey Root='HKLM' Key='SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)' ForceCreateOnInstall='yes'>
           <RegistryValue Name='url'                Type='string' Value='[URL]'/>
           <RegistryValue Name='disable_ssl'        Type='string' Value='[DISABLESSL]'/>
+		  <RegistryValue Name='enable_enrollment'  Type='string' Value='[ENABLEENROLL]'/>
           <RegistryValue Name='use_upn'            Type='string' Value='[USE_UPN]'/>
           <RegistryValue Name='trigger_challenges' Type='string' Value='[TRIGGERCHALLENGES]'/>
           <RegistryValue Name='send_empty_pass'    Type='string' Value='[SENDEMPTYPASS]'/>
