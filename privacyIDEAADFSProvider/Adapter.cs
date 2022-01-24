@@ -17,6 +17,7 @@ namespace privacyIDEAADFSProvider
         private bool use_upn = false;
         private bool triggerChallenge = false;
         private bool sendEmptyPassword = false;
+        private bool enrollmentEnabled = false;
 
         private PrivacyIDEA privacyIDEA;
         private bool debuglog = false;
@@ -133,6 +134,15 @@ namespace privacyIDEAADFSProvider
             authContext.Data.Add("userid", username);
             authContext.Data.Add("domain", domain);
 
+            // Perform optional user enrollment
+            if (enrollmentEnabled && privacyIDEA.CheckUserToken(username, domain) == false)
+            {
+                PIEnrollResponse res = privacyIDEA.InitToken(username, domain);
+                form.EnableEnrollment = true;
+                form.EnrollmentUrl = res.TotpUrl;
+                form.EnrollmentImg = res.Base64TotpImage;
+            }
+            
             return form;
         }
 
@@ -313,7 +323,7 @@ namespace privacyIDEAADFSProvider
 
             // Read the other defined keys into a dict
             List<string> configKeys = new List<string>(new string[]
-            { "use_upn", "url", "disable_ssl", "service_user", "service_pass", "service_realm",
+            { "use_upn", "url", "disable_ssl", "enable_enrollment", "service_user", "service_pass", "service_realm",
                 "realm", "trigger_challenges", "send_empty_pass" });
 
             var configDict = new Dictionary<string, string>();
@@ -346,6 +356,8 @@ namespace privacyIDEAADFSProvider
             }
 
             this.use_upn = GetFromDict(configDict, "use_upn", "0") == "1";
+
+            this.enrollmentEnabled = GetFromDict(configDict, "enable_enrollment", "0") == "1";
 
             this.triggerChallenge = GetFromDict(configDict, "trigger_challenges", "0") == "1";
             if (!this.triggerChallenge)

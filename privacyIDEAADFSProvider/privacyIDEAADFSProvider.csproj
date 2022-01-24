@@ -61,6 +61,7 @@
     <Compile Include="AdapterMetadata.cs" />
     <Compile Include="AdapterPresentationForm.cs" />
     <Compile Include="PIChallenge.cs" />
+    <Compile Include="PIEnrollResponse.cs" />
     <Compile Include="PILog.cs" />
     <Compile Include="PIResponse.cs" />
     <Compile Include="PIWebAuthnSignRequest.cs" />
