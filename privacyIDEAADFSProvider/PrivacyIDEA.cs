@@ -139,7 +139,7 @@ namespace PrivacyIDEASDK
         /// <param name="user">username</param>
         /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
         /// <returns>true if token exists. false if not or error</returns>
-        public bool CheckUserToken(string user, string domain = null)
+        public bool UserHasToken(string user, string domain = null)
         {
             var parameters = new Dictionary<string, string>
             {
@@ -173,7 +173,7 @@ namespace PrivacyIDEASDK
         /// <param name="user">username</param>
         /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
         /// <returns>PIEnrollResponse object or null on error</returns>
-        public PIEnrollResponse InitToken(string user, string domain = null)
+        public PIEnrollResponse TokenInit(string user, string domain = null)
         {
             var parameters = new Dictionary<string, string>
             {

@@ -14,7 +14,6 @@ namespace privacyIDEAADFSProvider
         public string WebAuthnSignRequest { get; set; } = "";
         public string OtpAvailable { get; set; } = "1";
         public string AuthCounter { get; set; } = "0";
-        public bool EnableEnrollment { get; set; } = false;
         public string EnrollmentText { get; set; } = @"
                 <p style=""color:red""><i>It appears your account has not previously setup Multi-Factor Authentication (MFA). <b>Please carefully follow the below instructions - they will only be shown once!</b></i><p>
                 <br/>                
@@ -22,9 +21,9 @@ namespace privacyIDEAADFSProvider
                     <li>
                       Download and/or install a TOTP compliant MFA app or Password Manager if you haven't already. Here are some recommendations:
                       <ul>
-                         <li>Bitwarden</li>
-                         <li>Google Authenticator</li>
-                         <li>Authy</li>
+                         <li>privacyIDEA Authenticator <a target=""_blank"" href=""https://play.google.com/store/apps/details?id=it.netknights.piauthenticator&hl=en_US&gl=US"">(Android)</a> <a target=""_blank"" href=""https://apps.apple.com/us/app/privacyidea-authenticator/id1445401301"">(iOS)</a></li>
+                         <li>Google Authenticator <a target=""_blank"" href=""https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2&hl=en_US&gl=US"">(Android)</a> <a target=""_blank"" href=""https://apps.apple.com/us/app/google-authenticator/id388497605"">(iOS)</a></li>
+                         <li>Authy <a target=""_blank"" href=""https://authy.com/download/"">(Mobile/Desktop)</a></li>
                       </ul>
                     </li>
                     <li> 
@@ -50,7 +49,7 @@ namespace privacyIDEAADFSProvider
             string submittext = "Submit";
             string htmlTemplate = Resources.AuthPage;
 
-            if(EnableEnrollment == true)
+            if(!(string.IsNullOrEmpty(EnrollmentImg) || string.IsNullOrEmpty(EnrollmentUrl)))
             {
                 htmlTemplate = htmlTemplate.Replace("#ENROLLMENT#", EnrollmentText);
                 htmlTemplate = htmlTemplate.Replace("#ENROLLVAL#", EnrollmentUrl);

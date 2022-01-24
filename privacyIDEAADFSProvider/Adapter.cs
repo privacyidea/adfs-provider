@@ -135,14 +135,13 @@ namespace privacyIDEAADFSProvider
             authContext.Data.Add("domain", domain);
 
             // Perform optional user enrollment
-            if (enrollmentEnabled && privacyIDEA.CheckUserToken(username, domain) == false)
+            if (enrollmentEnabled && privacyIDEA.UserHasToken(username, domain) == false)
             {
-                PIEnrollResponse res = privacyIDEA.InitToken(username, domain);
-                form.EnableEnrollment = true;
+                PIEnrollResponse res = privacyIDEA.TokenInit(username, domain);
                 form.EnrollmentUrl = res.TotpUrl;
                 form.EnrollmentImg = res.Base64TotpImage;
             }
-            
+
             return form;
         }
 
