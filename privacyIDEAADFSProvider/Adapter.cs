@@ -7,6 +7,7 @@ using System.DirectoryServices.AccountManagement;
 using System;
 using PrivacyIDEASDK;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace privacyIDEAADFSProvider
 {
@@ -17,6 +18,8 @@ namespace privacyIDEAADFSProvider
         private bool use_upn = false;
         private bool triggerChallenge = false;
         private bool sendEmptyPassword = false;
+        private bool enrollmentEnabled = false;
+        private List<string> enrollmentApps = new List<string>();
 
         private PrivacyIDEA privacyIDEA;
         private bool debuglog = false;
@@ -132,6 +135,21 @@ namespace privacyIDEAADFSProvider
             form.Mode = "otp";
             authContext.Data.Add("userid", username);
             authContext.Data.Add("domain", domain);
+
+            // Perform optional user enrollment
+            // If a challenge was triggered previously, checking if the user has a token is skipped
+            if (enrollmentEnabled &&
+                (response != null && string.IsNullOrEmpty(response.TransactionID) || (response == null)) &&
+                !privacyIDEA.UserHasToken(username, domain))
+            {
+                PIEnrollResponse res = privacyIDEA.TokenInit(username, domain);
+                if (enrollmentApps.Any())
+                {
+                    form.EnrollmentApps = enrollmentApps;
+                }
+                form.EnrollmentUrl = res.TotpUrl;
+                form.EnrollmentImg = res.Base64TotpImage;
+            }
 
             return form;
         }
@@ -313,7 +331,7 @@ namespace privacyIDEAADFSProvider
 
             // Read the other defined keys into a dict
             List<string> configKeys = new List<string>(new string[]
-            { "use_upn", "url", "disable_ssl", "service_user", "service_pass", "service_realm",
+            { "use_upn", "url", "disable_ssl", "enable_enrollment", "service_user", "service_pass", "service_realm",
                 "realm", "trigger_challenges", "send_empty_pass" });
 
             var configDict = new Dictionary<string, string>();
@@ -346,6 +364,9 @@ namespace privacyIDEAADFSProvider
             }
 
             this.use_upn = GetFromDict(configDict, "use_upn", "0") == "1";
+
+            this.enrollmentEnabled = GetFromDict(configDict, "enable_enrollment", "0") == "1";
+            this.enrollmentApps = registryReader.ReadMultiValue("enrollment_apps");
 
             this.triggerChallenge = GetFromDict(configDict, "trigger_challenges", "0") == "1";
             if (!this.triggerChallenge)

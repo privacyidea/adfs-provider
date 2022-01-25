@@ -134,6 +134,65 @@ namespace PrivacyIDEASDK
         }
 
         /// <summary>
+        /// Checks if user has existing token
+        /// </summary>
+        /// <param name="user">username</param>
+        /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
+        /// <returns>true if token exists. false if not or error</returns>
+        public bool UserHasToken(string user, string domain = null)
+        {
+            if (!GetAuthToken())
+            {
+                Error("Unable to lookup tokens without an auth token!");
+                return false;
+            }
+            var parameters = new Dictionary<string, string>
+            {
+                { "user", user }
+            };
+            AddRealmForDomain(domain, parameters);
+
+            string response = SendRequest("/token/", parameters, new List<KeyValuePair<string, string>>(), "GET");
+            if (string.IsNullOrEmpty(response))
+            {
+                Error("/token/ did not respond!");
+                return false;
+            }
+            bool ret = false;
+            try
+            {
+                dynamic root = JsonConvert.DeserializeObject(response);
+                ret = root.result.value.count != 0;
+            }
+            catch (Exception)
+            {
+                Error("/token/ response has wrong format or does not contain 'result.value.count'.\n" + response);
+            }
+            return ret;
+        }
+
+        /// <summary>
+        /// Enroll TOTP Token for specified user if user does not already have token
+        /// </summary>
+        /// <param name="user">username</param>
+        /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
+        /// <returns>PIEnrollResponse object or null on error</returns>
+        public PIEnrollResponse TokenInit(string user, string domain = null)
+        {
+            var parameters = new Dictionary<string, string>
+            {
+                { "user", user },
+                { "type", "totp" },
+                { "genkey", "1" }
+            };
+            AddRealmForDomain(domain, parameters);
+
+            string response = SendRequest("/token/init", parameters, new List<KeyValuePair<string, string>>());
+            return PIEnrollResponse.FromJSON(response, this);
+        }
+
+
+        /// <summary>
         /// Authenticate using the /validate/check endpoint with the username and OTP value. 
         /// Optionally, a transaction id can be provided if authentication is done using challenge-response.
         /// </summary>

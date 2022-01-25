@@ -51,6 +51,38 @@ namespace PrivacyIDEASDK
             return "";
         }
 
+        public List<string> ReadMultiValue(string name)
+        {
+            try
+            {
+                using (RegistryKey key = Registry.LocalMachine.OpenSubKey(registryPath))
+                {
+                    if (key != null)
+                    {
+                        Object o = key.GetValue(name);
+                        if (o != null)
+                        {
+                            return new List<string>(o as string[]);
+                        }
+                        else
+                        {
+                            LogFunc("object for key " + key + " is null.");
+                        }
+
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                if (LogFunc != null)
+                {
+                    LogFunc("registryreader: " + ex.Message);
+                }
+            }
+
+            return new List<string>();
+        }
+
         public Dictionary<string, string> GetRealmMapping()
         {
             var ret = new Dictionary<string, string>();

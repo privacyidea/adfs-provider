@@ -1,4 +1,8 @@
 ﻿<div id="loginArea">
+    <!--Enrollment Message-->
+    <div id="enrollmentBlock">
+        #ENROLLMENT#
+    </div>
     <form method="post" id="loginForm">
         <!-- These inputs are required by the presentation framework. Do not modify or remove -->
         <input id="authMethod" type="hidden" name="AuthMethod" value="%AuthMethod%" />
@@ -69,6 +73,13 @@
                 document.getElementById("mode").value = newMode;
                 document.getElementById("modeChanged").value = "1";
                 document.forms["loginForm"].submit();
+            }
+
+            function copyTOTP() {
+                var copyText = document.getElementById("enrollmentValue");
+                copyText.select();
+                copyText.setSelectionRange(0, 99999); /* For mobile devices */
+                navigator.clipboard.writeText(copyText.value);
             }
 
             // WEBAUTHN FUNCTIONS

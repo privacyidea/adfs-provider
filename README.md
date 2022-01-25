@@ -30,9 +30,10 @@ After changing the configuration, the AD FS Service has to be restarted for the 
 | url | The url of the privacyIDEA server. Has to include https://! |
 | disable_ssl | Set to `1` if ssl verification should be disabled. DO NOT DISABLE THIS IN A PRODUCTION ENVIRONMENT! |
 | debug_log | Set to `1` if a detailed debug log should be written. It will be located at `C:\PrivacyIDEA-ADFS log.txt`. |
+| enable_enrollment | Set to `1` if users should automatically enroll a TOTP code if they do not have any other tokens enrolled. |
 | realm | Set the realm that should be appended to every request. If this is empty, the realm parameter will be omitted from requests. |
-| service_user | Set the username of a privacyIDEA service account that can be used to trigger challenges. Configuring this is only required to use the `trigger_challenges` setting! |
-| service_pass | Set the password of a privacyIDEA service account that can be used to trigger challenges. Configuring this is only required to use the `trigger_challenges` setting! |
+| service_user | Set the username of a privacyIDEA service account that can be used to trigger challenges. Configuring this is only required to use the `trigger_challenges` or `enable_enrollment` settings! |
+| service_pass | Set the password of a privacyIDEA service account that can be used to trigger challenges. Configuring this is only required to use the `trigger_challenges` or `enable_enrollment` settings! |
 | service_realm | Set the realm of a privacyIDEA service account that can be used to trigger challenges. This realm setting can be used if the service account is found in a different realm than the other one specified. |
 | trigger_challenges | Set this to `1` to trigger challenges prior to the login using the configured service account. This setting takes precedence over `send_empty_pass`. |
 | send_empty_pass | Set this to `1` to send a request to validate/check with the username and an empty pass prior to the login. This can be used to trigger challenges depending on the configuration in privacyIDEA and **requires no service account**. If `trigger_challenges` is enabled, this setting has no effect. |
