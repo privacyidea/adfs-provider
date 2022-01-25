@@ -169,7 +169,6 @@ namespace PrivacyIDEASDK
                 Error("/token/ response has wrong format or does not contain 'result.value.count'.\n" + response);
             }
             return ret;
-        
         }
 
         /// <summary>
