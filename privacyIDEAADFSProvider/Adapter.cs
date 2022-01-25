@@ -138,10 +138,9 @@ namespace privacyIDEAADFSProvider
 
             // Perform optional user enrollment
             // If a challenge was triggered previously, checking if the user has a token is skipped
-            if ((response != null && string.IsNullOrEmpty(response.TransactionID)
-                || (response == null))
-                &&                
-                enrollmentEnabled && !privacyIDEA.UserHasToken(username, domain))
+            if (enrollmentEnabled &&
+                (response != null && string.IsNullOrEmpty(response.TransactionID) || (response == null)) &&
+                !privacyIDEA.UserHasToken(username, domain))
             {
                 PIEnrollResponse res = privacyIDEA.TokenInit(username, domain);
                 if (enrollmentApps.Any())
