@@ -365,7 +365,7 @@ namespace privacyIDEAADFSProvider
             this.use_upn = GetFromDict(configDict, "use_upn", "0") == "1";
 
             this.enrollmentEnabled = GetFromDict(configDict, "enable_enrollment", "0") == "1";
-            this.enrollmentApps = registryReader.ReadMultiValue("enrollment-apps");
+            this.enrollmentApps = registryReader.ReadMultiValue("enrollment_apps");
 
             this.triggerChallenge = GetFromDict(configDict, "trigger_challenges", "0") == "1";
             if (!this.triggerChallenge)
