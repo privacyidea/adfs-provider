@@ -2,7 +2,7 @@
 This project builds on Stephan Traub's [original provider v1.3.8.2](https://github.com/sbidy/privacyIDEA-ADFSProvider/tree/f66100713e650d134ac50fcbd3965b71ae588d47). 
 
 ## Preface
-This provider is currently in beta. If you face issues, please check the sections below on how to generate information that can be used to find the problem.
+If you face issues, please check the sections below on how to generate information that can be used to find the problem.
 
 ## Requirements
 To use the provider, the [.NET Framework 4.8](https://dotnet.microsoft.com/download/dotnet-framework/net48) is required on the target machine.
