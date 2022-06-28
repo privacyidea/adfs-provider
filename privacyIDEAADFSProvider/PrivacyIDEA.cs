@@ -442,6 +442,13 @@ namespace PrivacyIDEASDK
                     Log("No realm configured for domain " + d);
                 }
             }
+            else
+            {
+                if (!string.IsNullOrEmpty(Realm))
+                {
+                    parameters.Add("realm", Realm);
+                }
+            }            
         }
 
         internal StringContent DictToEncodedStringContent(Dictionary<string, string> dict)
