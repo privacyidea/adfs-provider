@@ -15,14 +15,14 @@ namespace privacyIDEAADFSProvider
     {
         private readonly string version = typeof(Adapter).Assembly.GetName().Version.ToString();
 
-        private bool use_upn = false;
-        private bool triggerChallenge = false;
-        private bool sendEmptyPassword = false;
-        private bool enrollmentEnabled = false;
-        private List<string> enrollmentApps = new List<string>();
-
-        private PrivacyIDEA privacyIDEA;
-        private bool debuglog = false;
+        private bool _use_upn = false;
+        private bool _triggerChallenge = false;
+        private bool _sendEmptyPassword = false;
+        private bool _enrollmentEnabled = false;
+        private List<string> _enrollmentApps = new List<string>();
+        private string _otpHint = "";
+        private PrivacyIDEA _privacyIDEA;
+        private bool _debuglog = false;
 
         public IAuthenticationAdapterMetadata Metadata
         {
@@ -54,7 +54,7 @@ namespace privacyIDEAADFSProvider
             {
                 username = tmp[1];
                 domain = tmp[0];
-                if (use_upn)
+                if (_use_upn)
                 {
                     // get UPN from sAMAccountName
                     Log("Getting UPN for user:" + username + " and domain: " + domain + "...");
@@ -78,26 +78,26 @@ namespace privacyIDEAADFSProvider
             Log("UPN value: " + upn + ", Domain value: " + domain);
 
             // use upn or sam as loginname attribute
-            if (use_upn)
+            if (_use_upn)
             {
                 username = upn;
             }
-
+            
             // Prepare the form
             var form = new AdapterPresentationForm();
-
+            form.OtpHint = _otpHint;
             // trigger challenges with service account or empty pass if configured
             PIResponse response = null;
 
-            if (privacyIDEA != null)
+            if (_privacyIDEA != null)
             {
-                if (this.triggerChallenge)
+                if (this._triggerChallenge)
                 {
-                    response = privacyIDEA.TriggerChallenges(username, domain);
+                    response = _privacyIDEA.TriggerChallenges(username, domain);
                 }
-                else if (this.sendEmptyPassword)
+                else if (this._sendEmptyPassword)
                 {
-                    response = privacyIDEA.ValidateCheck(username, "", domain: domain);
+                    response = _privacyIDEA.ValidateCheck(username, "", domain: domain);
                 }
             }
             else
@@ -138,14 +138,14 @@ namespace privacyIDEAADFSProvider
 
             // Perform optional user enrollment
             // If a challenge was triggered previously, checking if the user has a token is skipped
-            if (enrollmentEnabled &&
+            if (_enrollmentEnabled &&
                 (response != null && string.IsNullOrEmpty(response.TransactionID) || (response == null)) &&
-                !privacyIDEA.UserHasToken(username, domain))
+                !_privacyIDEA.UserHasToken(username, domain))
             {
-                PIEnrollResponse res = privacyIDEA.TokenInit(username, domain);
-                if (enrollmentApps.Any())
+                PIEnrollResponse res = _privacyIDEA.TokenInit(username, domain);
+                if (_enrollmentApps.Any())
                 {
-                    form.EnrollmentApps = enrollmentApps;
+                    form.EnrollmentApps = _enrollmentApps;
                 }
                 form.EnrollmentUrl = res.TotpUrl;
                 form.EnrollmentImg = res.Base64TotpImage;
@@ -182,7 +182,7 @@ namespace privacyIDEAADFSProvider
                 throw new ExternalAuthenticationException("Error - ProofData is empty", authContext);
             }
 
-            if (this.privacyIDEA == null)
+            if (this._privacyIDEA == null)
             {
                 Error("PrivacyIDEA is not initialized!");
                 throw new ExternalAuthenticationException("PrivacyIDEA is not initialized!", authContext);
@@ -230,11 +230,11 @@ namespace privacyIDEAADFSProvider
             PIResponse response = null;
             if (mode == "push")
             {
-                if (privacyIDEA.PollTransaction(transactionid))
+                if (_privacyIDEA.PollTransaction(transactionid))
                 {
                     // Push confirmed, finish the authentication via /validate/check using an empty otp
                     // https://privacyidea.readthedocs.io/en/latest/tokens/authentication_modes.html#outofband-mode
-                    response = privacyIDEA.ValidateCheck(user, "", transactionid, domain);
+                    response = _privacyIDEA.ValidateCheck(user, "", transactionid, domain);
                 }
                 else
                 {
@@ -254,13 +254,13 @@ namespace privacyIDEAADFSProvider
                 }
                 else
                 {
-                    response = privacyIDEA.ValidateCheckWebAuthn(user, transactionid, webauthnresponse, origin, domain);
+                    response = _privacyIDEA.ValidateCheckWebAuthn(user, transactionid, webauthnresponse, origin, domain);
                 }
             }
             else
             {
                 // Mode == OTP
-                response = privacyIDEA.ValidateCheck(user, otp, transactionid, domain);
+                response = _privacyIDEA.ValidateCheck(user, otp, transactionid, domain);
             }
 
             // If we get this far, the login data provided was wrong, an error occured or another challenge was triggered.
@@ -327,12 +327,12 @@ namespace privacyIDEAADFSProvider
             var registryReader = new RegistryReader(Log);
 
             // Read logging entry first to be able to log the reading of the rest if needed
-            this.debuglog = registryReader.Read("debug_log") == "1";
+            this._debuglog = registryReader.Read("debug_log") == "1";
 
             // Read the other defined keys into a dict
             List<string> configKeys = new List<string>(new string[]
             { "use_upn", "url", "disable_ssl", "enable_enrollment", "service_user", "service_pass", "service_realm",
-                "realm", "trigger_challenges", "send_empty_pass" });
+                "realm", "trigger_challenges", "send_empty_pass", "otp_hint" });
 
             var configDict = new Dictionary<string, string>();
             configKeys.ForEach(key =>
@@ -352,32 +352,34 @@ namespace privacyIDEAADFSProvider
             // Note: the config asks if ssl verify should be disabled, while the constructor parameter indicates if ssl verify should be enabled!
             bool shouldUseSSL = GetFromDict(configDict, "disable_ssl", "0") != "1";
 
-            this.privacyIDEA = new PrivacyIDEA(url, "PrivacyIDEA-ADFS", shouldUseSSL);
-            this.privacyIDEA.Logger = this;
+            this._privacyIDEA = new PrivacyIDEA(url, "PrivacyIDEA-ADFS", shouldUseSSL)
+            {
+                Logger = this
+            };
 
             string serviceUser = GetFromDict(configDict, "service_user", "");
             string servicePass = GetFromDict(configDict, "service_pass", "");
 
             if (!string.IsNullOrEmpty(serviceUser) && !string.IsNullOrEmpty(servicePass))
             {
-                this.privacyIDEA.SetServiceAccount(serviceUser, servicePass, GetFromDict(configDict, "service_realm"));
+                this._privacyIDEA.SetServiceAccount(serviceUser, servicePass, GetFromDict(configDict, "service_realm"));
             }
+            this._otpHint = GetFromDict(configDict, "otp_hint", "");
+            this._use_upn = GetFromDict(configDict, "use_upn", "0") == "1";
 
-            this.use_upn = GetFromDict(configDict, "use_upn", "0") == "1";
+            this._enrollmentEnabled = GetFromDict(configDict, "enable_enrollment", "0") == "1";
+            this._enrollmentApps = registryReader.ReadMultiValue("enrollment_apps");
 
-            this.enrollmentEnabled = GetFromDict(configDict, "enable_enrollment", "0") == "1";
-            this.enrollmentApps = registryReader.ReadMultiValue("enrollment_apps");
-
-            this.triggerChallenge = GetFromDict(configDict, "trigger_challenges", "0") == "1";
-            if (!this.triggerChallenge)
+            this._triggerChallenge = GetFromDict(configDict, "trigger_challenges", "0") == "1";
+            if (!this._triggerChallenge)
             {
                 // Only if triggerChallenge is disabled, sendEmptyPassword COULD be set
-                this.sendEmptyPassword = GetFromDict(configDict, "send_empty_pass", "0") == "1";
+                this._sendEmptyPassword = GetFromDict(configDict, "send_empty_pass", "0") == "1";
             }
-            this.privacyIDEA.Realm = GetFromDict(configDict, "realm", "");
+            this._privacyIDEA.Realm = GetFromDict(configDict, "realm", "");
             var realmmap = registryReader.GetRealmMapping();
             Log("realmmapping: " + string.Join(" , ", realmmap));
-            this.privacyIDEA.RealmMap = realmmap;
+            this._privacyIDEA.RealmMap = realmmap;
         }
 
         /// <summary>
@@ -385,7 +387,7 @@ namespace privacyIDEAADFSProvider
         /// </summary>
         public void OnAuthenticationPipelineUnload()
         {
-            this.privacyIDEA.Dispose();
+            this._privacyIDEA.Dispose();
         }
 
         /// <summary>
@@ -480,7 +482,7 @@ namespace privacyIDEAADFSProvider
 
         public async void LogImpl(string msg)
         {
-            if (this.debuglog)
+            if (this._debuglog)
             {
                 try
                 {

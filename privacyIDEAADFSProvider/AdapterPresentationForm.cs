@@ -7,6 +7,7 @@ namespace privacyIDEAADFSProvider
     class AdapterPresentationForm : IAdapterPresentationForm
     {
         public string ErrorMessage { get; set; } = "";
+        public string OtpHint { get; set; } = "";
         public string Message { get; set; } = "";
         public string PushMessage { get; set; } = "";
         public string PushAvailable { get; set; } = "0";
@@ -50,6 +51,10 @@ namespace privacyIDEAADFSProvider
         public string GetFormHtml(int lcid)
         {
             string otptext = "One-Time-Password";
+            if (!string.IsNullOrEmpty(OtpHint))
+            {
+                otptext = OtpHint;
+            }
             string submittext = "Submit";
             string htmlTemplate = Resources.AuthPage;
 
