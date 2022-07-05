@@ -38,6 +38,7 @@ After changing the configuration, the AD FS Service has to be restarted for the 
 | trigger_challenges | Set this to `1` to trigger challenges prior to the login using the configured service account. This setting takes precedence over `send_empty_pass`. |
 | send_empty_pass | Set this to `1` to send a request to validate/check with the username and an empty pass prior to the login. This can be used to trigger challenges depending on the configuration in privacyIDEA and **requires no service account**. If `trigger_challenges` is enabled, this setting has no effect. |
 | use_upn | Set this to `1` to use the Windows UPN (person@company.com) as the username for requests to privacyIDEA. |
+| tls_version | If you want to explicite the TLS version, set it to: `tls11`, `tls12` or `tls13`. Other values will be ignored and TLS version will stay as system default. |
 
 ### Domain to Realm Mapping
 It is possible to map different Windows domains to different privacyIDEA realms. To achieve this, add the subkey `HKLM\SOFTWARE\Netknights GmbH\PrivacyIDEA-ADFS\realm-mapping`. Now you can add REG_SZ entries that have the name of the Windows domain and the value of the corresponding privacyIDEA realm. Note that the realm mapping takes precedence over the general realm that can be configured as explained in the previous section.

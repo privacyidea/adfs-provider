@@ -331,7 +331,7 @@ namespace privacyIDEAADFSProvider
 
             // Read the other defined keys into a dict
             List<string> configKeys = new List<string>(new string[]
-            { "use_upn", "url", "disable_ssl", "enable_enrollment", "service_user", "service_pass", "service_realm",
+            { "use_upn", "url", "disable_ssl", "tls_version", "enable_enrollment", "service_user", "service_pass", "service_realm",
                 "realm", "trigger_challenges", "send_empty_pass", "otp_hint" });
 
             var configDict = new Dictionary<string, string>();
@@ -351,6 +351,31 @@ namespace privacyIDEAADFSProvider
 
             // Note: the config asks if ssl verify should be disabled, while the constructor parameter indicates if ssl verify should be enabled!
             bool shouldUseSSL = GetFromDict(configDict, "disable_ssl", "0") != "1";
+
+            // Check if TLS version should be overwritten
+            string tlsVersion = GetFromDict(configDict, "tls_version", "");
+            if (!string.IsNullOrEmpty(tlsVersion))
+            {
+                if (tlsVersion.Contains("tls11"))
+                {
+                    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls11;
+                    Log("Setting TLS version to 1.1");
+                }
+                else if (tlsVersion.Contains("tls12"))
+                {
+                    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                    Log("Setting TLS version to 1.2");
+                }
+                else if (tlsVersion.Contains("tls13"))
+                {
+                    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls13;
+                    Log("Setting TLS version to 1.3");
+                }
+                else
+                {
+                    Log($"Given TLS version ({tlsVersion}) has wrong format! Use default version from system.");
+                }
+            }
 
             this._privacyIDEA = new PrivacyIDEA(url, "PrivacyIDEA-ADFS", shouldUseSSL)
             {
