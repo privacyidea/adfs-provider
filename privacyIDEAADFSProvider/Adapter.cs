@@ -21,6 +21,7 @@ namespace privacyIDEAADFSProvider
         private bool _enrollmentEnabled = false;
         private List<string> _enrollmentApps = new List<string>();
         private string _otpHint = "";
+        private List<KeyValuePair<string, string>> _forwardHeaders = new List<KeyValuePair<string, string>>();
         private PrivacyIDEA _privacyIDEA;
         private bool _debuglog = false;
 
@@ -332,7 +333,7 @@ namespace privacyIDEAADFSProvider
             // Read the other defined keys into a dict
             List<string> configKeys = new List<string>(new string[]
             { "use_upn", "url", "disable_ssl", "tls_version", "enable_enrollment", "service_user", "service_pass", "service_realm",
-                "realm", "trigger_challenges", "send_empty_pass", "otp_hint" });
+                "realm", "trigger_challenges", "send_empty_pass", "otp_hint", "forward_headers" });
 
             var configDict = new Dictionary<string, string>();
             configKeys.ForEach(key =>
@@ -374,6 +375,17 @@ namespace privacyIDEAADFSProvider
                 else
                 {
                     Log($"Given TLS version ({tlsVersion}) has wrong format! Use default version from system.");
+                }
+            }
+
+            // Check if headers to forward are set
+            string headersToForward = GetFromDict(configDict, "forward_headers", "");
+            if (!string.IsNullOrEmpty(headersToForward))
+            {
+                List<string> headersList = headersToForward.Split(',').ToList();
+                foreach (string header in headersList)
+                {
+
                 }
             }
 
