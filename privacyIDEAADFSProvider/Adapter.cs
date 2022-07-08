@@ -8,6 +8,7 @@ using System;
 using PrivacyIDEASDK;
 using System.Collections.Generic;
 using System.Linq;
+using System.Collections.Specialized;
 
 namespace privacyIDEAADFSProvider
 {
@@ -46,7 +47,6 @@ namespace privacyIDEAADFSProvider
             IAuthenticationContext authContext)
         {
             Log("BeginAuthentication: identityClaim: " + identityClaim.Value);
-            request.Headers
             string username, domain, upn = "";
             // separates the username from the domain
             string[] tmp = identityClaim.Value.Split('\\');
@@ -82,25 +82,26 @@ namespace privacyIDEAADFSProvider
             if (_use_upn)
             {
                 username = upn;
-            }
-
-            List<KeyValuePair<string, string>> headers = new List<KeyValuePair<string, string>>();
-            
+            }            
             
             // Prepare the form
             var form = new AdapterPresentationForm();
             form.OtpHint = _otpHint;
+
+            // Collect headers to forward with next PI request
+            List<KeyValuePair<string, string>> headers = GetHeadersToForward(request);
+
             // trigger challenges with service account or empty pass if configured
             PIResponse response = null;
             if (_privacyIDEA != null)
             {
                 if (this._triggerChallenge)
                 {
-                    response = _privacyIDEA.TriggerChallenges(username, domain);
+                    response = _privacyIDEA.TriggerChallenges(username, domain, headers);
                 }
                 else if (this._sendEmptyPassword)
                 {
-                    response = _privacyIDEA.ValidateCheck(username, "", domain: domain);
+                    response = _privacyIDEA.ValidateCheck(username, "", domain: domain, headers: headers);
                 }
             }
             else
@@ -229,6 +230,9 @@ namespace privacyIDEAADFSProvider
                 return form;
             }
 
+            // Collect headers to forward with next PI request
+            List<KeyValuePair<string, string>> headers = GetHeadersToForward(request);
+
             // Do the authentication according to the mode we are in
             PIResponse response = null;
             if (mode == "push")
@@ -237,7 +241,7 @@ namespace privacyIDEAADFSProvider
                 {
                     // Push confirmed, finish the authentication via /validate/check using an empty otp
                     // https://privacyidea.readthedocs.io/en/latest/tokens/authentication_modes.html#outofband-mode
-                    response = _privacyIDEA.ValidateCheck(user, "", transactionid, domain);
+                    response = _privacyIDEA.ValidateCheck(user, "", transactionid, domain, headers);
                 }
                 else
                 {
@@ -257,13 +261,13 @@ namespace privacyIDEAADFSProvider
                 }
                 else
                 {
-                    response = _privacyIDEA.ValidateCheckWebAuthn(user, transactionid, webauthnresponse, origin, domain);
+                    response = _privacyIDEA.ValidateCheckWebAuthn(user, transactionid, webauthnresponse, origin, domain, headers);
                 }
             }
             else
             {
                 // Mode == OTP
-                response = _privacyIDEA.ValidateCheck(user, otp, transactionid, domain);
+                response = _privacyIDEA.ValidateCheck(user, otp, transactionid, domain, headers);
             }
 
             // If we get this far, the login data provided was wrong, an error occured or another challenge was triggered.
@@ -460,13 +464,32 @@ namespace privacyIDEAADFSProvider
             return form;
         }
 
-        private List<KeyValuePair<string, string>> GetHeadersToForward()
+        /// <summary>
+        /// Check if wanted header exists in requestHeaders collection.
+        /// </summary>
+        /// <param name="request">the http request object</param>
+        /// <returns>KeyValuePair list of headers and their values or empty KeyValuePair list </string></returns>
+        private List<KeyValuePair<string, string>> GetHeadersToForward(HttpListenerRequest request)
         {
+            
+            NameValueCollection requestHeaders = request.Headers;
+            List<KeyValuePair<string, string>> headersToForward = new List<KeyValuePair<string, string>>();
+
             foreach (string header in _forwardHeaders)
             {
-                List<string> headerValues = authContext; //todo get the headers from browser
+                string[] headerValues = requestHeaders.GetValues(header);
+
+                if (headerValues != null)
+                {
+                    string tmp = string.Join(",", headerValues);
+                    headersToForward.Add(new KeyValuePair<string, string>(header, tmp));
+                }
+                else
+                {
+                    Log("No values for header " + header + " found.");
+                }
             }
-            return null;
+            return headersToForward;
         }
 
         /// <summary>
