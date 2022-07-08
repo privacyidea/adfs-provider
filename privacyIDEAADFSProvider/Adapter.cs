@@ -21,7 +21,7 @@ namespace privacyIDEAADFSProvider
         private bool _enrollmentEnabled = false;
         private List<string> _enrollmentApps = new List<string>();
         private string _otpHint = "";
-        private List<KeyValuePair<string, string>> _forwardHeaders = new List<KeyValuePair<string, string>>();
+        private List<string> _forwardHeaders = new List<string>();
         private PrivacyIDEA _privacyIDEA;
         private bool _debuglog = false;
 
@@ -46,7 +46,7 @@ namespace privacyIDEAADFSProvider
             IAuthenticationContext authContext)
         {
             Log("BeginAuthentication: identityClaim: " + identityClaim.Value);
-
+            request.Headers
             string username, domain, upn = "";
             // separates the username from the domain
             string[] tmp = identityClaim.Value.Split('\\');
@@ -83,13 +83,15 @@ namespace privacyIDEAADFSProvider
             {
                 username = upn;
             }
+
+            List<KeyValuePair<string, string>> headers = new List<KeyValuePair<string, string>>();
+            
             
             // Prepare the form
             var form = new AdapterPresentationForm();
             form.OtpHint = _otpHint;
             // trigger challenges with service account or empty pass if configured
             PIResponse response = null;
-
             if (_privacyIDEA != null)
             {
                 if (this._triggerChallenge)
@@ -382,11 +384,7 @@ namespace privacyIDEAADFSProvider
             string headersToForward = GetFromDict(configDict, "forward_headers", "");
             if (!string.IsNullOrEmpty(headersToForward))
             {
-                List<string> headersList = headersToForward.Split(',').ToList();
-                foreach (string header in headersList)
-                {
-
-                }
+                _forwardHeaders = headersToForward.Split(',').ToList();
             }
 
             this._privacyIDEA = new PrivacyIDEA(url, "PrivacyIDEA-ADFS", shouldUseSSL)
@@ -460,6 +458,15 @@ namespace privacyIDEAADFSProvider
                 form.WebAuthnSignRequest = webAuthnSignRequest;
             }
             return form;
+        }
+
+        private List<KeyValuePair<string, string>> GetHeadersToForward()
+        {
+            foreach (string header in _forwardHeaders)
+            {
+                List<string> headerValues = authContext; //todo get the headers from browser
+            }
+            return null;
         }
 
         /// <summary>
