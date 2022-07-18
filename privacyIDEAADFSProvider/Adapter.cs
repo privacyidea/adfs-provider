@@ -472,7 +472,6 @@ namespace privacyIDEAADFSProvider
         /// <returns>KeyValuePair list of headers and their values or empty KeyValuePair list </string></returns>
         private List<KeyValuePair<string, string>> GetHeadersToForward(HttpListenerRequest request)
         {
-            
             NameValueCollection requestHeaders = request.Headers;
             List<KeyValuePair<string, string>> headersToForward = new List<KeyValuePair<string, string>>();
 
