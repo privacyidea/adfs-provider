@@ -386,6 +386,7 @@ namespace privacyIDEAADFSProvider
 
             // Check if headers to forward are set
             string headersToForward = GetFromDict(configDict, "forward_headers", "");
+            headersToForward.Replace(" ", "");
             if (!string.IsNullOrEmpty(headersToForward))
             {
                 _forwardHeaders = headersToForward.Split(',').ToList();

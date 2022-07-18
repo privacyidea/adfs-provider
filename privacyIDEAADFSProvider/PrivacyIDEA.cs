@@ -378,6 +378,7 @@ namespace PrivacyIDEASDK
                 foreach (var element in headers)
                 {
                     request.Headers.Add(element.Key, element.Value);
+                    Log("Forwarding headers: " + element.Key + " = " + element.Value); // todo rm
                 }
             }
 

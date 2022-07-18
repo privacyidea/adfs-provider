@@ -34,7 +34,7 @@
     <SignAssembly>true</SignAssembly>
   </PropertyGroup>
   <PropertyGroup>
-    <AssemblyOriginatorKeyFile>adfstest.pfx</AssemblyOriginatorKeyFile>
+    <AssemblyOriginatorKeyFile>test.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Microsoft.IdentityServer.Web">
@@ -87,6 +87,7 @@
     <None Include="adfstest.pfx" />
     <None Include="Install.ps1" />
     <None Include="packages.config" />
+    <None Include="test.snk" />
     <None Include="Uninstall.ps1" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
