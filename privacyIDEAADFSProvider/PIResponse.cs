@@ -30,6 +30,68 @@ namespace PrivacyIDEASDK
             return Challenges.First(challenge => challenge.Type == "push").Message;
         }
 
+        public string MergedSignRequest()
+        {
+            List<string> stringWebAuthnSignRequests = WebAuthnSignRequests();
+
+            if (stringWebAuthnSignRequests.Count < 1)
+            {
+                return "";
+            }
+            else if (stringWebAuthnSignRequests.Count == 1)
+            {
+                return stringWebAuthnSignRequests[0];
+            }
+            else
+            {
+                PIWebAuthnSignRequest webAuthn = new PIWebAuthnSignRequest();
+                webAuthn.WebAuthnSignRequest = stringWebAuthnSignRequests[0];
+                try
+                {
+                    return MergeWebAuthnSignRequest(webAuthn, stringWebAuthnSignRequests);
+                }
+                catch (JsonException e)
+                {
+                    return "";
+                }
+            }
+        }
+
+        static string MergeWebAuthnSignRequest (PIWebAuthnSignRequest webAuthn, List<string> webAuthnSignRequests)
+        {
+            // Extract allowCredentials from every WebAuthn sign request and store in JArray list.
+            List<JArray> extracted = new List<JArray>();
+            foreach (string signRequest in webAuthnSignRequests)
+            {
+                JObject jobj = JObject.Parse(signRequest);
+                JArray jarray = jobj["allowCredentials"] as JArray;
+
+                extracted.Add(jarray);
+            }
+            JObject webAuthnSignRequest = JObject.Parse(webAuthn.WebAuthnSignRequest);
+            JArray allowCredentials = new JArray();
+            extracted.ForEach(allowCredentials.Add);
+
+            webAuthnSignRequest.Add("allowCredentials", allowCredentials);
+
+            return webAuthnSignRequest.ToString();
+        }
+
+        public List<string> WebAuthnSignRequests()
+        {
+            List <string> ret = new List<string>();
+            foreach (PIChallenge challenge in Challenges)
+            {
+                if (challenge.Type == "webauthn")
+                {
+                    string temp = (challenge as PIWebAuthnSignRequest).WebAuthnSignRequest;
+                    ret.Add(temp);
+                }
+            }
+
+            return ret;
+        }
+
         public string WebAuthnSignRequest()
         {
             // Currently get only the first one that was triggered
