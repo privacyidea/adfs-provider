@@ -249,7 +249,7 @@ namespace Tests
             var c3 = resp.Challenges.Find(item => item.Type == "webauthn");
             Assert.AreEqual("WAN00025CE7", c3.Serial);
             Assert.AreEqual("Please confirm with your WebAuthn token (Yubico U2F EE Serial 61730834)", c3.Message);
-            var signRequest = resp.WebAuthnSignRequest();
+            var signRequest = resp.MergedSignRequest();
             Assert.IsFalse(string.IsNullOrEmpty(signRequest));
             // The WebAuthnSignRequest returned by PIResponse is unformatted, therefore the formatting of 
             // webAuthnSignRequest is removed aswell
