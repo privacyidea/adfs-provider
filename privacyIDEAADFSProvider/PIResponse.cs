@@ -1,7 +1,7 @@
-﻿using System.Collections.Generic;
-using System.Linq;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace PrivacyIDEASDK
 {
@@ -50,14 +50,14 @@ namespace PrivacyIDEASDK
                 {
                     return MergeWebAuthnSignRequest(webAuthn, stringWebAuthnSignRequests);
                 }
-                catch (JsonException e)
+                catch (JsonException)
                 {
                     return "";
                 }
             }
         }
 
-        static string MergeWebAuthnSignRequest (PIWebAuthnSignRequest webAuthn, List<string> webAuthnSignRequests)
+        static string MergeWebAuthnSignRequest(PIWebAuthnSignRequest webAuthn, List<string> webAuthnSignRequests)
         {
             // Extract allowCredentials from every WebAuthn sign request and store in JArray list.
             List<JArray> extracted = new List<JArray>();
@@ -68,10 +68,22 @@ namespace PrivacyIDEASDK
 
                 extracted.Add(jarray);
             }
+            // Get WebAuthn sign request as JSON object
             JObject webAuthnSignRequest = JObject.Parse(webAuthn.WebAuthnSignRequest);
-            JArray allowCredentials = new JArray();
-            extracted.ForEach(allowCredentials.Add);
 
+            // Set extracted allowCredentials section from every triggered WebAuthn device into one JSON array.
+            JArray allowCredentials = new JArray();
+
+            foreach (var x in extracted)
+            {
+                foreach (var item in x)
+                {
+                    allowCredentials.Add(item);
+                }
+            };
+
+            // Save extracted info in WebAuthn Sign Request
+            webAuthnSignRequest.Remove("allowCredentials");
             webAuthnSignRequest.Add("allowCredentials", allowCredentials);
 
             return webAuthnSignRequest.ToString();
@@ -79,7 +91,7 @@ namespace PrivacyIDEASDK
 
         public List<string> WebAuthnSignRequests()
         {
-            List <string> ret = new List<string>();
+            List<string> ret = new List<string>();
             foreach (PIChallenge challenge in Challenges)
             {
                 if (challenge.Type == "webauthn")
@@ -128,7 +140,7 @@ namespace PrivacyIDEASDK
                 if (result != null)
                 {
                     ret.Status = (bool)result["status"];
-                    
+
                     JToken jVal = result["value"];
                     if (jVal != null)
                     {
