@@ -1,14 +1,14 @@
-﻿using System.Net;
-using Microsoft.IdentityServer.Web.Authentication.External;
-using Claim = System.Security.Claims.Claim;
-using System.IO;
+﻿using Microsoft.IdentityServer.Web.Authentication.External;
+using PrivacyIDEASDK;
+using System;
+using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Diagnostics;
 using System.DirectoryServices.AccountManagement;
-using System;
-using PrivacyIDEASDK;
-using System.Collections.Generic;
+using System.IO;
 using System.Linq;
-using System.Collections.Specialized;
+using System.Net;
+using Claim = System.Security.Claims.Claim;
 
 namespace privacyIDEAADFSProvider
 {
@@ -82,8 +82,8 @@ namespace privacyIDEAADFSProvider
             if (_use_upn)
             {
                 username = upn;
-            }            
-            
+            }
+
             // Prepare the form
             var form = new AdapterPresentationForm();
             form.OtpHint = _otpHint;
@@ -459,7 +459,7 @@ namespace privacyIDEAADFSProvider
 
             if (response.TriggeredTokenTypes().Contains("webauthn"))
             {
-                string webAuthnSignRequest = response.WebAuthnSignRequest();
+                string webAuthnSignRequest = response.MergedSignRequest();
                 form.WebAuthnSignRequest = webAuthnSignRequest;
             }
             return form;
