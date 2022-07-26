@@ -44,11 +44,9 @@ namespace PrivacyIDEASDK
             }
             else
             {
-                PIWebAuthnSignRequest webAuthn = new PIWebAuthnSignRequest();
-                webAuthn.WebAuthnSignRequest = stringWebAuthnSignRequests[0];
                 try
                 {
-                    return MergeWebAuthnSignRequest(webAuthn, stringWebAuthnSignRequests);
+                    return MergeWebAuthnSignRequest(stringWebAuthnSignRequests);
                 }
                 catch (JsonException)
                 {
@@ -57,7 +55,7 @@ namespace PrivacyIDEASDK
             }
         }
 
-        static string MergeWebAuthnSignRequest(PIWebAuthnSignRequest webAuthn, List<string> webAuthnSignRequests)
+        static string MergeWebAuthnSignRequest(List<string> webAuthnSignRequests)
         {
             // Extract allowCredentials from every WebAuthn sign request and store in JArray list.
             List<JArray> extracted = new List<JArray>();
@@ -69,7 +67,7 @@ namespace PrivacyIDEASDK
                 extracted.Add(jarray);
             }
             // Get WebAuthn sign request as JSON object
-            JObject webAuthnSignRequest = JObject.Parse(webAuthn.WebAuthnSignRequest);
+            JObject webAuthnSignRequest = JObject.Parse(webAuthnSignRequests[0]);
 
             // Set extracted allowCredentials section from every triggered WebAuthn device into one JSON array.
             JArray allowCredentials = new JArray();
