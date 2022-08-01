@@ -22,6 +22,7 @@ namespace privacyIDEAADFSProvider
         private bool _enrollmentEnabled = false;
         private List<string> _enrollmentApps = new List<string>();
         private string _otpHint = "";
+        private string _preferredTokenType = "otp";
         private List<string> _forwardHeaders = new List<string>();
         private PrivacyIDEA _privacyIDEA;
         private bool _debuglog = false;
@@ -405,6 +406,7 @@ namespace privacyIDEAADFSProvider
                 this._privacyIDEA.SetServiceAccount(serviceUser, servicePass, GetFromDict(configDict, "service_realm"));
             }
             this._otpHint = GetFromDict(configDict, "otp_hint", "");
+            this._preferredTokenType = GetFromDict(configDict, "preferred_token_type", "otp");
             this._use_upn = GetFromDict(configDict, "use_upn", "0") == "1";
 
             this._enrollmentEnabled = GetFromDict(configDict, "enable_enrollment", "0") == "1";
@@ -462,6 +464,12 @@ namespace privacyIDEAADFSProvider
                 string webAuthnSignRequest = response.WebAuthnSignRequest();
                 form.WebAuthnSignRequest = webAuthnSignRequest;
             }
+
+            if (response.TriggeredTokenTypes().Contains(this._preferredTokenType))
+            {
+                form.Mode = this._preferredTokenType;
+            }
+
             return form;
         }
 
