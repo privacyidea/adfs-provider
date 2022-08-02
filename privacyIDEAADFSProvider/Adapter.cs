@@ -340,7 +340,7 @@ namespace privacyIDEAADFSProvider
             // Read the other defined keys into a dict
             List<string> configKeys = new List<string>(new string[]
             { "use_upn", "url", "disable_ssl", "tls_version", "enable_enrollment", "service_user", "service_pass", "service_realm",
-                "realm", "trigger_challenges", "send_empty_pass", "otp_hint", "forward_headers" });
+                "realm", "trigger_challenges", "send_empty_pass", "otp_hint", "forward_headers", "preferred_token_type" });
 
             var configDict = new Dictionary<string, string>();
             configKeys.ForEach(key =>
