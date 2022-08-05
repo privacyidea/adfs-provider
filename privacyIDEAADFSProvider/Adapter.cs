@@ -137,7 +137,10 @@ namespace privacyIDEAADFSProvider
                 }
             }
 
-            form.Mode = "otp";
+            if (String.IsNullOrEmpty(form.Mode))
+            {
+                form.Mode = "otp";
+            }
             authContext.Data.Add("userid", username);
             authContext.Data.Add("domain", domain);
 
