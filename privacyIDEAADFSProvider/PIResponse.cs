@@ -32,59 +32,47 @@ namespace PrivacyIDEASDK
 
         public string MergedSignRequest()
         {
-            List<string> stringWebAuthnSignRequests = WebAuthnSignRequests();
+            List<string> webAuthnSignRequests = WebAuthnSignRequests();
 
-            if (stringWebAuthnSignRequests.Count < 1)
+            if (webAuthnSignRequests.Count < 1)
             {
                 return "";
             }
-            else if (stringWebAuthnSignRequests.Count == 1)
+            else if (webAuthnSignRequests.Count == 1)
             {
-                return stringWebAuthnSignRequests[0];
+                return webAuthnSignRequests[0];
             }
             else
             {
-                try
+                // Extract allowCredentials from every WebAuthn sign request and store in JArray list.
+                List<JArray> extracted = new List<JArray>();
+                foreach (string signRequest in webAuthnSignRequests)
                 {
-                    return MergeWebAuthnSignRequest(stringWebAuthnSignRequests);
+                    JObject jobj = JObject.Parse(signRequest);
+                    JArray jarray = jobj["allowCredentials"] as JArray;
+
+                    extracted.Add(jarray);
                 }
-                catch (JsonException)
+                // Get WebAuthn sign request as JSON object
+                JObject webAuthnSignRequest = JObject.Parse(webAuthnSignRequests[0]);
+
+                // Set extracted allowCredentials section from every triggered WebAuthn device into one JSON array.
+                JArray allowCredentials = new JArray();
+
+                foreach (var x in extracted)
                 {
-                    return "";
-                }
+                    foreach (var item in x)
+                    {
+                        allowCredentials.Add(item);
+                    }
+                };
+
+                // Save extracted info in WebAuthn Sign Request
+                webAuthnSignRequest.Remove("allowCredentials");
+                webAuthnSignRequest.Add("allowCredentials", allowCredentials);
+
+                return webAuthnSignRequest.ToString();
             }
-        }
-
-        static string MergeWebAuthnSignRequest(List<string> webAuthnSignRequests)
-        {
-            // Extract allowCredentials from every WebAuthn sign request and store in JArray list.
-            List<JArray> extracted = new List<JArray>();
-            foreach (string signRequest in webAuthnSignRequests)
-            {
-                JObject jobj = JObject.Parse(signRequest);
-                JArray jarray = jobj["allowCredentials"] as JArray;
-
-                extracted.Add(jarray);
-            }
-            // Get WebAuthn sign request as JSON object
-            JObject webAuthnSignRequest = JObject.Parse(webAuthnSignRequests[0]);
-
-            // Set extracted allowCredentials section from every triggered WebAuthn device into one JSON array.
-            JArray allowCredentials = new JArray();
-
-            foreach (var x in extracted)
-            {
-                foreach (var item in x)
-                {
-                    allowCredentials.Add(item);
-                }
-            };
-
-            // Save extracted info in WebAuthn Sign Request
-            webAuthnSignRequest.Remove("allowCredentials");
-            webAuthnSignRequest.Add("allowCredentials", allowCredentials);
-
-            return webAuthnSignRequest.ToString();
         }
 
         public List<string> WebAuthnSignRequests()
@@ -96,22 +84,6 @@ namespace PrivacyIDEASDK
                 {
                     string temp = (challenge as PIWebAuthnSignRequest).WebAuthnSignRequest;
                     ret.Add(temp);
-                }
-            }
-
-            return ret;
-        }
-
-        public string WebAuthnSignRequest()
-        {
-            // Currently get only the first one that was triggered
-            string ret = "";
-            foreach (PIChallenge challenge in Challenges)
-            {
-                if (challenge.Type == "webauthn")
-                {
-                    ret = (challenge as PIWebAuthnSignRequest).WebAuthnSignRequest;
-                    break;
                 }
             }
 
