@@ -92,7 +92,7 @@ namespace Tests
                 "LCJtcmVzb2x2ZXJyZWFkIiwicGVyaW9kaWN0YXNrX3dyaXRlIiwicG9saWN5d3JpdGUiLCJyZXNvbHZlcnJlYWQiLCJlbnJvbGxDRVJUSUZJQ0FURSI" +
                 "sImFzc2lnbiIsImNvbmZpZ2RlbGV0ZSIsImVucm9sbFlVQklLRVkiLCJyZXN5bmMiXX0.HvP_hgA-UJFINXnwoBVmAurqcaaMmwM-AsD1S6chGIM";
 
-            string webAuthnSignRequest = "{\n" +
+            string webAuthnSignRequest1 = "{\n" +
                 "            \"allowCredentials\": [\n" +
                 "              {\n" +
                 "                \"id\": \"83De8z_CNqogB6aCyKs6dWIqwpOpzVoNaJ74lgcpuYN7l-95QsD3z-qqPADqsFlPwBXCMqEPssq75kqHCMQHDA\",\n" +
@@ -110,6 +110,54 @@ namespace Tests
                 "            \"timeout\": 60000,\n" +
                 "            \"userVerification\": \"preferred\"\n" +
                 "          }\n";
+
+            string webAuthnSignRequest2 = "{\n" +
+                "            \"allowCredentials\": [\n" +
+                "              {\n" +
+                "                \"id\": \"83De8z_CNqogB6aCyKs6dWIqwnrijhva23onu230985uc2m08uiowejrtcoml3XCMqEPssq75kqHCMQHDA\",\n" +
+                "                \"transports\": [\n" +
+                "                  \"internal\",\n" +
+                "                  \"nfc\",\n" +
+                "                  \"ble\",\n" +
+                "                  \"usb\"\n" +
+                "                ],\n" +
+                "                \"type\": \"public-key\"\n" +
+                "              }\n" +
+                "            ],\n" +
+                "            \"challenge\": \"dHzSmZnAhxEqvtw34v43v2335vc25c22IE\",\n" +
+                "            \"rpId\": \"office.netknights.it\",\n" +
+                "            \"timeout\": 60000,\n" +
+                "            \"userVerification\": \"preferred\"\n" +
+                "          }\n";
+
+            string mergedSignRequests = "{\n" +
+                "            \"challenge\": \"dHzSmZnAhxEq0szRWMY4EGg8qgjeBhJDjAPYKWfd2IE\",\n" +
+                "            \"rpId\": \"office.netknights.it\",\n" +
+                "            \"timeout\": 60000,\n" +
+                "            \"userVerification\": \"preferred\",\n" +
+                "            \"allowCredentials\": [\n" +
+                "              {\n" +
+                "                \"id\": \"83De8z_CNqogB6aCyKs6dWIqwpOpzVoNaJ74lgcpuYN7l-95QsD3z-qqPADqsFlPwBXCMqEPssq75kqHCMQHDA\",\n" +
+                "                \"transports\": [\n" +
+                "                  \"internal\",\n" +
+                "                  \"nfc\",\n" +
+                "                  \"ble\",\n" +
+                "                  \"usb\"\n" +
+                "                ],\n" +
+                "                \"type\": \"public-key\"\n" +
+                "              },\n" +
+                "              {\n" +
+                "                \"id\": \"83De8z_CNqogB6aCyKs6dWIqwnrijhva23onu230985uc2m08uiowejrtcoml3XCMqEPssq75kqHCMQHDA\",\n" +
+                "                \"transports\": [\n" +
+                "                  \"internal\",\n" +
+                "                  \"nfc\",\n" +
+                "                  \"ble\",\n" +
+                "                  \"usb\"\n" +
+                "                ],\n" +
+                "                \"type\": \"public-key\"\n" +
+                "              }\n" +
+                "            ]\n" +
+                "          }";
 
             // Auth token response
             server.Given(
@@ -193,10 +241,21 @@ namespace Tests
                                 "        \"attributes\": {\n" +
                                 "          \"hideResponseInput\": true,\n" +
                                 "          \"img\": \"static/img/FIDO-U2F-Security-Key-444x444.png\",\n" +
-                                "          \"webAuthnSignRequest\": " + webAuthnSignRequest +
+                                "          \"webAuthnSignRequest\": " + webAuthnSignRequest1 +
                                 "        },\n" +
                                 "        \"message\": \"Please confirm with your WebAuthn token (Yubico U2F EE Serial 61730834)\",\n" +
                                 "        \"serial\": \"WAN00025CE7\",\n" +
+                                "        \"transaction_id\": \"16786665691788289392\",\n" +
+                                "        \"type\": \"webauthn\"\n" +
+                                "      },\n" +
+                                "      {\n" +
+                                "        \"attributes\": {\n" +
+                                "          \"hideResponseInput\": true,\n" +
+                                "          \"img\": \"static/img/FIDO-U2F-Security-Key-444x444.png\",\n" +
+                                "          \"webAuthnSignRequest\": " + webAuthnSignRequest2 +
+                                "        },\n" +
+                                "        \"message\": \"Please confirm with your WebAuthn token (Yubico U2F EE Serial 6173234565)\",\n" +
+                                "        \"serial\": \"WAN0002TER\",\n" +
                                 "        \"transaction_id\": \"16786665691788289392\",\n" +
                                 "        \"type\": \"webauthn\"\n" +
                                 "      }\n" +
@@ -249,11 +308,14 @@ namespace Tests
             var c3 = resp.Challenges.Find(item => item.Type == "webauthn");
             Assert.AreEqual("WAN00025CE7", c3.Serial);
             Assert.AreEqual("Please confirm with your WebAuthn token (Yubico U2F EE Serial 61730834)", c3.Message);
-            var signRequest = resp.WebAuthnSignRequest();
+            var signRequest = resp.MergedSignRequest();
             Assert.IsFalse(string.IsNullOrEmpty(signRequest));
-            // The WebAuthnSignRequest returned by PIResponse is unformatted, therefore the formatting of 
-            // webAuthnSignRequest is removed aswell
-            Assert.AreEqual(webAuthnSignRequest.Replace("\n", "").Replace(" ", ""), signRequest);
+            Assert.AreEqual(RemoveWhitespace(mergedSignRequests), RemoveWhitespace(signRequest));
+        }
+
+        public static string RemoveWhitespace(string str)
+        {
+            return string.Join("", str.Split(default(string[]), StringSplitOptions.RemoveEmptyEntries));
         }
     }
 }
