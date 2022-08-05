@@ -22,6 +22,7 @@ namespace privacyIDEAADFSProvider
         private bool _enrollmentEnabled = false;
         private List<string> _enrollmentApps = new List<string>();
         private string _otpHint = "";
+        private string _preferredTokenType = "otp";
         private List<string> _forwardHeaders = new List<string>();
         private PrivacyIDEA _privacyIDEA;
         private bool _debuglog = false;
@@ -136,7 +137,10 @@ namespace privacyIDEAADFSProvider
                 }
             }
 
-            form.Mode = "otp";
+            if (String.IsNullOrEmpty(form.Mode))
+            {
+                form.Mode = "otp";
+            }
             authContext.Data.Add("userid", username);
             authContext.Data.Add("domain", domain);
 
@@ -339,7 +343,7 @@ namespace privacyIDEAADFSProvider
             // Read the other defined keys into a dict
             List<string> configKeys = new List<string>(new string[]
             { "use_upn", "url", "disable_ssl", "tls_version", "enable_enrollment", "service_user", "service_pass", "service_realm",
-                "realm", "trigger_challenges", "send_empty_pass", "otp_hint", "forward_headers" });
+                "realm", "trigger_challenges", "send_empty_pass", "otp_hint", "forward_headers", "preferred_token_type" });
 
             var configDict = new Dictionary<string, string>();
             configKeys.ForEach(key =>
@@ -405,6 +409,7 @@ namespace privacyIDEAADFSProvider
                 this._privacyIDEA.SetServiceAccount(serviceUser, servicePass, GetFromDict(configDict, "service_realm"));
             }
             this._otpHint = GetFromDict(configDict, "otp_hint", "");
+            this._preferredTokenType = GetFromDict(configDict, "preferred_token_type", "otp");
             this._use_upn = GetFromDict(configDict, "use_upn", "0") == "1";
 
             this._enrollmentEnabled = GetFromDict(configDict, "enable_enrollment", "0") == "1";
@@ -462,6 +467,12 @@ namespace privacyIDEAADFSProvider
                 string webAuthnSignRequest = response.MergedSignRequest();
                 form.WebAuthnSignRequest = webAuthnSignRequest;
             }
+
+            if (response.TriggeredTokenTypes().Contains(this._preferredTokenType))
+            {
+                form.Mode = this._preferredTokenType;
+            }
+
             return form;
         }
 
