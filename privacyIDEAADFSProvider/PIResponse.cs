@@ -1,8 +1,7 @@
-﻿using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace PrivacyIDEASDK
 {
@@ -67,6 +66,7 @@ namespace PrivacyIDEASDK
                 if (result != null)
                 {
                     ret.Status = (bool)result["status"];
+                    
                     JToken jVal = result["value"];
                     if (jVal != null)
                     {
@@ -98,22 +98,12 @@ namespace PrivacyIDEASDK
                             string transactionid = (string)element["transaction_id"];
                             string type = (string)element["type"];
                             string serial = (string)element["serial"];
-
                             if (type == "webauthn")
                             {
                                 PIWebAuthnSignRequest tmp = new PIWebAuthnSignRequest();
                                 JToken attr = element["attributes"];
-
-                                if (attr.Type != JTokenType.Null)
-                                {
-                                    var signRequest = attr["webAuthnSignRequest"];
-                                    if (signRequest != null)
-                                    {
-                                        tmp.WebAuthnSignRequest = signRequest.ToString(Formatting.None); // todo System.InvalidOperationException: Cannot access child value on Newtonsoft.Json.Linq.JValue.
-                                        tmp.WebAuthnSignRequest.Replace("\n", "");
-                                    }
-                                }
-
+                                tmp.WebAuthnSignRequest = attr["webAuthnSignRequest"].ToString(Formatting.None);
+                                tmp.WebAuthnSignRequest.Replace("\n", "");
                                 tmp.Message = message;
                                 tmp.Serial = serial;
                                 tmp.TransactionID = transactionid;
@@ -133,15 +123,17 @@ namespace PrivacyIDEASDK
                     }
                 }
             }
-            catch (Exception ex)
+            catch (JsonException je)
             {
                 if (privacyIDEA != null)
                 {
-                    privacyIDEA.Error(ex);
+                    privacyIDEA.Error(je);
                 }
                 return null;
             }
+
             return ret;
         }
+
     }
 }
