@@ -85,7 +85,6 @@
     <Content Include="AuthPage.html" />
     <Content Include="icon.ico" />
     <None Include="adfskeyfile.pfx" />
-    <None Include="adfstest.pfx" />
     <None Include="Install.ps1" />
     <None Include="packages.config" />
     <None Include="Uninstall.ps1" />
