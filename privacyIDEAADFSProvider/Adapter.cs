@@ -45,7 +45,6 @@ namespace privacyIDEAADFSProvider
             IAuthenticationContext authContext)
         {
             Log("BeginAuthentication: identityClaim: " + identityClaim.Value);
-
             string username, domain, upn = "";
             // separates the username from the domain
             string[] tmp = identityClaim.Value.Split('\\');
@@ -489,7 +488,7 @@ namespace privacyIDEAADFSProvider
 
         public void Error(Exception exception)
         {
-            string message = exception.Message + ":\n" + exception.StackTrace;
+            string message = exception.Message + ":\n" + exception.ToString();
             string formatted = "[" + DateTime.UtcNow.ToString("yyyy-MM-ddTHH\\:mm\\:ss") + "] " + message;
             // Write error to both
             this.EventError(formatted);
