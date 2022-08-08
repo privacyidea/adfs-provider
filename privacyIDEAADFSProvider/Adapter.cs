@@ -1,13 +1,14 @@
-﻿using System.Net;
-using Microsoft.IdentityServer.Web.Authentication.External;
-using Claim = System.Security.Claims.Claim;
-using System.IO;
+﻿using Microsoft.IdentityServer.Web.Authentication.External;
+using PrivacyIDEASDK;
+using System;
+using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Diagnostics;
 using System.DirectoryServices.AccountManagement;
-using System;
-using PrivacyIDEASDK;
-using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Net;
+using Claim = System.Security.Claims.Claim;
 
 namespace privacyIDEAADFSProvider
 {
@@ -21,6 +22,8 @@ namespace privacyIDEAADFSProvider
         private bool _enrollmentEnabled = false;
         private List<string> _enrollmentApps = new List<string>();
         private string _otpHint = "";
+        private string _preferredTokenType = "otp";
+        private List<string> _forwardHeaders = new List<string>();
         private PrivacyIDEA _privacyIDEA;
         private bool _debuglog = false;
 
@@ -81,22 +84,25 @@ namespace privacyIDEAADFSProvider
             {
                 username = upn;
             }
-            
+
             // Prepare the form
             var form = new AdapterPresentationForm();
             form.OtpHint = _otpHint;
+
+            // Collect headers to forward with next PI request
+            List<KeyValuePair<string, string>> headers = GetHeadersToForward(request);
+
             // trigger challenges with service account or empty pass if configured
             PIResponse response = null;
-
             if (_privacyIDEA != null)
             {
                 if (this._triggerChallenge)
                 {
-                    response = _privacyIDEA.TriggerChallenges(username, domain);
+                    response = _privacyIDEA.TriggerChallenges(username, domain, headers);
                 }
                 else if (this._sendEmptyPassword)
                 {
-                    response = _privacyIDEA.ValidateCheck(username, "", domain: domain);
+                    response = _privacyIDEA.ValidateCheck(username, "", domain: domain, headers: headers);
                 }
             }
             else
@@ -131,7 +137,10 @@ namespace privacyIDEAADFSProvider
                 }
             }
 
-            form.Mode = "otp";
+            if (String.IsNullOrEmpty(form.Mode))
+            {
+                form.Mode = "otp";
+            }
             authContext.Data.Add("userid", username);
             authContext.Data.Add("domain", domain);
 
@@ -225,6 +234,9 @@ namespace privacyIDEAADFSProvider
                 return form;
             }
 
+            // Collect headers to forward with next PI request
+            List<KeyValuePair<string, string>> headers = GetHeadersToForward(request);
+
             // Do the authentication according to the mode we are in
             PIResponse response = null;
             if (mode == "push")
@@ -233,7 +245,7 @@ namespace privacyIDEAADFSProvider
                 {
                     // Push confirmed, finish the authentication via /validate/check using an empty otp
                     // https://privacyidea.readthedocs.io/en/latest/tokens/authentication_modes.html#outofband-mode
-                    response = _privacyIDEA.ValidateCheck(user, "", transactionid, domain);
+                    response = _privacyIDEA.ValidateCheck(user, "", transactionid, domain, headers);
                 }
                 else
                 {
@@ -253,13 +265,13 @@ namespace privacyIDEAADFSProvider
                 }
                 else
                 {
-                    response = _privacyIDEA.ValidateCheckWebAuthn(user, transactionid, webauthnresponse, origin, domain);
+                    response = _privacyIDEA.ValidateCheckWebAuthn(user, transactionid, webauthnresponse, origin, domain, headers);
                 }
             }
             else
             {
                 // Mode == OTP
-                response = _privacyIDEA.ValidateCheck(user, otp, transactionid, domain);
+                response = _privacyIDEA.ValidateCheck(user, otp, transactionid, domain, headers);
             }
 
             // If we get this far, the login data provided was wrong, an error occured or another challenge was triggered.
@@ -331,7 +343,7 @@ namespace privacyIDEAADFSProvider
             // Read the other defined keys into a dict
             List<string> configKeys = new List<string>(new string[]
             { "use_upn", "url", "disable_ssl", "tls_version", "enable_enrollment", "service_user", "service_pass", "service_realm",
-                "realm", "trigger_challenges", "send_empty_pass", "otp_hint" });
+                "realm", "trigger_challenges", "send_empty_pass", "otp_hint", "forward_headers", "preferred_token_type" });
 
             var configDict = new Dictionary<string, string>();
             configKeys.ForEach(key =>
@@ -376,6 +388,14 @@ namespace privacyIDEAADFSProvider
                 }
             }
 
+            // Check if headers to forward are set
+            string headersToForward = GetFromDict(configDict, "forward_headers", "");
+            headersToForward.Replace(" ", "");
+            if (!string.IsNullOrEmpty(headersToForward))
+            {
+                _forwardHeaders = headersToForward.Split(',').ToList();
+            }
+
             this._privacyIDEA = new PrivacyIDEA(url, "PrivacyIDEA-ADFS", shouldUseSSL)
             {
                 Logger = this
@@ -389,6 +409,7 @@ namespace privacyIDEAADFSProvider
                 this._privacyIDEA.SetServiceAccount(serviceUser, servicePass, GetFromDict(configDict, "service_realm"));
             }
             this._otpHint = GetFromDict(configDict, "otp_hint", "");
+            this._preferredTokenType = GetFromDict(configDict, "preferred_token_type", "otp");
             this._use_upn = GetFromDict(configDict, "use_upn", "0") == "1";
 
             this._enrollmentEnabled = GetFromDict(configDict, "enable_enrollment", "0") == "1";
@@ -443,10 +464,43 @@ namespace privacyIDEAADFSProvider
 
             if (response.TriggeredTokenTypes().Contains("webauthn"))
             {
-                string webAuthnSignRequest = response.WebAuthnSignRequest();
+                string webAuthnSignRequest = response.MergedSignRequest();
                 form.WebAuthnSignRequest = webAuthnSignRequest;
             }
+
+            if (response.TriggeredTokenTypes().Contains(this._preferredTokenType))
+            {
+                form.Mode = this._preferredTokenType;
+            }
+
             return form;
+        }
+
+        /// <summary>
+        /// Check if wanted header exists in requestHeaders collection.
+        /// </summary>
+        /// <param name="request">the http request object</param>
+        /// <returns>KeyValuePair list of headers and their values or empty KeyValuePair list </string></returns>
+        private List<KeyValuePair<string, string>> GetHeadersToForward(HttpListenerRequest request)
+        {
+            NameValueCollection requestHeaders = request.Headers;
+            List<KeyValuePair<string, string>> headersToForward = new List<KeyValuePair<string, string>>();
+
+            foreach (string header in _forwardHeaders)
+            {
+                string[] headerValues = requestHeaders.GetValues(header);
+
+                if (headerValues != null)
+                {
+                    string tmp = string.Join(",", headerValues);
+                    headersToForward.Add(new KeyValuePair<string, string>(header, tmp));
+                }
+                else
+                {
+                    Log("No values for header " + header + " found.");
+                }
+            }
+            return headersToForward;
         }
 
         /// <summary>
