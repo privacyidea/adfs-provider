@@ -1,6 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -75,8 +75,9 @@ namespace PrivacyIDEASDK
         /// </summary>
         /// <param name="username">username to trigger challenges for</param>
         /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
+        /// <param name="headers">optional headers which can be forwarded to the privacyIDEA server</param>
         /// <returns>PIResponse object or null on error</returns>
-        public PIResponse TriggerChallenges(string username, string domain = null)
+        public PIResponse TriggerChallenges(string username, string domain = null, List<KeyValuePair<string, string>> headers = null)
         {
             if (!GetAuthToken())
             {
@@ -90,7 +91,7 @@ namespace PrivacyIDEASDK
 
             AddRealmForDomain(domain, parameters);
 
-            string response = SendRequest("/validate/triggerchallenge", parameters);
+            string response = SendRequest("/validate/triggerchallenge", parameters, headers);
             PIResponse ret = PIResponse.FromJSON(response, this);
 
             return ret;
@@ -201,8 +202,9 @@ namespace PrivacyIDEASDK
         /// <param name="otp">OTP</param>
         /// <param name="transactionid">optional transaction id to refer to a challenge</param>
         /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
+        /// <param name="headers">optional headers which can be forwarded to the privacyIDEA server</param>
         /// <returns>PIResponse object or null on error</returns>
-        public PIResponse ValidateCheck(string user, string otp, string transactionid = null, string domain = null)
+        public PIResponse ValidateCheck(string user, string otp, string transactionid = null, string domain = null, List<KeyValuePair<string, string>> headers = null)
         {
             var parameters = new Dictionary<string, string>
             {
@@ -217,7 +219,7 @@ namespace PrivacyIDEASDK
 
             AddRealmForDomain(domain, parameters);
 
-            string response = SendRequest("/validate/check", parameters, new List<KeyValuePair<string, string>>());
+            string response = SendRequest("/validate/check", parameters, headers);
             return PIResponse.FromJSON(response, this);
         }
 
@@ -230,8 +232,9 @@ namespace PrivacyIDEASDK
         /// <param name="webAuthnSignResponse">the WebAuthnSignResponse string in json format as returned from the browser</param>
         /// <param name="origin">origin also returned by the browser</param>
         /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
+        /// <param name="headers">optional headers which can be forwarded to the privacyIDEA server</param>
         /// <returns>PIResponse object or null on error</returns>
-        public PIResponse ValidateCheckWebAuthn(string user, string transactionid, string webAuthnSignResponse, string origin, string domain = null)
+        public PIResponse ValidateCheckWebAuthn(string user, string transactionid, string webAuthnSignResponse, string origin, string domain = null, List<KeyValuePair<string, string>> headers = null)
         {
             if (string.IsNullOrEmpty(user) || string.IsNullOrEmpty(transactionid) || string.IsNullOrEmpty(webAuthnSignResponse) || string.IsNullOrEmpty(origin))
             {
@@ -284,10 +287,7 @@ namespace PrivacyIDEASDK
             AddRealmForDomain(domain, parameters);
 
             // The origin has to be set in the header for WebAuthn authentication
-            var headers = new List<KeyValuePair<string, string>>
-            {
-                new KeyValuePair<string, string>("Origin", origin)
-            };
+            headers.Add(new KeyValuePair<string, string>("Origin", origin));
 
             string response = SendRequest("/validate/check", parameters, headers);
             return PIResponse.FromJSON(response, this);
@@ -354,7 +354,7 @@ namespace PrivacyIDEASDK
             }
         }
 
-        private String SendRequest(string endpoint, Dictionary<string, string> parameters, List<KeyValuePair<string, string>> headers = null, string method = "POST")
+        private string SendRequest(string endpoint, Dictionary<string, string> parameters, List<KeyValuePair<string, string>> headers = null, string method = "POST")
         {
             Log("Sending [" + string.Join(" , ", parameters) + "] to [" + endpoint + "] with method [" + method + "]");
 
@@ -379,6 +379,7 @@ namespace PrivacyIDEASDK
                 foreach (var element in headers)
                 {
                     request.Headers.Add(element.Key, element.Value);
+                    Log("Forwarding headers: " + element.Key + " = " + element.Value);
                 }
             }
 
