@@ -153,7 +153,7 @@ namespace PrivacyIDEASDK
                                     var signRequest = attr["webAuthnSignRequest"];
                                     if (signRequest != null)
                                     {
-                                        tmp.WebAuthnSignRequest = signRequest.ToString(Formatting.None); // todo System.InvalidOperationException: Cannot access child value on Newtonsoft.Json.Linq.JValue.
+                                        tmp.WebAuthnSignRequest = signRequest.ToString(Formatting.None);
                                         tmp.WebAuthnSignRequest.Replace("\n", "");
                                     }
                                 }
