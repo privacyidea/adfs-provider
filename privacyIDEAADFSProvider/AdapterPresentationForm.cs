@@ -23,7 +23,9 @@ namespace privacyIDEAADFSProvider
                     <li>
                       Download and/or install a TOTP compliant MFA app or Password Manager if you haven't already. Here are some recommendations:
                       <ul>
-                         #ENROLLAPPS#
+                            <li>privacyIDEA Authenticator <a target=""_blank"" href=""https://play.google.com/store/apps/details?id=it.netknights.piauthenticator&hl=en_US&gl=US"">(Android)</a> <a target=""_blank"" href=""https://apps.apple.com/us/app/privacyidea-authenticator/id1445401301"">(iOS)</a></li>
+                            <li>Google Authenticator <a target=""_blank"" href=""https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2&hl=en_US&gl=US"">(Android)</a> <a target=""_blank"" href=""https://apps.apple.com/us/app/google-authenticator/id388497605"">(iOS)</a></li>
+                            <li>Authy <a target=""_blank"" href=""https://authy.com/download/"">(Mobile/Desktop)</a></li>
                       </ul>
                     </li>
                     <li> 
@@ -36,11 +38,6 @@ namespace privacyIDEAADFSProvider
                  </ol>";
         public string EnrollmentUrl { get; set; } = "";
         public string EnrollmentImg { get; set; } = "";
-        public List<string> EnrollmentApps { get; set; } = new List<string>() {
-            "privacyIDEA Authenticator <a target=\"_blank\" href=\"https://play.google.com/store/apps/details?id=it.netknights.piauthenticator&hl=en_US&gl=US\">(Android)</a> <a target=\"_blank\" href=\"https://apps.apple.com/us/app/privacyidea-authenticator/id1445401301\">(iOS)</a>",
-            "Google Authenticator <a target=\"_blank\" href=\"https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2&hl=en_US&gl=US\">(Android)</a> <a target=\"_blank\" href=\"https://apps.apple.com/us/app/google-authenticator/id388497605\">(iOS)</a>",
-            "Authy <a target=\"_blank\" href=\"https://authy.com/download/\">(Mobile/Desktop)</a>"
-        };
 
         public AdapterPresentationForm()
         {
@@ -61,15 +58,6 @@ namespace privacyIDEAADFSProvider
             if(!(string.IsNullOrEmpty(EnrollmentImg) || string.IsNullOrEmpty(EnrollmentUrl)))
             {
                 htmlTemplate = htmlTemplate.Replace("#ENROLLMENT#", EnrollmentText);
-
-                // Enumerate EnrollmentApps
-                string enrollappstxt = "";
-                foreach (var app in EnrollmentApps)
-                {
-                    enrollappstxt += "<li>" + app + "</li>";
-                }
-
-                htmlTemplate = htmlTemplate.Replace("#ENROLLAPPS#", enrollappstxt);
                 htmlTemplate = htmlTemplate.Replace("#ENROLLVAL#", EnrollmentUrl);
                 htmlTemplate = htmlTemplate.Replace("#ENROLLIMG#", EnrollmentImg);
             }
