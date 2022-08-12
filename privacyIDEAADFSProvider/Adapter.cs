@@ -6,7 +6,6 @@ using System.Collections.Specialized;
 using System.Diagnostics;
 using System.DirectoryServices.AccountManagement;
 using System.IO;
-using System.Linq;
 using System.Net;
 using Claim = System.Security.Claims.Claim;
 
@@ -20,7 +19,6 @@ namespace privacyIDEAADFSProvider
         private bool _triggerChallenge = false;
         private bool _sendEmptyPassword = false;
         private bool _enrollmentEnabled = false;
-        private List<string> _enrollmentApps = new List<string>();
         private string _otpHint = "";
         private string _preferredTokenType = "otp";
         private List<string> _forwardHeaders = new List<string>();
@@ -151,10 +149,6 @@ namespace privacyIDEAADFSProvider
                 !_privacyIDEA.UserHasToken(username, domain))
             {
                 PIEnrollResponse res = _privacyIDEA.TokenInit(username, domain);
-                if (_enrollmentApps.Any())
-                {
-                    form.EnrollmentApps = _enrollmentApps;
-                }
                 form.EnrollmentUrl = res.TotpUrl;
                 form.EnrollmentImg = res.Base64TotpImage;
             }
@@ -413,7 +407,6 @@ namespace privacyIDEAADFSProvider
             this._use_upn = GetFromDict(configDict, "use_upn", "0") == "1";
 
             this._enrollmentEnabled = GetFromDict(configDict, "enable_enrollment", "0") == "1";
-            this._enrollmentApps = registryReader.ReadMultiValue("enrollment_apps");
 
             this._triggerChallenge = GetFromDict(configDict, "trigger_challenges", "0") == "1";
             if (!this._triggerChallenge)
