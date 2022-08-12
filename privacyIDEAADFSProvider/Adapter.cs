@@ -435,7 +435,7 @@ namespace privacyIDEAADFSProvider
             this._privacyIDEA.Dispose();
         }
 
-        /// <summary>
+        /// <summary> 
         /// Called on error and represents the authform with a error message
         /// </summary>
         /// <param name="request">the http request object</param>
@@ -466,11 +466,17 @@ namespace privacyIDEAADFSProvider
             {
                 string webAuthnSignRequest = response.MergedSignRequest();
                 form.WebAuthnSignRequest = webAuthnSignRequest;
+                form.Mode = "webauthn";
             }
 
             if (response.TriggeredTokenTypes().Contains(this._preferredTokenType))
             {
                 form.Mode = this._preferredTokenType;
+            }
+
+            if (form.Mode == "webauthn" && (form.WebAuthnSignRequest == null || string.IsNullOrEmpty(form.WebAuthnSignRequest)))
+            {
+                form.Mode = "otp";
             }
 
             return form;
@@ -542,7 +548,7 @@ namespace privacyIDEAADFSProvider
 
         public void Error(Exception exception)
         {
-            string message = exception.Message + ":\n" + exception.StackTrace;
+            string message = exception.Message + ":\n" + exception.ToString();
             string formatted = "[" + DateTime.UtcNow.ToString("yyyy-MM-ddTHH\\:mm\\:ss") + "] " + message;
             // Write error to both
             this.EventError(formatted);

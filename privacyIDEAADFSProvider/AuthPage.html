@@ -412,25 +412,30 @@
 
             const requestStr = value("webAuthnSignRequest");
 
-            // Set origin
-            if (!window.location.origin) {
-                window.location.origin = window.location.protocol + "//" + window.location.hostname + (window.location.port ? ':' + window.location.port : '');
+            if (requestStr.length === 0) {
+                set("mode", "otp");
             }
-            set("origin", window.origin);
+            else {
+                // Set origin
+                if (!window.location.origin) {
+                    window.location.origin = window.location.protocol + "//" + window.location.hostname + (window.location.port ? ':' + window.location.port : '');
+                }
+                set("origin", window.origin);
 
-            try {
-                const requestjson = JSON.parse(requestStr);
+                try {
+                    const requestjson = JSON.parse(requestStr);
 
-                const webAuthnSignResponse = webAuthnSign(requestjson);
-                webAuthnSignResponse.then((webauthnresponse) => {
-                    const response = JSON.stringify(webauthnresponse);
-                    set("webAuthnSignResponse", response);
-                    set("mode", "webauthn");
-                    document.forms["loginForm"].submit();
-                });
-            } catch (err) {
-                console.log("Error while signing WebAuthnSignRequest: " + err);
-                alert("Error while signing WebAuthnSignRequest: " + err);
+                    const webAuthnSignResponse = webAuthnSign(requestjson);
+                    webAuthnSignResponse.then((webauthnresponse) => {
+                        const response = JSON.stringify(webauthnresponse);
+                        set("webAuthnSignResponse", response);
+                        set("mode", "webauthn");
+                        document.forms["loginForm"].submit();
+                    });
+                } catch (err) {
+                    console.log("Error while signing WebAuthnSignRequest: " + err);
+                    alert("Error while signing WebAuthnSignRequest: " + err);
+                }
             }
         }
 
