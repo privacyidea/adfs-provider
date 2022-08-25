@@ -6,6 +6,7 @@ using System.Collections.Specialized;
 using System.Diagnostics;
 using System.DirectoryServices.AccountManagement;
 using System.IO;
+using System.Linq;
 using System.Net;
 using Claim = System.Security.Claims.Claim;
 
@@ -35,6 +36,7 @@ namespace privacyIDEAADFSProvider
                 return meta;
             }
         }
+
         /// <summary>
         /// Initiates a new authentication process and returns our form to the AD FS system.
         /// </summary>
