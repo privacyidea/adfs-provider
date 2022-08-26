@@ -40,6 +40,7 @@ After changing the configuration, the AD FS Service has to be restarted for the 
 | use_upn | Set this to `1` to use the Windows UPN (person@company.com) as the username for requests to privacyIDEA. |
 | tls_version | If you want to explicite the TLS version, set it to: `tls11`, `tls12` or `tls13`. Other values will be ignored and TLS version will stay as system default. |
 | forward_headers | If you want to forward specific headers to the privacyIDEA server, you can set them here. If the header does not exist or has no value, it will be ignored. The headers names should be separated with ','. |
+| preferred_token_type | Set the token type for which the UI should be first shown. This only matters if such token was triggered before. Possible values are `otp`, `push`, `u2f` and `webauthn`. The default is OTP mode. |
 
 ### Domain to Realm Mapping
 It is possible to map different Windows domains to different privacyIDEA realms. To achieve this, add the subkey `HKLM\SOFTWARE\Netknights GmbH\PrivacyIDEA-ADFS\realm-mapping`. Now you can add REG_SZ entries that have the name of the Windows domain and the value of the corresponding privacyIDEA realm. Note that the realm mapping takes precedence over the general realm that can be configured as explained in the previous section.
