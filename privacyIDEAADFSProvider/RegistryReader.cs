@@ -9,21 +9,21 @@ namespace PrivacyIDEASDK
 
     public class RegistryReader
     {
-        private static string registryPath = "SOFTWARE\\Netknights GmbH\\PrivacyIDEA-ADFS";
-        private static string realmMapPath = registryPath + "\\realm-mapping";
+        private static readonly string _RegistryPath = "SOFTWARE\\Netknights GmbH\\PrivacyIDEA-ADFS";
+        private static readonly string _RealmMapPath = _RegistryPath + "\\realm-mapping";
 
-        private LogFunction LogFunc;
+        private readonly LogFunction _LogFunc;
 
         public RegistryReader(LogFunction logFunction)
         {
-            this.LogFunc = logFunction;
+            _LogFunc = logFunction;
         }
 
         public string Read(string name)
         {
             try
             {
-                using (RegistryKey key = Registry.LocalMachine.OpenSubKey(registryPath))
+                using (RegistryKey key = Registry.LocalMachine.OpenSubKey(_RegistryPath))
                 {
                     if (key != null)
                     {
@@ -34,7 +34,7 @@ namespace PrivacyIDEASDK
                         }
                         else
                         {
-                            LogFunc("object for key " + key + " is null.");
+                            _LogFunc?.Invoke("Object for key " + key + " is null.");
                         }
 
                     }
@@ -42,10 +42,7 @@ namespace PrivacyIDEASDK
             }
             catch (Exception ex)
             {
-                if (LogFunc != null)
-                {
-                    LogFunc("registryreader: " + ex.Message);
-                }
+                _LogFunc?.Invoke("RegistryReader exception occured: " + ex.Message);
             }
 
             return "";
@@ -55,7 +52,7 @@ namespace PrivacyIDEASDK
         {
             try
             {
-                using (RegistryKey key = Registry.LocalMachine.OpenSubKey(registryPath))
+                using (RegistryKey key = Registry.LocalMachine.OpenSubKey(_RegistryPath))
                 {
                     if (key != null)
                     {
@@ -66,7 +63,7 @@ namespace PrivacyIDEASDK
                         }
                         else
                         {
-                            LogFunc("object for key " + key + " is null.");
+                            _LogFunc?.Invoke("Object for key " + key + " is null.");
                         }
 
                     }
@@ -74,10 +71,7 @@ namespace PrivacyIDEASDK
             }
             catch (Exception ex)
             {
-                if (LogFunc != null)
-                {
-                    LogFunc("registryreader: " + ex.Message);
-                }
+                _LogFunc?.Invoke("RegistryReader exception occured: " + ex.Message);
             }
 
             return new List<string>();
@@ -88,7 +82,7 @@ namespace PrivacyIDEASDK
             var ret = new Dictionary<string, string>();
             try
             {
-                using (RegistryKey key = Registry.LocalMachine.OpenSubKey(realmMapPath))
+                using (RegistryKey key = Registry.LocalMachine.OpenSubKey(_RealmMapPath))
                 {
                     if (key != null)
                     {
@@ -102,10 +96,7 @@ namespace PrivacyIDEASDK
             catch (Exception e)
             {
                 // The subkey might not exist if no realm mapping is configured
-                if (LogFunc != null)
-                {
-                    LogFunc("Exception while loading realm map: " + e.Message);
-                }
+                _LogFunc?.Invoke("Exception while loading realm map: " + e.Message);
             }
 
             return ret;

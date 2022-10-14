@@ -12,19 +12,19 @@ using Claim = System.Security.Claims.Claim;
 
 namespace privacyIDEAADFSProvider
 {
-    public class Adapter : IAuthenticationAdapter, PILog
+    public class Adapter : IAuthenticationAdapter, IPILog
     {
         private readonly string version = typeof(Adapter).Assembly.GetName().Version.ToString();
 
-        private bool _use_upn = false;
-        private bool _triggerChallenge = false;
-        private bool _sendEmptyPassword = false;
-        private bool _enrollmentEnabled = false;
-        private string _otpHint = "";
-        private string _preferredTokenType = "otp";
-        private List<string> _forwardHeaders = new List<string>();
-        private PrivacyIDEA _privacyIDEA;
-        private bool _debuglog = false;
+        private bool _UseUPN = false;
+        private bool _TriggerChallenge = false;
+        private bool _SendEmptyPassword = false;
+        private bool _EnrollmentEnabled = false;
+        private string _OtpHint = "";
+        private string _PreferredTokenType = "otp";
+        private List<string> _ForwardHeaders = new List<string>();
+        private PrivacyIDEA _PrivacyIDEA;
+        private bool _DebugLog = false;
 
         public IAuthenticationAdapterMetadata Metadata
         {
@@ -32,7 +32,7 @@ namespace privacyIDEAADFSProvider
             {
                 AdapterMetadata meta = new AdapterMetadata();
                 meta.AdapterMetadataInit();
-                meta.adapterversion = version;
+                meta.AdapterVersion = version;
                 return meta;
             }
         }
@@ -56,7 +56,7 @@ namespace privacyIDEAADFSProvider
             {
                 username = tmp[1];
                 domain = tmp[0];
-                if (_use_upn)
+                if (_UseUPN)
                 {
                     // get UPN from sAMAccountName
                     Log("Getting UPN for user:" + username + " and domain: " + domain + "...");
@@ -80,29 +80,29 @@ namespace privacyIDEAADFSProvider
             Log("UPN value: " + upn + ", Domain value: " + domain);
 
             // use upn or sam as loginname attribute
-            if (_use_upn)
+            if (_UseUPN)
             {
                 username = upn;
             }
 
             // Prepare the form
             var form = new AdapterPresentationForm();
-            form.OtpHint = _otpHint;
+            form.OtpHint = _OtpHint;
 
             // Collect headers to forward with next PI request
             List<KeyValuePair<string, string>> headers = GetHeadersToForward(request);
 
             // trigger challenges with service account or empty pass if configured
             PIResponse response = null;
-            if (_privacyIDEA != null)
+            if (_PrivacyIDEA != null)
             {
-                if (this._triggerChallenge)
+                if (_TriggerChallenge)
                 {
-                    response = _privacyIDEA.TriggerChallenges(username, domain, headers);
+                    response = _PrivacyIDEA.TriggerChallenges(username, domain, headers);
                 }
-                else if (this._sendEmptyPassword)
+                else if (_SendEmptyPassword)
                 {
-                    response = _privacyIDEA.ValidateCheck(username, "", domain: domain, headers: headers);
+                    response = _PrivacyIDEA.ValidateCheck(username, "", domain: domain, headers: headers);
                 }
             }
             else
@@ -146,11 +146,11 @@ namespace privacyIDEAADFSProvider
 
             // Perform optional user enrollment
             // If a challenge was triggered previously, checking if the user has a token is skipped
-            if (_enrollmentEnabled &&
+            if (_EnrollmentEnabled &&
                 (response != null && string.IsNullOrEmpty(response.TransactionID) || (response == null)) &&
-                !_privacyIDEA.UserHasToken(username, domain))
+                !_PrivacyIDEA.UserHasToken(username, domain))
             {
-                PIEnrollResponse res = _privacyIDEA.TokenInit(username, domain);
+                PIEnrollResponse res = _PrivacyIDEA.TokenInit(username, domain);
                 form.EnrollmentUrl = res.TotpUrl;
                 form.EnrollmentImg = res.Base64TotpImage;
             }
@@ -186,7 +186,7 @@ namespace privacyIDEAADFSProvider
                 throw new ExternalAuthenticationException("Error - ProofData is empty", authContext);
             }
 
-            if (this._privacyIDEA == null)
+            if (_PrivacyIDEA == null)
             {
                 Error("PrivacyIDEA is not initialized!");
                 throw new ExternalAuthenticationException("PrivacyIDEA is not initialized!", authContext);
@@ -237,11 +237,11 @@ namespace privacyIDEAADFSProvider
             PIResponse response = null;
             if (mode == "push")
             {
-                if (_privacyIDEA.PollTransaction(transactionid))
+                if (_PrivacyIDEA.PollTransaction(transactionid))
                 {
                     // Push confirmed, finish the authentication via /validate/check using an empty otp
                     // https://privacyidea.readthedocs.io/en/latest/tokens/authentication_modes.html#outofband-mode
-                    response = _privacyIDEA.ValidateCheck(user, "", transactionid, domain, headers);
+                    response = _PrivacyIDEA.ValidateCheck(user, "", transactionid, domain, headers);
                 }
                 else
                 {
@@ -261,13 +261,13 @@ namespace privacyIDEAADFSProvider
                 }
                 else
                 {
-                    response = _privacyIDEA.ValidateCheckWebAuthn(user, transactionid, webauthnresponse, origin, domain, headers);
+                    response = _PrivacyIDEA.ValidateCheckWebAuthn(user, transactionid, webauthnresponse, origin, domain, headers);
                 }
             }
             else
             {
                 // Mode == OTP
-                response = _privacyIDEA.ValidateCheck(user, otp, transactionid, domain, headers);
+                response = _PrivacyIDEA.ValidateCheck(user, otp, transactionid, domain, headers);
             }
 
             // If we get this far, the login data provided was wrong, an error occured or another challenge was triggered.
@@ -334,7 +334,7 @@ namespace privacyIDEAADFSProvider
             var registryReader = new RegistryReader(Log);
 
             // Read logging entry first to be able to log the reading of the rest if needed
-            this._debuglog = registryReader.Read("debug_log") == "1";
+            _DebugLog = registryReader.Read("debug_log") == "1";
 
             // Read the other defined keys into a dict
             List<string> configKeys = new List<string>(new string[]
@@ -389,10 +389,10 @@ namespace privacyIDEAADFSProvider
             headersToForward.Replace(" ", "");
             if (!string.IsNullOrEmpty(headersToForward))
             {
-                _forwardHeaders = headersToForward.Split(',').ToList();
+                _ForwardHeaders = headersToForward.Split(',').ToList();
             }
 
-            this._privacyIDEA = new PrivacyIDEA(url, "PrivacyIDEA-ADFS", shouldUseSSL)
+            _PrivacyIDEA = new PrivacyIDEA(url, "PrivacyIDEA-ADFS", shouldUseSSL)
             {
                 Logger = this
             };
@@ -402,24 +402,24 @@ namespace privacyIDEAADFSProvider
 
             if (!string.IsNullOrEmpty(serviceUser) && !string.IsNullOrEmpty(servicePass))
             {
-                this._privacyIDEA.SetServiceAccount(serviceUser, servicePass, GetFromDict(configDict, "service_realm"));
+                _PrivacyIDEA.SetServiceAccount(serviceUser, servicePass, GetFromDict(configDict, "service_realm"));
             }
-            this._otpHint = GetFromDict(configDict, "otp_hint", "");
-            this._preferredTokenType = GetFromDict(configDict, "preferred_token_type", "otp");
-            this._use_upn = GetFromDict(configDict, "use_upn", "0") == "1";
+            _OtpHint = GetFromDict(configDict, "otp_hint", "");
+            _PreferredTokenType = GetFromDict(configDict, "preferred_token_type", "otp");
+            _UseUPN = GetFromDict(configDict, "use_upn", "0") == "1";
 
-            this._enrollmentEnabled = GetFromDict(configDict, "enable_enrollment", "0") == "1";
+            _EnrollmentEnabled = GetFromDict(configDict, "enable_enrollment", "0") == "1";
 
-            this._triggerChallenge = GetFromDict(configDict, "trigger_challenges", "0") == "1";
-            if (!this._triggerChallenge)
+            _TriggerChallenge = GetFromDict(configDict, "trigger_challenges", "0") == "1";
+            if (!_TriggerChallenge)
             {
                 // Only if triggerChallenge is disabled, sendEmptyPassword COULD be set
-                this._sendEmptyPassword = GetFromDict(configDict, "send_empty_pass", "0") == "1";
+                _SendEmptyPassword = GetFromDict(configDict, "send_empty_pass", "0") == "1";
             }
-            this._privacyIDEA.Realm = GetFromDict(configDict, "realm", "");
+            _PrivacyIDEA.Realm = GetFromDict(configDict, "realm", "");
             var realmmap = registryReader.GetRealmMapping();
             Log("realmmapping: " + string.Join(" , ", realmmap));
-            this._privacyIDEA.RealmMap = realmmap;
+            _PrivacyIDEA.RealmMap = realmmap;
         }
 
         /// <summary>
@@ -427,7 +427,7 @@ namespace privacyIDEAADFSProvider
         /// </summary>
         public void OnAuthenticationPipelineUnload()
         {
-            this._privacyIDEA.Dispose();
+            _PrivacyIDEA.Dispose();
         }
 
         /// <summary> 
@@ -464,9 +464,9 @@ namespace privacyIDEAADFSProvider
                 form.Mode = "webauthn";
             }
 
-            if (response.TriggeredTokenTypes().Contains(this._preferredTokenType))
+            if (response.TriggeredTokenTypes().Contains(_PreferredTokenType))
             {
-                form.Mode = this._preferredTokenType;
+                form.Mode = _PreferredTokenType;
             }
 
             if (form.Mode == "webauthn" && (form.WebAuthnSignRequest == null || string.IsNullOrEmpty(form.WebAuthnSignRequest)))
@@ -487,7 +487,7 @@ namespace privacyIDEAADFSProvider
             NameValueCollection requestHeaders = request.Headers;
             List<KeyValuePair<string, string>> headersToForward = new List<KeyValuePair<string, string>>();
 
-            foreach (string header in _forwardHeaders)
+            foreach (string header in _ForwardHeaders)
             {
                 string[] headerValues = requestHeaders.GetValues(header);
 
@@ -530,15 +530,15 @@ namespace privacyIDEAADFSProvider
         public void Log(string message)
         {
             string formatted = "[" + DateTime.UtcNow.ToString("yyyy-MM-ddTHH\\:mm\\:ss") + "] " + message;
-            this.LogImpl(formatted);
+            LogImpl(formatted);
         }
 
         public void Error(string message)
         {
             string formatted = "[" + DateTime.UtcNow.ToString("yyyy-MM-ddTHH\\:mm\\:ss") + "] " + message;
             // write error to both
-            this.EventError(formatted);
-            this.LogImpl(formatted);
+            EventError(formatted);
+            LogImpl(formatted);
         }
 
         public void Error(Exception exception)
@@ -546,8 +546,8 @@ namespace privacyIDEAADFSProvider
             string message = exception.Message + ":\n" + exception.ToString();
             string formatted = "[" + DateTime.UtcNow.ToString("yyyy-MM-ddTHH\\:mm\\:ss") + "] " + message;
             // Write error to both
-            this.EventError(formatted);
-            this.LogImpl(formatted);
+            EventError(formatted);
+            LogImpl(formatted);
         }
 
         private void EventError(string message)
@@ -561,7 +561,7 @@ namespace privacyIDEAADFSProvider
 
         public async void LogImpl(string msg)
         {
-            if (this._debuglog)
+            if (_DebugLog)
             {
                 try
                 {

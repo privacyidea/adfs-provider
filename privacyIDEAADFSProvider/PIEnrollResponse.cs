@@ -29,8 +29,10 @@ namespace PrivacyIDEASDK
                 return null;
             }
 
-            PIEnrollResponse ret = new PIEnrollResponse();
-            ret.Raw = json;
+            PIEnrollResponse ret = new PIEnrollResponse
+            {
+                Raw = json
+            };
             try
             {
                 JObject jobj = JObject.Parse(json);

@@ -102,8 +102,10 @@ namespace PrivacyIDEASDK
                 return null;
             }
 
-            PIResponse ret = new PIResponse();
-            ret.Raw = json;
+            PIResponse ret = new PIResponse
+            {
+                Raw = json
+            };
             try
             {
                 JObject jobj = JObject.Parse(json);
@@ -133,8 +135,7 @@ namespace PrivacyIDEASDK
                     ret.Type = (string)detail["type"];
                     ret.Serial = (string)detail["serial"];
 
-                    JArray multiChallenge = detail["multi_challenge"] as JArray;
-                    if (multiChallenge != null)
+                    if (detail["multi_challenge"] is JArray multiChallenge)
                     {
                         foreach (JToken element in multiChallenge.Children())
                         {
@@ -166,11 +167,13 @@ namespace PrivacyIDEASDK
                             }
                             else
                             {
-                                PIChallenge tmp = new PIChallenge();
-                                tmp.Message = message;
-                                tmp.Serial = serial;
-                                tmp.TransactionID = transactionid;
-                                tmp.Type = type;
+                                PIChallenge tmp = new PIChallenge
+                                {
+                                    Message = message,
+                                    Serial = serial,
+                                    TransactionID = transactionid,
+                                    Type = type
+                                };
                                 ret.Challenges.Add(tmp);
                             }
                         }
