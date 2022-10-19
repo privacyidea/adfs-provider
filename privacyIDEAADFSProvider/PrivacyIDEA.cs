@@ -28,46 +28,49 @@ namespace PrivacyIDEASDK
             {
                 if (SSLVerify != _sslVerify)
                 {
-                    httpClientHandler = new HttpClientHandler();
+                    _HttpClientHandler = new HttpClientHandler();
                     if (!SSLVerify)
                     {
-                        httpClientHandler.ClientCertificateOptions = ClientCertificateOption.Manual;
-                        httpClientHandler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+                        _HttpClientHandler.ClientCertificateOptions = ClientCertificateOption.Manual;
+                        _HttpClientHandler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
                     }
-                    httpClient = new HttpClient(httpClientHandler);
-                    httpClient.DefaultRequestHeaders.Add("User-Agent", useragent);
+                    _HttpClient = new HttpClient(_HttpClientHandler);
+                    _HttpClient.DefaultRequestHeaders.Add("User-Agent", _UserAgent);
                     _sslVerify = SSLVerify;
                 }
             }
         }
 
-        private HttpClientHandler httpClientHandler;
-        private HttpClient httpClient;
-        private bool disposedValue;
-        private string serviceuser, servicepass, servicerealm, useragent;
-        private bool logServerResponse = true;
-        public PILog Logger { get; set; } = null;
+        private HttpClientHandler _HttpClientHandler;
+        private HttpClient _HttpClient;
+        private bool _DisposedValue;
+        private string _ServiceUser;
+        private string _ServicePass;
+        private string _ServiceRealm;
+        private readonly string _UserAgent;
+        private readonly bool _LogServerResponse = true;
+        public IPILog Logger { get; set; } = null;
 
         // The webauthn parameters should not be url encoded because they already have the correct format.
-        private static List<String> exludeFromURIEscape = new List<string>(new string[]
+        private static readonly List<String> _ExludeFromURIEscape = new List<string>(new string[]
            { "credentialid", "clientdata", "signaturedata", "authenticatordata", "userhandle", "assertionclientextensions" });
 
-        private static List<String> logExcludedEndpoints = new List<string>(new string[]
+        private static readonly List<String> _LogExcludedEndpoints = new List<string>(new string[]
            { "/auth", "/validate/polltransaction" });
 
         public PrivacyIDEA(string url, string useragent, bool sslVerify = true)
         {
             this.Url = url;
-            this.useragent = useragent;
+            this._UserAgent = useragent;
 
-            httpClientHandler = new HttpClientHandler();
+            _HttpClientHandler = new HttpClientHandler();
             if (!sslVerify)
             {
-                httpClientHandler.ClientCertificateOptions = ClientCertificateOption.Manual;
-                httpClientHandler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+                _HttpClientHandler.ClientCertificateOptions = ClientCertificateOption.Manual;
+                _HttpClientHandler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
             }
-            httpClient = new HttpClient(httpClientHandler);
-            httpClient.DefaultRequestHeaders.Add("User-Agent", useragent);
+            _HttpClient = new HttpClient(_HttpClientHandler);
+            _HttpClient.DefaultRequestHeaders.Add("User-Agent", useragent);
         }
 
         /// <summary>
@@ -308,13 +311,13 @@ namespace PrivacyIDEASDK
 
             var map = new Dictionary<string, string>
             {
-                { "username", serviceuser },
-                { "password", servicepass }
+                { "username", _ServiceUser },
+                { "password", _ServicePass }
             };
 
-            if (!string.IsNullOrEmpty(servicerealm))
+            if (!string.IsNullOrEmpty(_ServiceRealm))
             {
-                map.Add("realm", servicerealm);
+                map.Add("realm", _ServiceRealm);
             }
 
             string response = SendRequest("/auth", map);
@@ -338,7 +341,7 @@ namespace PrivacyIDEASDK
 
             if (!string.IsNullOrEmpty(token))
             {
-                httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(token);
+                _HttpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(token);
                 return true;
             }
             return false;
@@ -346,11 +349,11 @@ namespace PrivacyIDEASDK
 
         public void SetServiceAccount(string user, string pass, string realm = "")
         {
-            serviceuser = user;
-            servicepass = pass;
+            _ServiceUser = user;
+            _ServicePass = pass;
             if (!string.IsNullOrEmpty(realm))
             {
-                servicerealm = realm;
+                _ServiceRealm = realm;
             }
         }
 
@@ -383,7 +386,7 @@ namespace PrivacyIDEASDK
                 }
             }
 
-            Task<HttpResponseMessage> responseTask = httpClient.SendAsync(request);
+            Task<HttpResponseMessage> responseTask = _HttpClient.SendAsync(request);
 
             var responseMessage = responseTask.GetAwaiter().GetResult();
             if (responseMessage.StatusCode != HttpStatusCode.OK)
@@ -402,7 +405,7 @@ namespace PrivacyIDEASDK
                 Error(e.Message);
             }
 
-            if (logServerResponse && !string.IsNullOrEmpty(ret) && !logExcludedEndpoints.Contains(endpoint))
+            if (_LogServerResponse && !string.IsNullOrEmpty(ret) && !_LogExcludedEndpoints.Contains(endpoint))
             {
                 Log(endpoint + " response:\n" + JToken.Parse(ret).ToString(Formatting.Indented));
             }
@@ -460,7 +463,7 @@ namespace PrivacyIDEASDK
             foreach (var element in dict)
             {
                 sb.Append(element.Key).Append("=");
-                sb.Append((exludeFromURIEscape.Contains(element.Key)) ? element.Value : Uri.EscapeDataString(element.Value));
+                sb.Append((_ExludeFromURIEscape.Contains(element.Key)) ? element.Value : Uri.EscapeDataString(element.Value));
                 sb.Append("&");
             }
             // Remove tailing &
@@ -476,7 +479,7 @@ namespace PrivacyIDEASDK
 
         internal bool ServiceAccountAvailable()
         {
-            return !string.IsNullOrEmpty(serviceuser) && !string.IsNullOrEmpty(servicepass);
+            return !string.IsNullOrEmpty(_ServiceUser) && !string.IsNullOrEmpty(_ServicePass);
         }
 
         internal void Log(string message)
@@ -505,16 +508,16 @@ namespace PrivacyIDEASDK
 
         protected virtual void Dispose(bool disposing)
         {
-            if (!disposedValue)
+            if (!_DisposedValue)
             {
                 if (disposing)
                 {
                     // Managed
-                    httpClient.Dispose();
-                    httpClientHandler.Dispose();
+                    _HttpClient.Dispose();
+                    _HttpClientHandler.Dispose();
                 }
                 // Unmanaged
-                disposedValue = true;
+                _DisposedValue = true;
             }
         }
 

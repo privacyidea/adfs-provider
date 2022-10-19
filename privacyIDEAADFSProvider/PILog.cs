@@ -2,7 +2,7 @@
 
 namespace PrivacyIDEASDK
 {
-    public interface PILog
+    public interface IPILog
     {
         void Log(string message);
 

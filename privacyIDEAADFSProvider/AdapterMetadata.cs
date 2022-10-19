@@ -5,19 +5,23 @@ namespace privacyIDEAADFSProvider
 {
     class AdapterMetadata : IAuthenticationAdapterMetadata
     {
-        public string adapterversion { get; set; }
+        public string AdapterVersion { get; set; }
 
-        //public UITranslation[] inter;
+        static readonly List<int> LCIDS = new List<int>
+                {
+                    1033,   // en-us
+                    1031,   // de-de
+                    2057    // en-gb
+                };
 
-        public void AdapterMetadataInit(/*UITranslation[] adfsinter*/)
+        public void AdapterMetadataInit()
         {
-            //this.inter = adfsinter;
         }
 
         /// Returns the name of the provider that will be shown in the AD FS management UI (not visible to end users)
         public string AdminName
         {
-            get { return "privacyIDEA-ADFSProvider_" + adapterversion; }
+            get { return "privacyIDEA-ADFSProvider_" + AdapterVersion; }
         }
 
         /// Returns an array of strings containing URIs indicating the set of authentication methods implemented by the adapter 
@@ -33,23 +37,7 @@ namespace privacyIDEAADFSProvider
         /// to determine the best language\locale to display to the user.
         public int[] AvailableLcids
         {
-            get
-            {
-                List<int> LCIDS = new List<int>();
-                bool HasDefault = false;
-                /*if (inter != null)
-                {
-                    foreach (UITranslation adfsui in inter)
-                    {
-                        LCIDS.Add(adfsui.LCID);
-                        if (adfsui.LCID == 1033) HasDefault = true;
-                    }
-                }*/
-                //Fallback and fixup
-                if ((LCIDS.Count == 0) | (!HasDefault))
-                    LCIDS.Add(1033);
-                return LCIDS.ToArray();
-            }
+            get => LCIDS.ToArray();
         }
 
         /// Returns a Dictionary containing the set of localized friendly names of the provider, indexed by lcid. 
@@ -59,21 +47,14 @@ namespace privacyIDEAADFSProvider
         {
             get
             {
-                Dictionary<int, string> _friendlyNames = new Dictionary<int, string>();
-                bool HasDefault = false;
-                /*if (inter != null)
+                Dictionary<int, string> friendlyNames = new Dictionary<int, string>();
+                // Friendly name is the same for any LCID
+                foreach (int i in LCIDS)
                 {
-                    foreach (UITranslation adfsui in inter)
-                    {
-                        _friendlyNames.Add(adfsui.LCID, adfsui.friendlyname);
-                        if (adfsui.LCID == 1033) HasDefault = true;
-                    }
+                    friendlyNames.Add(i, "privacyIDEA AD FS Provider");
                 }
-                */
-                if ((_friendlyNames.Count == 0) | (!HasDefault))
-                    _friendlyNames.Add(1033, "privacyIDEA AD FS Provider");
 
-                return _friendlyNames;
+                return friendlyNames;
             }
         }
 
@@ -84,19 +65,12 @@ namespace privacyIDEAADFSProvider
         {
             get
             {
-                Dictionary<int, string> _descriptions = new Dictionary<int, string>();
-                bool HasDefault = false;
-                /*if (inter != null)
+                Dictionary<int, string> descriptions = new Dictionary<int, string>();
+                foreach (int i in LCIDS)
                 {
-                    foreach (UITranslation adfsui in inter)
-                    {
-                        _descriptions.Add(adfsui.LCID, adfsui.description);
-                        if (adfsui.LCID == 1033) HasDefault = true;
-                    }
-                }*/
-                if ((_descriptions.Count == 0) | (!HasDefault))
-                    _descriptions.Add(1033, "AD FS Provider to authenticate with privacyIDEA.");
-                return _descriptions;
+                    descriptions.Add(i, "AD FS Provider to authenticate with privacyIDEA.");
+                }
+                return descriptions;
             }
         }
 

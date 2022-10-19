@@ -6,6 +6,10 @@
             <!-- PAGE 1-->
             <Dialog Id="ConfigurationDlg" Width="370" Height="270" Title="[ProductName] Setup" NoMinimize="yes">
                 <!-- MAIN -->
+				<Control Type="Text" Id="label_url" Width="65" Height="15" X="38" Y="58" Text="privacyIDEA URL" />
+				<Control Type="Text" Id="label_realm" Width="44" Height="25" X="38" Y="105" Text="Realm (optional)" />
+				<Control Type="Text" Id="label_user" Width="26" Height="10" X="38" Y="180" Text="User:" />
+				<Control Type="Text" Id="label_pass" Width="23" Height="10" X="145" Y="180" Text="Pass:" />
                 <Control Type="Edit" Id="in_url" Width="143" Height="15" X="112" Y="56" Text="https://..." Property="URL" Help="Server URL including scheme and path." />
                 <Control Type="CheckBox" Id="cbox_ssl" Width="123" Height="15" X="38" Y="79" Text="Disable SSL verification" CheckBoxValue="1" Property="DISABLESSL" />
                 <Control Type="Edit" Id="in_realm" Width="74" Height="15" X="90" Y="109" Text="Realm" Property="REALM" />
@@ -53,10 +57,6 @@
                     <Text>{\WixUI_Font_Title}AD FS Provider Configuration</Text>
                 </Control>
                 <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="2" />
-                <Control Type="Text" Id="label_url" Width="65" Height="15" X="38" Y="58" Text="privacyIDEA URL" />
-                <Control Type="Text" Id="label_realm" Width="44" Height="25" X="38" Y="105" Text="Realm (optional)" />
-                <Control Type="Text" Id="label_user" Width="26" Height="10" X="38" Y="180" Text="User:" />
-                <Control Type="Text" Id="label_pass" Width="23" Height="10" X="145" Y="180" Text="Pass:" />
             </Dialog>
             <!-- END PAGE 1-->
             <Dialog Id="NoServerURLMessageDlg" Width="260" Height="85" Title="[ProductName] Setup" NoMinimize="yes">
