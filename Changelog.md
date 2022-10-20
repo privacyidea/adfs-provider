@@ -1,3 +1,8 @@
+## 20-10-2022 v1.1.1
+
+# Enhancement
+* Add German (de-de) and British English (en-gb) as supported languages.
+
 ## 25-08-2022 v1.1.0
 
 # Features
