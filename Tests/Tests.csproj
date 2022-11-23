@@ -24,10 +24,4 @@
     <ProjectReference Include="..\privacyIDEAADFSProvider\privacyIDEAADFSProvider.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Reference Include="Microsoft.IdentityServer.Web">
-      <HintPath>..\privacyIDEAADFSProvider\Microsoft.IdentityServer.Web.dll</HintPath>
-    </Reference>
-  </ItemGroup>
-
 </Project>
