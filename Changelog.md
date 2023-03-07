@@ -1,36 +1,45 @@
-## 20-10-2022 v1.1.1
+## 2023-03-10 v1.2.0
 
-# Enhancement
+### Features
+* Token enrollment via challenge-response
+* Preferred client mode can be set from the server
+
+
+## 2022-10-20 v1.1.1
+
+### Enhancement
 * Add German (de-de) and British English (en-gb) as supported languages.
 
-## 25-08-2022 v1.1.0
 
-# Features
+## 2022-08-25 v1.1.0
+
+### Features
 * Option to enroll TOTP token if the user has none. This requires a service account to be set (#17)
 * Option to forward selected headers (#24)
 * Option to set the TLS version explicitly. By default the system version is used as advised by Microsoft (#23)
 * Option to set a custom hint for the OTP input (#21)
 * Option to set the preferred token type (if such token was triggered, see docs) (#32)
 
-# Fixes
+### Fixes
 * If a user has multiple WebAuth token, all of them will be usable now (#29)
 
 
-## 20-07-2021 v1.0.0
+## 2021-07-20 v1.0.0
 
-# Fixes
+### Fixes
 * Fixed an issue that would prevent multiple consecutive challenges from working
 
-## 06-07-2021 v0.10.0
 
-# Features
+## 2021-07-06 v0.10.0
+
+### Features
 * WebAuthn
 * Configurable Windows Domain to privacyIDEA realm mapping
 
 
-## 10-06-2021 v0.9.0
+## 2021-06-10 v0.9.0
 
-# Features
+### Features
 * OTP Token like HOTP and TOTP
 * Challenge-Response with Email and SMS
 * Push Token

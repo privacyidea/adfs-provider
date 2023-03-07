@@ -16,6 +16,7 @@ namespace PrivacyIDEASDK
         public int ErrorCode { get; set; } = 0;
         public bool Status { get; set; } = false;
         public bool Value { get; set; } = false;
+        public string PreferredClientMode { get; set; } = "";
 
         public string Raw { get; set; } = "";
         public List<PIChallenge> Challenges { get; set; } = new List<PIChallenge>();
@@ -95,10 +96,7 @@ namespace PrivacyIDEASDK
         {
             if (string.IsNullOrEmpty(json))
             {
-                if (privacyIDEA != null)
-                {
-                    privacyIDEA.Error("Json to parse is empty!");
-                }
+                privacyIDEA?.Error("Json to parse is empty!");
                 return null;
             }
 
@@ -135,6 +133,24 @@ namespace PrivacyIDEASDK
                     ret.Type = (string)detail["type"];
                     ret.Serial = (string)detail["serial"];
 
+                    // Check if the response contains "preferred_client_mode" (PI >=3.8). If so, translate the values that use other names
+                    string prefClientMode = (string)detail["preferred_client_mode"];
+                    if (!string.IsNullOrEmpty(prefClientMode))
+                    {
+                        if (prefClientMode == "interactive")
+                        {
+                            ret.PreferredClientMode = "otp";
+                        }
+                        else if (prefClientMode == "poll")
+                        {
+                            ret.PreferredClientMode = "push";
+                        }
+                        else
+                        {
+                            ret.PreferredClientMode = prefClientMode;
+                        }
+                    }
+
                     if (detail["multi_challenge"] is JArray multiChallenge)
                     {
                         foreach (JToken element in multiChallenge.Children())
@@ -143,12 +159,27 @@ namespace PrivacyIDEASDK
                             string transactionid = (string)element["transaction_id"];
                             string type = (string)element["type"];
                             string serial = (string)element["serial"];
+                            string clientMode = (string)element["client_mode"];
+                            string image = "";
+
+                            if (element["image"] != null && element["image"].Type != JTokenType.Null)
+                            {
+                                image = (string)element["image"];
+                            }
 
                             if (type == "webauthn")
                             {
-                                PIWebAuthnSignRequest tmp = new PIWebAuthnSignRequest();
-                                JToken attr = element["attributes"];
+                                PIWebAuthnSignRequest tmp = new PIWebAuthnSignRequest
+                                {
+                                    Message = message,
+                                    Serial = serial,
+                                    TransactionID = transactionid,
+                                    Type = type,
+                                    ClientMode = clientMode,
+                                    Image = image
+                                };
 
+                                JToken attr = element["attributes"];
                                 if (attr.Type != JTokenType.Null)
                                 {
                                     var signRequest = attr["webAuthnSignRequest"];
@@ -158,11 +189,6 @@ namespace PrivacyIDEASDK
                                         tmp.WebAuthnSignRequest.Replace("\n", "");
                                     }
                                 }
-
-                                tmp.Message = message;
-                                tmp.Serial = serial;
-                                tmp.TransactionID = transactionid;
-                                tmp.Type = type;
                                 ret.Challenges.Add(tmp);
                             }
                             else
@@ -172,7 +198,9 @@ namespace PrivacyIDEASDK
                                     Message = message,
                                     Serial = serial,
                                     TransactionID = transactionid,
-                                    Type = type
+                                    Type = type,
+                                    ClientMode = clientMode,
+                                    Image = image
                                 };
                                 ret.Challenges.Add(tmp);
                             }
@@ -182,10 +210,7 @@ namespace PrivacyIDEASDK
             }
             catch (Exception ex)
             {
-                if (privacyIDEA != null)
-                {
-                    privacyIDEA.Error(ex);
-                }
+                privacyIDEA?.Error(ex);
                 return null;
             }
             return ret;

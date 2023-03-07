@@ -484,26 +484,17 @@ namespace PrivacyIDEASDK
 
         internal void Log(string message)
         {
-            if (this.Logger != null)
-            {
-                this.Logger.Log(message);
-            }
+            this.Logger?.Log(message);
         }
 
         internal void Error(string message)
         {
-            if (this.Logger != null)
-            {
-                this.Logger.Error(message);
-            }
+            this.Logger?.Error(message);
         }
 
         internal void Error(Exception exception)
         {
-            if (this.Logger != null)
-            {
-                this.Logger.Error(exception);
-            }
+            this.Logger?.Error(exception);
         }
 
         protected virtual void Dispose(bool disposing)

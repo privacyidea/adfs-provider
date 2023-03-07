@@ -34,7 +34,7 @@ namespace PrivacyIDEASDK
                         }
                         else
                         {
-                            _LogFunc?.Invoke("Object for key " + key + " is null.");
+                            _LogFunc?.Invoke($"'{name}' is not set in registry.");
                         }
 
                     }

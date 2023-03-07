@@ -48,10 +48,10 @@ namespace privacyIDEAADFSProvider
             IAuthenticationContext authContext)
         {
             Log("BeginAuthentication: identityClaim: " + identityClaim.Value);
-            string username, domain, upn = "";
+            string username, domain;
             // separates the username from the domain
             string[] tmp = identityClaim.Value.Split('\\');
-
+            string upn;
             if (tmp.Length > 1)
             {
                 username = tmp[1];
@@ -86,8 +86,10 @@ namespace privacyIDEAADFSProvider
             }
 
             // Prepare the form
-            var form = new AdapterPresentationForm();
-            form.OtpHint = _OtpHint;
+            var form = new AdapterPresentationForm(Log)
+            {
+                OtpHint = _OtpHint
+            };
 
             // Collect headers to forward with next PI request
             List<KeyValuePair<string, string>> headers = GetHeadersToForward(request);
@@ -198,7 +200,7 @@ namespace privacyIDEAADFSProvider
             Log("AuthContext: " + string.Join(", ", authContext.Data));
 
             // Prepare form to return, fill with values from proofData
-            var form = new AdapterPresentationForm();
+            var form = new AdapterPresentationForm(Log);
             string otp = (string)GetFromDict(proofDict, "otp");
             string mode = (string)GetFromDict(proofDict, "mode");
             string modeChanged = (string)GetFromDict(proofDict, "modeChanged");
@@ -224,6 +226,14 @@ namespace privacyIDEAADFSProvider
 
             string transactionid = (string)GetFromDict(contextDict, "transactionid");
             string user = (string)GetFromDict(contextDict, "userid");
+
+            // Restore the previous response to set the challenges again in case of error
+            PIResponse previousResponse = null;
+            string previousResponseStr = (string)GetFromDict(contextDict, "previousResponse");
+            if (!string.IsNullOrEmpty(previousResponseStr))
+            {
+                previousResponse = PIResponse.FromJSON(previousResponseStr, _PrivacyIDEA);
+            }
 
             if (modeChanged == "1")
             {
@@ -278,6 +288,7 @@ namespace privacyIDEAADFSProvider
                 {
                     newChallenge = true;
                     form = ExtractChallengeDataToForm(response, form, authContext);
+                    authContext.Data.Add("previousResponse", response.Raw);
                 }
                 else if (response.Value)
                 {
@@ -287,6 +298,12 @@ namespace privacyIDEAADFSProvider
                 else
                 {
                     Log("Response value was false!");
+                    if (previousResponse != null)
+                    {
+                        Log("Restoring values from previous response with challenges...");
+                        form = ExtractChallengeDataToForm(previousResponse, form, authContext);
+                    }
+
                     // Set the error message from the response or a default
                     form.ErrorMessage = (!string.IsNullOrEmpty(response.ErrorMessage)) ? response.ErrorMessage + " (" + response.ErrorCode + ")"
                         : "Wrong OTP value!";
@@ -329,26 +346,24 @@ namespace privacyIDEAADFSProvider
         /// <param name="configData"></param>
         public void OnAuthenticationPipelineLoad(IAuthenticationMethodConfigData configData)
         {
-            Log("OnAuthenticationPipelineLoad: Provider Version " + version);
-
-            var registryReader = new RegistryReader(Log);
-
             // Read logging entry first to be able to log the reading of the rest if needed
+            var registryReader = new RegistryReader(Log);
             _DebugLog = registryReader.Read("debug_log") == "1";
 
+            Log("OnAuthenticationPipelineLoad: Provider Version " + version);
             // Read the other defined keys into a dict
             List<string> configKeys = new List<string>(new string[]
             { "use_upn", "url", "disable_ssl", "tls_version", "enable_enrollment", "service_user", "service_pass", "service_realm",
                 "realm", "trigger_challenges", "send_empty_pass", "otp_hint", "forward_headers", "preferred_token_type" });
 
             var configDict = new Dictionary<string, string>();
+            Log("Read config values:");
             configKeys.ForEach(key =>
             {
                 string value = registryReader.Read(key);
-                Log("Read value '" + value + "' for key '" + key + "'");
+                Log($"{key} = {value}");
                 configDict[key] = value;
             });
-
             string url = GetFromDict(configDict, "url");
             if (string.IsNullOrEmpty(url))
             {
@@ -380,7 +395,7 @@ namespace privacyIDEAADFSProvider
                 }
                 else
                 {
-                    Log($"Given TLS version ({tlsVersion}) has wrong format! Use default version from system.");
+                    Log($"Given TLS version ({tlsVersion}) has wrong format! Using default version from system.");
                 }
             }
 
@@ -418,7 +433,7 @@ namespace privacyIDEAADFSProvider
             }
             _PrivacyIDEA.Realm = GetFromDict(configDict, "realm", "");
             var realmmap = registryReader.GetRealmMapping();
-            Log("realmmapping: " + string.Join(" , ", realmmap));
+            Log("realmmapping = " + string.Join(" , ", realmmap));
             _PrivacyIDEA.RealmMap = realmmap;
         }
 
@@ -439,15 +454,21 @@ namespace privacyIDEAADFSProvider
         public IAdapterPresentation OnError(HttpListenerRequest request, ExternalAuthenticationException ex)
         {
             Log("OnError, ExternalAuthenticationException: " + ex.Message);
-            var form = new AdapterPresentationForm();
-            form.ErrorMessage = ex.Message;
+            var form = new AdapterPresentationForm(Log)
+            {
+                ErrorMessage = ex.Message
+            };
             return form;
         }
 
+        /// This function should only be used if the response contains challenges that were triggered.
         private AdapterPresentationForm ExtractChallengeDataToForm(PIResponse response, AdapterPresentationForm form, IAuthenticationContext authContext)
         {
-            // explicitly overwrite here. If another challenge was triggered, it will have a different transaction_id.
+            // Explicitly overwrite here. If another challenge was triggered, it will have a different transaction_id.
             authContext.Data["transactionid"] = response.TransactionID;
+            // Reset WebAuthn and mode
+            form.WebAuthnSignRequest = "";
+            form.Mode = "otp";
 
             form.Message = response.Message;
 
@@ -459,12 +480,14 @@ namespace privacyIDEAADFSProvider
 
             if (response.TriggeredTokenTypes().Contains("webauthn"))
             {
-                string webAuthnSignRequest = response.MergedSignRequest();
-                form.WebAuthnSignRequest = webAuthnSignRequest;
-                form.Mode = "webauthn";
+                form.WebAuthnSignRequest = response.MergedSignRequest();
             }
 
-            if (response.TriggeredTokenTypes().Contains(_PreferredTokenType))
+            if (!string.IsNullOrEmpty(response.PreferredClientMode))
+            {
+                form.Mode = response.PreferredClientMode;
+            }
+            else if (response.TriggeredTokenTypes().Contains(_PreferredTokenType))
             {
                 form.Mode = _PreferredTokenType;
             }
@@ -472,6 +495,32 @@ namespace privacyIDEAADFSProvider
             if (form.Mode == "webauthn" && (form.WebAuthnSignRequest == null || string.IsNullOrEmpty(form.WebAuthnSignRequest)))
             {
                 form.Mode = "otp";
+            }
+
+            // Check if there is an image that should be shown in the current mode
+            // TODO using the client_mode of the challenges as our modes (e.g. interactive, poll) would simplify this
+            IEnumerable<PIChallenge> challenges;
+            if (form.Mode == "otp")
+            {
+                challenges = response.Challenges.Where(challenge => challenge.ClientMode == "interactive");
+            }
+            else if (form.Mode == "push")
+            {
+                challenges = response.Challenges.Where(challenge => challenge.ClientMode == "poll");
+            }
+            else
+            {
+                challenges = response.Challenges.Where(challenge => challenge.ClientMode == form.Mode);
+            }
+
+            if (challenges.Any())
+            {
+                // Default for PIResponse class is null
+                var challengeWithImage = challenges.FirstOrDefault(challenge => !string.IsNullOrEmpty(challenge.Image));
+                if (challengeWithImage != null)
+                {
+                    form.EnrollmentImg = challengeWithImage.Image;
+                }
             }
 
             return form;
@@ -517,7 +566,7 @@ namespace privacyIDEAADFSProvider
                         };
         }
 
-        private T GetFromDict<T>(Dictionary<string, T> dict, string key, T defaultValue = default(T))
+        private T GetFromDict<T>(Dictionary<string, T> dict, string key, T defaultValue = default)
         {
             if (dict.ContainsKey(key))
             {
@@ -529,13 +578,13 @@ namespace privacyIDEAADFSProvider
 
         public void Log(string message)
         {
-            string formatted = "[" + DateTime.UtcNow.ToString("yyyy-MM-ddTHH\\:mm\\:ss") + "] " + message;
+            string formatted = "[" + DateTime.Now.ToString("yyyy-MM-ddTHH\\:mm\\:ss") + "] " + message;
             LogImpl(formatted);
         }
 
         public void Error(string message)
         {
-            string formatted = "[" + DateTime.UtcNow.ToString("yyyy-MM-ddTHH\\:mm\\:ss") + "] " + message;
+            string formatted = "[" + DateTime.Now.ToString("yyyy-MM-ddTHH\\:mm\\:ss") + "] " + message;
             // write error to both
             EventError(formatted);
             LogImpl(formatted);
@@ -544,7 +593,7 @@ namespace privacyIDEAADFSProvider
         public void Error(Exception exception)
         {
             string message = exception.Message + ":\n" + exception.ToString();
-            string formatted = "[" + DateTime.UtcNow.ToString("yyyy-MM-ddTHH\\:mm\\:ss") + "] " + message;
+            string formatted = "[" + DateTime.Now.ToString("yyyy-MM-ddTHH\\:mm\\:ss") + "] " + message;
             // Write error to both
             EventError(formatted);
             LogImpl(formatted);
