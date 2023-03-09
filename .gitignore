@@ -244,3 +244,6 @@ ModelManifest.xml
 .fake/
 
 config.xml
+
+# pi-csharp-client
+csharp-client
