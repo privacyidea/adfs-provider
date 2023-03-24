@@ -1,210 +1,214 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <?include $(sys.CURRENTDIR)\Include.wxi?>
+	<?include $(sys.CURRENTDIR)\Include.wxi?>
 
-  <Product Id="*"
-           Name="$(var.ProductName) $(var.Version)"
-           Language="1033"
-           Version="$(var.Version)"
-           Manufacturer="$(var.Publisher)"
-           UpgradeCode="62a6f39c-3c33-460e-a3ac-8b700cdd8d80">
+	<Product Id="*"
+			 Name="$(var.ProductName) $(var.Version)"
+			 Language="1033"
+			 Version="$(var.Version)"
+			 Manufacturer="$(var.Publisher)"
+			 UpgradeCode="62a6f39c-3c33-460e-a3ac-8b700cdd8d80">
 
-    <Package InstallerVersion="200"
-             Compressed="yes"
-             InstallScope="perMachine"
-             InstallPrivileges="elevated"
-             Platform ="x64"
-             Manufacturer="$(var.Publisher)"
-             Description="$(var.ProductName) $(var.Version) $(var.Platform) Setup"/>
+		<Package InstallerVersion="200"
+				 Compressed="yes"
+				 InstallScope="perMachine"
+				 InstallPrivileges="elevated"
+				 Platform ="x64"
+				 Manufacturer="$(var.Publisher)"
+				 Description="$(var.ProductName) $(var.Version) $(var.Platform) Setup"/>
 
-    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed."/>
+		<MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed."/>
 
-    <?if $(var.Platform) = x86 ?>
-    <Condition Message="The privacyIDEA AD FS Provider can not be installed on a x86 machine.">
-      <![CDATA[Not VersionNT64]]>
-    </Condition>
-    <?endif?>
+		<?if $(var.Platform) = x86 ?>
+		<Condition Message="The privacyIDEA AD FS Provider can not be installed on a x86 machine.">
+			<![CDATA[Not VersionNT64]]>
+		</Condition>
+		<?endif?>
 
-    <MediaTemplate EmbedCab="yes"/>
+		<MediaTemplate EmbedCab="yes"/>
 
-    <Icon Id="icon.ico" SourceFile="$(var.privacyIDEAADFSProvider.ProjectDir)\icon.ico"/>
-    <Property Id="ARPPRODUCTICON" Value="icon.ico"/>
+		<Icon Id="icon.ico" SourceFile="$(var.privacyIDEAADFSProvider.ProjectDir)\icon.ico"/>
+		<Property Id="ARPPRODUCTICON" Value="icon.ico"/>
 
-    <Property Id="ARPURLINFOABOUT" Value="$(var.AppURLInfoAbout)"/>
-    <Property Id="ARPNOREPAIR" Value="yes" Secure="yes" />
-    <Property Id="ARPNOMODIFY" Value="yes" Secure="yes" />
+		<Property Id="ARPURLINFOABOUT" Value="$(var.AppURLInfoAbout)"/>
+		<Property Id="ARPNOREPAIR" Value="yes" Secure="yes" />
+		<Property Id="ARPNOMODIFY" Value="yes" Secure="yes" />
 
-    <Condition Message="You need to be an administrator to install this product.">Privileged</Condition>
+		<Condition Message="You need to be an administrator to install this product.">Privileged</Condition>
 
-    <!-- Custom action definitions -->
-    <CustomAction Id='IsPrivileged' Error='You must be an admin to install this product'/>
-    <CustomAction Id="PreventDowngrading" Error="Newer version already installed."/>
+		<!-- Custom action definitions -->
+		<CustomAction Id='IsPrivileged' Error='You must be an admin to install this product'/>
+		<CustomAction Id="PreventDowngrading" Error="Newer version already installed."/>
 
-    <!-- INSTALL -->
-    <CustomAction Id='SetPowerShellInstallInput'
-                  Property='RunPowerShellInstall'
-                  Value="&quot;C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe&quot; -NonInteractive -ExecutionPolicy Bypass -InputFormat None -NoProfile -File &quot;[INSTALLFOLDER]Install.ps1&quot;"
-                  Execute='immediate'/>
+		<!-- INSTALL -->
+		<CustomAction Id='SetPowerShellInstallInput'
+					  Property='RunPowerShellInstall'
+					  Value="&quot;C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe&quot; -NonInteractive -ExecutionPolicy Bypass -InputFormat None -NoProfile -File &quot;[INSTALLFOLDER]Install.ps1&quot;"
+					  Execute='immediate'/>
 
-    <CustomAction Id="RunPowerShellInstall"
-                  BinaryKey="WixCA"
-                  DllEntry="CAQuietExec"
-                  Execute="commit"
-                  Return="check"
-                  Impersonate="no"/>
+		<CustomAction Id="RunPowerShellInstall"
+					  BinaryKey="WixCA"
+					  DllEntry="CAQuietExec"
+					  Execute="commit"
+					  Return="check"
+					  Impersonate="no"/>
 
-    <!-- UNINSTALL -->
-    <CustomAction Id='SetPowerShellUninstallInput'
-                  Property='RunPowerShellUninstall'
-                  Value="&quot;C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe&quot; -NonInteractive -ExecutionPolicy Bypass -InputFormat None -NoProfile -File &quot;[INSTALLFOLDER]Uninstall.ps1&quot;"
-                  Execute='immediate'/>
+		<!-- UNINSTALL -->
+		<CustomAction Id='SetPowerShellUninstallInput'
+					  Property='RunPowerShellUninstall'
+					  Value="&quot;C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe&quot; -NonInteractive -ExecutionPolicy Bypass -InputFormat None -NoProfile -File &quot;[INSTALLFOLDER]Uninstall.ps1&quot;"
+					  Execute='immediate'/>
 
-    <CustomAction Id="RunPowerShellUninstall"
-                  BinaryKey="WixCA"
-                  DllEntry="CAQuietExec"
-                  Execute="deferred"
-                  Return="check"
-                  Impersonate="no"/>
-    <!-- END Custom action definitions-->
+		<CustomAction Id="RunPowerShellUninstall"
+					  BinaryKey="WixCA"
+					  DllEntry="CAQuietExec"
+					  Execute="deferred"
+					  Return="check"
+					  Impersonate="no"/>
+		<!-- END Custom action definitions-->
 
-    <!-- Lookup configuration values in registry to prefill fields -->
-    <Property Id="URL">
-      <RegistrySearch Id="SearchHostname" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
-                      Name="url" Win64="yes" Type="raw"/>
-    </Property>
-    <Property Id="DISABLESSL">
-      <RegistrySearch Id="SearchDisableSSL" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
-                      Name="disable_ssl" Win64="yes" Type="raw"/>
-    </Property>
-    <Property Id="REALM">
-      <RegistrySearch Id="SearchRealm" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
-                      Name="realm" Win64="yes" Type="raw"/>
-    </Property>
-    <Property Id="USEUPN">
-      <RegistrySearch Id="SearchUseUPN" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
-                      Name="use_upn" Win64="yes" Type="raw"/>
-    </Property>
-	<Property Id="ENABLEENROLL">
-      <RegistrySearch Id="SearchEnableEnrollment" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
-                      Name="enable_enrollment" Win64="yes" Type="raw"/>
-	</Property>
-    <Property Id="SERVICEUSER">
-      <RegistrySearch Id="SearchServiceUser" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
-                      Name="service_user" Win64="yes" Type="raw"/>
-    </Property>
-    <Property Id="SERVICEPASS">
-      <RegistrySearch Id="SearchServicePass" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
-                      Name="service_pass" Win64="yes" Type="raw"/>
-    </Property>
-    <Property Id="TRIGGERCHALLENGES">
-      <RegistrySearch Id="SearchTriggerChallenges" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
-                      Name="trigger_challenges" Win64="yes" Type="raw"/>
-    </Property>
-    <Property Id="SENDEMPTYPASS">
-      <RegistrySearch Id="SearchSendEmptyPass" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
-                      Name="send_empty_pass" Win64="yes" Type="raw"/>
-    </Property>
-    <Property Id="DEBUGLOG">
-      <RegistrySearch Id="SearchDebugLog" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
-                      Name="debug_log" Win64="yes" Type="raw"/>
-    </Property>
-    <!-- END LOOKUP -->
-    
-    <!-- INSTALL EXECUTE SEQUENCE -->
-    <InstallExecuteSequence>
-      <Custom Action='IsPrivileged' Before='AppSearch'>NOT Privileged</Custom>
+		<!-- Lookup configuration values in registry to prefill fields -->
+		<Property Id="URL">
+			<RegistrySearch Id="SearchHostname" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+							Name="url" Win64="yes" Type="raw"/>
+		</Property>
+		<Property Id="DISABLESSL">
+			<RegistrySearch Id="SearchDisableSSL" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+							Name="disable_ssl" Win64="yes" Type="raw"/>
+		</Property>
+		<Property Id="REALM">
+			<RegistrySearch Id="SearchRealm" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+							Name="realm" Win64="yes" Type="raw"/>
+		</Property>
+		<Property Id="USEUPN">
+			<RegistrySearch Id="SearchUseUPN" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+							Name="use_upn" Win64="yes" Type="raw"/>
+		</Property>
+		<Property Id="ENABLEENROLL">
+			<RegistrySearch Id="SearchEnableEnrollment" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+							Name="enable_enrollment" Win64="yes" Type="raw"/>
+		</Property>
+		<Property Id="SERVICEUSER">
+			<RegistrySearch Id="SearchServiceUser" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+							Name="service_user" Win64="yes" Type="raw"/>
+		</Property>
+		<Property Id="SERVICEPASS">
+			<RegistrySearch Id="SearchServicePass" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+							Name="service_pass" Win64="yes" Type="raw"/>
+		</Property>
+		<Property Id="TRIGGERCHALLENGES">
+			<RegistrySearch Id="SearchTriggerChallenges" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+							Name="trigger_challenges" Win64="yes" Type="raw"/>
+		</Property>
+		<Property Id="SENDEMPTYPASS">
+			<RegistrySearch Id="SearchSendEmptyPass" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+							Name="send_empty_pass" Win64="yes" Type="raw"/>
+		</Property>
+		<Property Id="DEBUGLOG">
+			<RegistrySearch Id="SearchDebugLog" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+							Name="debug_log" Win64="yes" Type="raw"/>
+		</Property>
+		<!-- END LOOKUP -->
 
-      <Custom Action="SetPowerShellInstallInput" After="CostFinalize">NOT Installed</Custom>
-      <Custom Action="RunPowerShellInstall" After="InstallInitialize">NOT Installed</Custom>
+		<!-- INSTALL EXECUTE SEQUENCE -->
+		<InstallExecuteSequence>
+			<Custom Action='IsPrivileged' Before='AppSearch'>NOT Privileged</Custom>
 
-      <Custom Action="SetPowerShellUninstallInput" After="CostFinalize">Installed</Custom>
-      <Custom Action="RunPowerShellUninstall" After="InstallInitialize">Installed</Custom>
-    </InstallExecuteSequence>
-    <!-- END INSTALL EXECUTE SEQUENCE -->
+			<Custom Action="SetPowerShellInstallInput" After="CostFinalize">NOT Installed</Custom>
+			<Custom Action="RunPowerShellInstall" After="InstallInitialize">NOT Installed</Custom>
 
-    <!-- Set Logos and License -->
-    <WixVariable Id="WixUIDialogBmp" Value="$(var.ProjectDir)\Assets\Dialog.bmp"/>
-    <WixVariable Id="WixUIBannerBmp" Value="$(var.ProjectDir)\Assets\Banner.bmp"/>
-    <WixVariable Id="WixUILicenseRtf" Value="$(var.ProjectDir)\Assets\AGPLv3.rtf"/>
+			<Custom Action="SetPowerShellUninstallInput" After="CostFinalize">Installed</Custom>
+			<Custom Action="RunPowerShellUninstall" After="InstallInitialize">Installed</Custom>
+		</InstallExecuteSequence>
+		<!-- END INSTALL EXECUTE SEQUENCE -->
 
-    <!-- UI Dialogues -->
-    <UI Id="MyWixUI_FeatureTree">
-      <UIRef Id="WixUI_FeatureTree"/>
-      <DialogRef Id="ConfigurationDlg"/>
-      <!-- Skip the component dialog which is part of this UI set -->
-      <Publish Dialog="ConfigurationDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
-      <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="ConfigurationDlg">1</Publish>
-      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="ConfigurationDlg" Order="1">NOT Installed OR (WixUI_InstallMode = "Change" AND USER_IS_ADMINISTRATOR = "1" )</Publish>
-    </UI>
-    <!-- END UI Dialogues -->
+		<!-- Set Logos and License -->
+		<WixVariable Id="WixUIDialogBmp" Value="$(var.ProjectDir)\Assets\Dialog.bmp"/>
+		<WixVariable Id="WixUIBannerBmp" Value="$(var.ProjectDir)\Assets\Banner.bmp"/>
+		<WixVariable Id="WixUILicenseRtf" Value="$(var.ProjectDir)\Assets\AGPLv3.rtf"/>
 
-    <Feature Id="ProductFeature" Title="ADFSInstaller" Level="1">
-      <ComponentGroupRef Id="ProductComponents"/>
-    </Feature>
-  </Product>
+		<!-- UI Dialogues -->
+		<UI Id="MyWixUI_FeatureTree">
+			<UIRef Id="WixUI_FeatureTree"/>
+			<DialogRef Id="ConfigurationDlg"/>
+			<!-- Skip the component dialog which is part of this UI set -->
+			<Publish Dialog="ConfigurationDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
+			<Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="ConfigurationDlg">1</Publish>
+			<Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="ConfigurationDlg" Order="1">NOT Installed OR (WixUI_InstallMode = "Change" AND USER_IS_ADMINISTRATOR = "1" )</Publish>
+		</UI>
+		<!-- END UI Dialogues -->
 
-  <!-- DIRECTORIES -->
-  <Fragment>
-    <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLFOLDER" Name="PrivacyIDEA AD FS"/>
-      </Directory>
-    </Directory>
-  </Fragment>
-  <!-- END DIRECTORIES -->
+		<Feature Id="ProductFeature" Title="ADFSInstaller" Level="1">
+			<ComponentGroupRef Id="ProductComponents"/>
+		</Feature>
+	</Product>
 
-  <!-- COMPONENTS -->
-  <Fragment>
-    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
-      <!-- REGISTRY ENTRIES -->
-      <Component Id="RegistryEntries">
-        <RegistryKey Root='HKLM' Key='SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)' ForceCreateOnInstall='yes'>
-          <RegistryValue Name='url'                Type='string' Value='[URL]'/>
-          <RegistryValue Name='disable_ssl'        Type='string' Value='[DISABLESSL]'/>
-		  <RegistryValue Name='enable_enrollment'  Type='string' Value='[ENABLEENROLL]'/>
-          <RegistryValue Name='use_upn'            Type='string' Value='[USE_UPN]'/>
-          <RegistryValue Name='trigger_challenges' Type='string' Value='[TRIGGERCHALLENGES]'/>
-          <RegistryValue Name='send_empty_pass'    Type='string' Value='[SENDEMPTYPASS]'/>
-          <RegistryValue Name='realm'              Type='string' Value='[REALM]'/>
-          <RegistryValue Name='service_user'       Type='string' Value='[SERVICEUSER]'/>
-          <RegistryValue Name='service_pass'       Type='string' Value='[SERVICEPASS]'/>
-          <RegistryValue Name='service_realm'      Type='string' Value=''/>
-          <RegistryValue Name='debug_log'          Type='string' Value='[DEBUGLOG]'/>
-        </RegistryKey>
-      </Component>
+	<!-- DIRECTORIES -->
+	<Fragment>
+		<Directory Id="TARGETDIR" Name="SourceDir">
+			<Directory Id="ProgramFiles64Folder">
+				<Directory Id="INSTALLFOLDER" Name="PrivacyIDEA AD FS"/>
+			</Directory>
+		</Directory>
+	</Fragment>
+	<!-- END DIRECTORIES -->
 
-      <!-- PROVIDER DLL COMPONENT (NO GAC) -->
-      <Component Id='ProviderDll' Guid='{539D96DC-692A-4BF3-B74A-31CEC8700A4B}' DiskId='1'>
-        <File Id="ProviderDll"
-                   Name="$(var.privacyIDEAADFSProvider.TargetFileName)"
-                   Source="$(var.privacyIDEAADFSProvider.TargetPath)"
-                   KeyPath="yes"/>
-      </Component>
+	<!-- COMPONENTS -->
+	<Fragment>
+		<ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+			<!-- REGISTRY ENTRIES -->
+			<Component Id="RegistryEntries">
+				<RegistryKey Root='HKLM' Key='SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)' ForceCreateOnInstall='yes'>
+					<RegistryValue Name='url'						Type='string' Value='[URL]'/>
+					<RegistryValue Name='disable_ssl'				Type='string' Value='[DISABLESSL]'/>
+					<RegistryValue Name='enable_enrollment'			Type='string' Value='[ENABLEENROLL]'/>
+					<RegistryValue Name='use_upn'					Type='string' Value='[USE_UPN]'/>
+					<RegistryValue Name='trigger_challenges'		Type='string' Value='[TRIGGERCHALLENGES]'/>
+					<RegistryValue Name='send_empty_pass'			Type='string' Value='[SENDEMPTYPASS]'/>
+					<RegistryValue Name='realm'						Type='string' Value='[REALM]'/>
+					<RegistryValue Name='service_user'				Type='string' Value='[SERVICEUSER]'/>
+					<RegistryValue Name='service_pass'				Type='string' Value='[SERVICEPASS]'/>
+					<RegistryValue Name='service_realm'				Type='string' Value=''/>
+					<RegistryValue Name='debug_log'					Type='string' Value='[DEBUGLOG]'/>
+					<RegistryValue Name='otp_hint'					Type='string' Value='[OTP_HINT]'/>
+					<RegistryValue Name='tls_version'				Type='string' Value='""'/>
+					<RegistryValue Name='preferred_token_type'      Type='string' Value='""'/>
+					<RegistryValue Name='forward_headers'			Type='string' Value='""'/>
+				</RegistryKey>
+			</Component>
 
-      <!-- NEWTONSOFT JSON COMPONENT (GAC) -->
-      <Component Id='NewtonsoftJsonDll' Guid='{CC78BE32-EB49-4008-8EFC-5DE7F7F862FA}' DiskId='1'>
-        <File Id="NewtonsoftJsonDll"
-                   Name="Newtonsoft.Json.dll"
-                   Source="$(var.privacyIDEAADFSProvider.TargetDir)\Newtonsoft.Json.dll"
-                   KeyPath="yes"
-                   Assembly=".net"/>
-      </Component>
+			<!-- PROVIDER DLL COMPONENT (NO GAC) -->
+			<Component Id='ProviderDll' Guid='{539D96DC-692A-4BF3-B74A-31CEC8700A4B}' DiskId='1'>
+				<File Id="ProviderDll"
+						   Name="$(var.privacyIDEAADFSProvider.TargetFileName)"
+						   Source="$(var.privacyIDEAADFSProvider.TargetPath)"
+						   KeyPath="yes"/>
+			</Component>
 
-      <!-- INSTALL SCRIPT -->
-      <Component Id="InstallScript" Guid="{3F012B01-1F99-414D-86B7-A4B33372EEAD}" DiskId="1">
-        <File Id="InstallScript"
-              Name="Install.ps1"
-              Source ="$(var.privacyIDEAADFSProvider.ProjectDir)\Install.ps1"/>
-      </Component>
+			<!-- NEWTONSOFT JSON COMPONENT (GAC) -->
+			<Component Id='NewtonsoftJsonDll' Guid='{CC78BE32-EB49-4008-8EFC-5DE7F7F862FA}' DiskId='1'>
+				<File Id="NewtonsoftJsonDll"
+						   Name="Newtonsoft.Json.dll"
+						   Source="$(var.privacyIDEAADFSProvider.TargetDir)\Newtonsoft.Json.dll"
+						   KeyPath="yes"
+						   Assembly=".net"/>
+			</Component>
 
-      <!-- UNINSTALL SCRIPT -->
-      <Component Id="UninstallScript" Guid="{0E2A4A57-C01D-4652-8FBF-E128D07B36B4}" DiskId="1">
-        <File Id="UninstallScript"
-              Name="Uninstall.ps1"
-              Source ="$(var.privacyIDEAADFSProvider.ProjectDir)\Uninstall.ps1"/>
-      </Component>
-    </ComponentGroup>
-  </Fragment>
-  <!-- END COMPONENTS -->
+			<!-- INSTALL SCRIPT -->
+			<Component Id="InstallScript" Guid="{3F012B01-1F99-414D-86B7-A4B33372EEAD}" DiskId="1">
+				<File Id="InstallScript"
+					  Name="Install.ps1"
+					  Source ="$(var.privacyIDEAADFSProvider.ProjectDir)\Install.ps1"/>
+			</Component>
+
+			<!-- UNINSTALL SCRIPT -->
+			<Component Id="UninstallScript" Guid="{0E2A4A57-C01D-4652-8FBF-E128D07B36B4}" DiskId="1">
+				<File Id="UninstallScript"
+					  Name="Uninstall.ps1"
+					  Source ="$(var.privacyIDEAADFSProvider.ProjectDir)\Uninstall.ps1"/>
+			</Component>
+		</ComponentGroup>
+	</Fragment>
+	<!-- END COMPONENTS -->
 
 </Wix>

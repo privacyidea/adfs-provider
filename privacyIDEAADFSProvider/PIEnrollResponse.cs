@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-using System.Linq;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace PrivacyIDEASDK
@@ -22,10 +20,7 @@ namespace PrivacyIDEASDK
         {
             if (string.IsNullOrEmpty(json))
             {
-                if (privacyIDEA != null)
-                {
-                    privacyIDEA.Error("Json to parse is empty!");
-                }
+                privacyIDEA?.Error("Json to parse is empty!");
                 return null;
             }
 
@@ -72,10 +67,7 @@ namespace PrivacyIDEASDK
             }
             catch (JsonException je)
             {
-                if (privacyIDEA != null)
-                {
-                    privacyIDEA.Error(je);
-                }
+                privacyIDEA?.Error(je);
                 return null;
             }
 

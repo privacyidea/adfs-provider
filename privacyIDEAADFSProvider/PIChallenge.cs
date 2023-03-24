@@ -8,6 +8,8 @@ namespace PrivacyIDEASDK
         public string Message { get; set; } = "";
         public string TransactionID { get; set; } = "";
         public string Type { get; set; } = "";
+        public string Image { get; set; } = "";
+        public string ClientMode { get; set; } = "";
         public Dictionary<string, object> Attributes { get; set; } = new Dictionary<string, object>();
     }
 }

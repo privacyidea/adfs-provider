@@ -1,6 +1,5 @@
 ﻿using Microsoft.IdentityServer.Web.Authentication.External;
-using PrivacyIDEASDK;
-using System.Collections.Generic;
+using System;
 
 namespace privacyIDEAADFSProvider
 {
@@ -16,6 +15,8 @@ namespace privacyIDEAADFSProvider
         public string WebAuthnSignRequest { get; set; } = "";
         public string OtpAvailable { get; set; } = "1";
         public string AuthCounter { get; set; } = "0";
+
+        // TODO remove the following in future release. The AuthPage.html can then be adjusted to contain the image in the general login form (div)
         public string EnrollmentText { get; set; } = @"
                 <p style=""color:red""><i>It appears your account has not previously setup Multi-Factor Authentication (MFA). <b>Please carefully follow the below instructions - they will only be shown once!</b></i><p>
                 <br/>                
@@ -38,9 +39,10 @@ namespace privacyIDEAADFSProvider
                  </ol>";
         public string EnrollmentUrl { get; set; } = "";
         public string EnrollmentImg { get; set; } = "";
-
-        public AdapterPresentationForm()
+        private Action<string> _Log;
+        public AdapterPresentationForm(Action<string> log)
         {
+            _Log = log;
         }
 
         /// Returns the HTML Form fragment that contains the adapter user interface. This data will be included in the web page that is presented
@@ -55,11 +57,17 @@ namespace privacyIDEAADFSProvider
             string submittext = "Submit";
             string htmlTemplate = Resources.AuthPage;
 
-            if(!(string.IsNullOrEmpty(EnrollmentImg) || string.IsNullOrEmpty(EnrollmentUrl)))
+            // Distinguish between the rollout feature of this provider and the rollout that can happen via /validate/check.
+            // For the latter, just set the image and show the usual challenge message from the server
+            if(!string.IsNullOrEmpty(EnrollmentImg) && !string.IsNullOrEmpty(EnrollmentUrl))
             {
                 htmlTemplate = htmlTemplate.Replace("#ENROLLMENT#", EnrollmentText);
                 htmlTemplate = htmlTemplate.Replace("#ENROLLVAL#", EnrollmentUrl);
                 htmlTemplate = htmlTemplate.Replace("#ENROLLIMG#", EnrollmentImg);
+            }
+            else if (!string.IsNullOrEmpty(EnrollmentImg))
+            {
+                htmlTemplate = htmlTemplate.Replace("#ENROLLMENT#", $"<img id=\"enrollmentImg\" src=\"{EnrollmentImg}\" width=\"325px\" alt>");
             }
             else
             {
@@ -91,7 +99,7 @@ namespace privacyIDEAADFSProvider
             return null;
         }
 
-        //returns the title string for the web page which presents the HTML form content to the end user
+        /// Returns the title string for the web page which presents the HTML form content to the end user
         public string GetPageTitle(int lcid)
         {
             return "privacyIDEA AD FS";

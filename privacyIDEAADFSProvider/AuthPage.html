@@ -13,7 +13,7 @@
         <p id="pageIntroductionText" style="color:red">#ERROR#</p>
         <br />
         <label for="otp" class="block">#MESSAGE#</label>
-        <input id="otp" name="otp" type="password" value="" class="text" placeholder="#OTPTEXT#" size="35" />
+        <input id="otp" name="otp" type="password" value="" class="text" placeholder="#OTPTEXT#" size="35" autofocus/>
         <input id="submitButton" type="submit" name="Submit" value="#SUBMIT#" />
 
         <input id="autoSubmit" type="hidden" name="autoSubmit" value="#autoSubmit#" />
@@ -394,6 +394,8 @@
         }
 
         if (value("mode") == "webauthn") {
+            disable("otp");
+            disable("submitButton");
             doWebAuthn();
         }
 
