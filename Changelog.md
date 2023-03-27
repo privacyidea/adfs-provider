@@ -1,4 +1,4 @@
-## 2023-03-10 v1.2.0
+## 2023-03-27 v1.2.0
 
 ### Features
 * Token enrollment via challenge-response
