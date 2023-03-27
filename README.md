@@ -30,7 +30,7 @@ After changing the configuration, the AD FS Service has to be restarted for the 
 | url | The url of the privacyIDEA server. Has to include https://! |
 | disable_ssl | Set to `1` if ssl verification should be disabled. DO NOT DISABLE THIS IN A PRODUCTION ENVIRONMENT! |
 | debug_log | Set to `1` if a detailed debug log should be written. It will be located at `C:\PrivacyIDEA-ADFS log.txt`. |
-| enable_enrollment | Set to `1` if users should automatically enroll a TOTP code if they do not have any other tokens enrolled. |
+| enable_enrollment | Set to `1` if users should automatically enroll a TOTP code if they do not have any other tokens enrolled. !!! This feature is deprecated in favor of the new enrollment that can be controlled from the privacyIDEA server starting v3.8.0, and will be removed in a future version of this provider. |
 | realm | Set the realm that should be appended to every request. If this is empty, the realm parameter will be omitted from requests. |
 | service_user | Set the username of a privacyIDEA service account that can be used to trigger challenges. Configuring this is only required to use the `trigger_challenges` or `enable_enrollment` settings! |
 | service_pass | Set the password of a privacyIDEA service account that can be used to trigger challenges. Configuring this is only required to use the `trigger_challenges` or `enable_enrollment` settings! |
