@@ -207,7 +207,6 @@ namespace privacyIDEAADFSProvider
             string pushAvailable = (string)GetFromDict(proofDict, "pushAvailable");
             string message = (string)GetFromDict(proofDict, "message");
             string webAuthnSignRequest = (string)GetFromDict(proofDict, "webAuthnSignRequest");
-            string domain = (string)GetFromDict(proofDict, "domain");
 
             string strAuthCounter = (string)GetFromDict(proofDict, "authCounter", "0");
             if (!string.IsNullOrEmpty(strAuthCounter))
@@ -226,6 +225,7 @@ namespace privacyIDEAADFSProvider
 
             string transactionid = (string)GetFromDict(contextDict, "transactionid");
             string user = (string)GetFromDict(contextDict, "userid");
+            string domain = (string)GetFromDict(contextDict, "domain");
 
             // Restore the previous response to set the challenges again in case of error
             PIResponse previousResponse = null;
