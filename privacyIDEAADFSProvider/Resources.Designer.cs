@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace privacyIDEAADFSProvider {
+namespace PrivacyIDEAADFSProvider {
     using System;
     
     
@@ -19,7 +19,7 @@ namespace privacyIDEAADFSProvider {
     // class via a tool like ResGen or Visual Studio.
     // To add or remove a member, edit your .ResX file then rerun ResGen
     // with the /str option, or rebuild your VS project.
-    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("System.Resources.Tools.StronglyTypedResourceBuilder", "16.0.0.0")]
+    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("System.Resources.Tools.StronglyTypedResourceBuilder", "17.0.0.0")]
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
     internal class Resources {
@@ -62,6 +62,10 @@ namespace privacyIDEAADFSProvider {
         
         /// <summary>
         ///   Looks up a localized string similar to &lt;div id=&quot;loginArea&quot;&gt;
+        ///    &lt;!--Enrollment Message--&gt;
+        ///    &lt;div id=&quot;enrollmentBlock&quot;&gt;
+        ///        #ENROLLMENT#
+        ///    &lt;/div&gt;
         ///    &lt;form method=&quot;post&quot; id=&quot;loginForm&quot;&gt;
         ///        &lt;!-- These inputs are required by the presentation framework. Do not modify or remove --&gt;
         ///        &lt;input id=&quot;authMethod&quot; type=&quot;hidden&quot; name=&quot;AuthMethod&quot; value=&quot;%AuthMethod%&quot; /&gt;
@@ -69,9 +73,7 @@ namespace privacyIDEAADFSProvider {
         ///        &lt;!-- End inputs are required by the presentation framework. --&gt;
         ///
         ///
-        ///        &lt;p id=&quot;pageIntroductionText&quot; style=&quot;color:red&quot;&gt;#ERROR#&lt;/p&gt;
-        ///        &lt;br /&gt;
-        ///        &lt;label for=&quot;ot [rest of string was truncated]&quot;;.
+        ///        &lt; [rest of string was truncated]&quot;;.
         /// </summary>
         internal static string AuthPage {
             get {

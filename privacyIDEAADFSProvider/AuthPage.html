@@ -1,39 +1,236 @@
 ﻿<div id="loginArea">
-    <!--Enrollment Message-->
+    <!-- Enrollment Message -->
     <div id="enrollmentBlock">
         #ENROLLMENT#
     </div>
+   
     <form method="post" id="loginForm">
         <!-- These inputs are required by the presentation framework. Do not modify or remove -->
         <input id="authMethod" type="hidden" name="AuthMethod" value="%AuthMethod%" />
         <input id="context" type="hidden" name="Context" value="%Context%" />
         <!-- End inputs are required by the presentation framework. -->
 
-
         <p id="pageIntroductionText" style="color:red">#ERROR#</p>
         <br />
-        <label for="otp" class="block">#MESSAGE#</label>
-        <input id="otp" name="otp" type="password" value="" class="text" placeholder="#OTPTEXT#" size="35" autofocus/>
-        <input id="submitButton" type="submit" name="Submit" value="#SUBMIT#" />
+        <label for="otp" class="block" aria-label="#MESSAGE#">#MESSAGE#</label>
+        <input id="otp" name="otp" type="password" value="" class="text" placeholder="#OTPTEXT#" size="35" autocomplete="new-password" autofocus />
+        <input id="submitButton" type="submit" name="Submit" value="#SUBMIT#" onclick="submitForm()" />
 
         <input id="autoSubmit" type="hidden" name="autoSubmit" value="#autoSubmit#" />
         <input id="mode" type="hidden" name="mode" value="#mode#" />
         <input id="pushAvailable" type="hidden" name="pushAvailable" value="#pushAvailable#" />
         <input id="otpAvailable" type="hidden" name="otpAvailable" value="#otpAvailable#" />
         <input id="webAuthnSignRequest" type="hidden" name="webAuthnSignRequest" value="#webAuthnSignRequest#" />
-        <input id="webAuthnSignResponse" type="hidden" name="webAuthnSignResponse" value="" />
-        <input id="modeChanged" type="hidden" name="modeChanged" value="#modeChanged#" />
-        <input id="origin" type="hidden" name="origin" value="" />
-
+        <input id="passkeyChallenge" type="hidden" name="passkeyChallenge" value="#passkeyChallenge#" />
+        <input id="passkeyRegistration" type="hidden" name="passkeyRegistration" value="#passkeyRegistration#" />
         <input id="authCounter" type="hidden" name="authCounter" value="#authCounter#" />
+        <input id="disablePasskey" type="hidden" name="disablePasskey" value="#disablePasskey#" />
+        <input id="autoSubmitLength" type="hidden" name="autoSubmitLength" value="#autoSubmitLength#" />
+        <input id="formResult" type="hidden" name="formResult" value="" />
+        <input id="disableOTP" type="hidden" name="disableOTP" value="#disableOTP#" />
 
-        <!-- Extra input to persist the message -->
+        <!-- Extra inputs to persist some data -->
         <input id="message" type="hidden" name="message" value="#MESSAGE#" />
+        <input id="enrollmentLink" type="hidden" name="enrollmentLink" value="#enrollmentLink#" />
+        <input id="enrollmentImg" type="hidden" name="enrollmentImg" value="#enrollmentImg#" />
+
+        <!-- Retry Passkey Registration -->
+        <input id="retryPasskeyRegistration" name="retryPasskeyRegistration" type="button" value="Retry Passkey Registration" onclick="registerPasskey()"
+               aria-label="Retry Passkey Registration"
+               style="background-color: rgb(38, 114, 236); border: none; border-style: solid; border-width: 1px; height: 35px;
+               min-width: 160px; width: auto; color: white; margin-bottom: 8px; user-select: none; padding: 8px 25px 12px 25px;" />
+
+        <div id="alternateTokenDiv" class="groupMargin">
+            Other Login Options
+            <br />
+            <!-- Passkey -->
+            <input id="passkeyLoginButton" name="passkeyLoginButton" type="button" value="Passkey" onclick="requestPasskeyLogin()"
+                   aria-label="Passkey Login"
+                   style="background-color: rgb(38, 114, 236); border: none; border-style: solid; border-width: 1px; height: 35px;
+                   min-width: 160px; width: auto; color: white; margin-bottom: 8px; user-select: none; padding: 8px 25px 12px 25px;" />
+            <!-- Retry Passkey Login -->
+            <input id="retryPasskeyLogin" name="retryPasskeyLogin" type="button" value="Retry Passkey Login" onclick="passkeyAuthentication()"
+                   aria-label="Retry Passkey Login"
+                   style="background-color: rgb(38, 114, 236); border: none; border-style: solid; border-width: 1px; height: 35px;
+                   min-width: 160px; width: auto; color: white; margin-bottom: 8px; user-select: none; padding: 8px 25px 12px 25px;" />
+            <!-- WebAuthn -->
+            <input id="useWebAuthnButton" name="useWebAuthnButton" type="button" value="WebAuthn" onclick="doWebAuthn()" aria-label="Use WebAuthn"
+                   style="background-color: rgb(38, 114, 236); border: none; border-style: solid; border-width: 1px; height: 35px;
+                   min-width: 160px; width: auto; color: white; margin-bottom: 8px; user-select: none; padding: 8px 25px 12px 25px;" />
+            <!-- Push-->
+            <input id="usePushButton" name="usePushButton" type="button" value="Push" onclick="changeMode('push')" aria-label="Use Push Token"
+                   style="background-color: rgb(38, 114, 236); border: none; border-style: solid; border-width: 1px; height: 35px;
+                   min-width: 160px; width: auto; color: white; margin-bottom: 8px; user-select: none; padding: 8px 25px 12px 25px;" />
+            <!-- OTP -->
+            <input id="useOTPButton" name="useOTPButton" type="button" value="OTP" onclick="changeMode('otp')" aria-label="Use One-Time-Password"
+                   style="background-color: rgb(38, 114, 236); border: none; border-style: solid; border-width: 1px; height: 35px;
+                   min-width: 160px; width: auto; color: white; margin-bottom: 8px; user-select: none; padding: 8px 25px 12px 25px;" />
+        </div>
 
         <script>
+            'use strict';
+            let formResult = {
+                authenticationResetRequested: false,
+                passkeyLoginRequested: false,
+                passkeyLoginCancelled: false,
+                modeChanged: false,
+                newMode: "",
+                webAuthnSignResponse: "",
+                passkeySignResponse: "",
+                passkeyRegistrationResponse: "",
+                origin: "",
+            };
+            disable("retryPasskeyLogin");
+            disable("retryPasskeyRegistration");
+
+            if (value("autoSubmit") === "1") {
+                submitForm();
+            }
+
+            // Set alternate token button visibility
+            if (value("webAuthnSignRequest") === "") {
+                disable("useWebAuthnButton");
+            }
+
+            if (value("pushAvailable") === "0") {
+                disable("usePushButton");
+            }
+
+            if (value("passkeyChallenge") != "") {
+                disable("passkeyLoginButton");
+                enable("retryPasskeyLogin");
+                passkeyAuthentication();
+            }
+
+            if (value("passkeyRegistration") != "") {
+                disable("passkeyLoginButton");
+                disable("alternateTokenDiv");
+                disable("submitButton");
+                disable("otp");
+
+                enable("retryPasskeyRegistration");
+                registerPasskey();
+            }
+
+            let asl = value("autoSubmitLength")
+            if (asl !== "") {
+                setAutoSubmit(asl);
+            }
+
+            if (value("disablePasskey") == "1") {
+                disable("passkeyLoginButton");
+                disable("retryPasskeyLogin");
+            }
+
+            if (value("disableOTP") === "1") {
+                disable("otp");
+                disable("submit");
+                disable("useOTPButton");
+            }
+
+            // Set UI according to mode
+            if (value("mode") === "push") {
+                const pollingIntervals = [3, 2, 2, 1];
+                disable("otp");
+                disable("usePushButton");
+                disable("submitButton");
+                var refreshTime = 2;
+                if (value("authCounter") > (pollingIntervals.length - 1)) {
+                    refreshTime = pollingIntervals[(pollingIntervals.length - 1)];
+                } else {
+                    refreshTime = pollingIntervals[Number(value("authCounter")) - 1];
+                }
+                refreshTime *= 1000;
+                setTimeout(() => {
+                    submitForm();
+                }, refreshTime);
+            }
+
+            if (value("mode") == "otp") {
+                disable("useOTPButton");
+            }
+
+            if (value("mode") == "webauthn") {
+                disable("otp");
+                disable("submitButton");
+                doWebAuthn();
+            }
+
+            setLoginOptionsVisibility();
+
+            function doWebAuthn() {
+                // If mode is push, we have to change it, otherwise the site will refresh while doing webauthn
+                if (value("mode") === "push") {
+                    changeMode("webauthn");
+                }
+
+                if (!window.isSecureContext) {
+                    console.log("Insecure context detected: Aborting WebAuthn authentication!")
+                    changeMode("otp");
+                }
+
+                const requestStr = value("webAuthnSignRequest");
+
+                if (requestStr.length === 0) {
+                    changeMode("otp");
+                } else {
+                    try {
+                        const requestjson = JSON.parse(requestStr);
+
+                        const webAuthnSignResponse = webAuthnSign(requestjson);
+                        webAuthnSignResponse.then((webauthnresponse) => {
+                            const response = JSON.stringify(webauthnresponse);
+                            formResult.webAuthnSignResponse = response;
+                            submitForm();
+                        });
+                    } catch (err) {
+                        console.log("Error while signing WebAuthnSignRequest: " + err);
+                    }
+                }
+            }
+
             // Helper functions
+            function setLoginOptionsVisibility() {
+                let ids = ["passkeyLoginButton", "retryPasskeyLogin", "useOTPButton", "usePushButton", "useWebAuthnButton"]
+                let shouldShow = false;
+                for (let id of ids) {
+                    let element = document.querySelector("#" + id);
+                    if (element && window.getComputedStyle(element).display !== "none" && window.getComputedStyle(element).display !== "hidden") {
+                        console.log("shouldshow=true because of " + id);
+                        shouldShow = true;
+                        break;
+                    }
+                }
+                if (!shouldShow) {
+                    let element = document.querySelector("#alternateTokenDiv");
+                    if (element) {
+                        element.style.display = "none";
+                    }
+                }
+
+                // If the otp input field is visible, hide the otp button
+                let otpInput = document.querySelector("#otp");
+                if (otpInput && otpInput.style.display !== "none" && otpInput.style.display !== "hidden") {
+                    let element = document.querySelector("#useOTPButton");
+                    if (element) {
+                        element.style.display = "none";
+                    }
+                }
+            }
+
+            function submitForm() {
+                if (!window.location.origin) {
+                    window.location.origin = window.location.protocol + "//" + window.location.hostname +
+                        (window.location.port ? ':' + window.location.port : '');
+                }
+                formResult.origin = window.origin;
+                set("formResult", JSON.stringify(formResult));
+                document.forms["loginForm"].requestSubmit();
+            }
+
+
             function value(id) {
-                var element = document.getElementById(id);
+                var element = document.querySelector("#" + id);
                 if (element != null) {
                     return element.value;
                 } else {
@@ -43,7 +240,7 @@
             }
 
             function set(id, value) {
-                var element = document.getElementById(id);
+                var element = document.querySelector("#" + id);
                 if (element != null) {
                     element.value = value;
                 } else {
@@ -52,7 +249,7 @@
             }
 
             function disable(id) {
-                var element = document.getElementById(id)
+                var element = document.querySelector("#" + id);
                 if (element != null) {
                     element.style.display = "none";
                 } else {
@@ -61,7 +258,7 @@
             }
 
             function enable(id) {
-                var element = document.getElementById(id);
+                var element = document.querySelector("#" + id);
                 if (element != null) {
                     element.style.display = "initial";
                 } else {
@@ -70,17 +267,158 @@
             }
 
             function changeMode(newMode) {
-                document.getElementById("mode").value = newMode;
-                document.getElementById("modeChanged").value = "1";
-                document.forms["loginForm"].submit();
+                document.querySelector("#mode").value = newMode;
+                formResult.newMode = newMode.toLowerCase();
+                formResult.modeChanged = true;
+                submitForm();
+            }
+
+            function requestPasskeyLogin() {
+                formResult.passkeyLoginRequested = true;
+                submitForm();
             }
 
             function copyTOTP() {
-                var copyText = document.getElementById("enrollmentValue");
+                var copyText = document.querySelector("#enrollmentValue");
                 copyText.select();
                 copyText.setSelectionRange(0, 99999); /* For mobile devices */
                 navigator.clipboard.writeText(copyText.value);
             }
+
+            function setAutoSubmit(inputLength) {
+                let otpField = document.querySelector("#otp")
+                if (otpField) {
+                    otpField.addEventListener("keyup", function () {
+                        // catch parse int error?
+                        if (otpField.value.length === parseInt(inputLength)) {
+                            submitForm();
+                        }
+                    });
+                }
+            }
+
+            // PASSKEY FUNCTIONS
+            function passkeyAuthentication() {
+                if (value("mode") == "push") {
+                    changeMode("passkey");
+                    return;
+                }
+                let passkeyChallenge = value("passkeyChallenge");
+                if (passkeyChallenge == "") {
+                    console.log("Passkey Authentication: Challenge data is empty!")
+                    return "";
+                }
+                formResult.passkeyLoginCancelled = false;
+                let challengeObject = JSON.parse(passkeyChallenge.replace(/(&quot;)/g, "\""));
+                let userVerification = "preferred";
+                if (["required", "preferred", "discouraged"].includes(challengeObject.user_verification)) {
+                    userVerification = challengeObject.user_verification;
+                }
+                navigator.credentials.get({
+                    publicKey: {
+                        challenge: Uint8Array.from(challengeObject.challenge, c => c.charCodeAt(0)),
+                        rpId: challengeObject.rpId,
+                        userVerification: userVerification,
+                    },
+                }).then(credential => {
+                    let params = {
+                        transaction_id: challengeObject.transaction_id,
+                        credential_id: credential.id,
+                        authenticatorData: bytesToBase64(
+                            new Uint8Array(credential.response.authenticatorData)),
+                        clientDataJSON: bytesToBase64(new Uint8Array(credential.response.clientDataJSON)),
+                        signature: bytesToBase64(new Uint8Array(credential.response.signature)),
+                        userHandle: bytesToBase64(new Uint8Array(credential.response.userHandle)),
+                    };
+                    formResult.passkeySignResponse = JSON.stringify(params);
+                    submitForm();
+                }, function (error) {
+                    console.log("Passkey authentication error: " + error);
+                    formResult.passkeyLoginCancelled = true;
+                });
+            }
+
+            // Use the passkey_registration from the response as input to this function
+            function registerPasskey() {
+                let registrationData = value("passkeyRegistration");
+                if (registrationData == "") {
+                    console.log("Passkey Registration: Registration data is empty!")
+                    return "";
+                }
+                let data = JSON.parse(registrationData.replace(/(&quot;)/g, "\""));
+                let excludedCredentials = [];
+                if (data.excludeCredentials) {
+                    for (const cred of data.excludeCredentials) {
+                        excludedCredentials.push({
+                            id: base64URLToBytes(cred.id),
+                            type: cred.type,
+                        });
+                    }
+                }
+
+                return navigator.credentials.create({
+                    publicKey: {
+                        rp: data.rp,
+                        user: {
+                            id: base64URLToBytes(data.user.id),
+                            name: data.user.name,
+                            displayName: data.user.displayName
+                        },
+                        challenge: Uint8Array.from(data.challenge, c => c.charCodeAt(0)),
+                        pubKeyCredParams: data.pubKeyCredParams,
+                        excludeCredentials: excludedCredentials,
+                        authenticatorSelection: data.authenticatorSelection,
+                        timeout: data.timeout,
+                        extensions: {
+                            credProps: true,
+                        },
+                        attestation: data.attestation
+                    }
+                }).then(function (publicKeyCred) {
+                    let params = {
+                        credential_id: publicKeyCred.id.replace(/\+/g, '-').replace(/\//g, '_'),
+                        rawId: bytesToBase64(new Uint8Array(publicKeyCred.rawId)),
+                        authenticatorAttachment: publicKeyCred.authenticatorAttachment,
+                        attestationObject: bytesToBase64(
+                            new Uint8Array(publicKeyCred.response.attestationObject)),
+                        clientDataJSON: bytesToBase64(new Uint8Array(publicKeyCred.response.clientDataJSON)),
+                    }
+                    if (publicKeyCred.response.attestationObject) {
+                        params.attestationObject = bytesToBase64(
+                            new Uint8Array(publicKeyCred.response.attestationObject));
+                    }
+                    const extResults = publicKeyCred.getClientExtensionResults();
+                    if (extResults.credProps) {
+                        params.credProps = extResults.credProps;
+                    }
+                    formResult.passkeyRegistrationResponse = JSON.stringify(params);
+                    submitForm();
+                }, function (error) {
+                    console.log("Error while registering passkey:");
+                    console.log(error);
+                    return null;
+                });
+            }
+
+            function bytesToBase64(bytes) {
+                const binString = Array.from(bytes, (byte) =>
+                    String.fromCodePoint(byte),).join("");
+                return btoa(binString).replace(/\+/g, '-').replace(/\//g, '_');
+            }
+
+            function base64URLToBytes(base64URLString) {
+                const base64 = base64URLString.replace(/-/g, '+').replace(/_/g, '/');
+                const padLength = (4 - (base64.length % 4)) % 4;
+                const padded = base64.padEnd(base64.length + padLength, '=');
+                const binary = atob(padded);
+                const buffer = new ArrayBuffer(binary.length);
+                const bytes = new Uint8Array(buffer);
+                for (let i = 0; i < binary.length; i++) {
+                    bytes[i] = binary.charCodeAt(i);
+                }
+                return buffer;
+            }
+            // END PASSKEY FUNCTIONS
 
             // WEBAUTHN FUNCTIONS
             function uint6ToB64(nUint6) {
@@ -332,114 +670,5 @@
             }
             // END WEBAUTHN FUNCTIONS
         </script>
-
-        <div id="intro" class="groupMargin">
-        </div>
-
-        <div id="alternateTokenDiv" class="groupMargin">
-            Alternate Login Options
-            <br />
-            <input id="useWebAuthnButton" style="background-color: rgb(38, 114, 236); border: none; border-style: solid; border-width: 1px; height: 30px; min-width: 80px; width: auto;
-        color: white; margin-bottom: 8px; user-select: none; padding: 4px 20px 6px 20px;" name="useWebAuthnButton" type="button" value="WebAuthn" onclick="doWebAuthn()" />
-
-            <input id="usePushButton" style="background-color: rgb(38, 114, 236); border: none; border-style: solid; border-width: 1px; height: 30px; min-width: 80px; width: auto;
-        color: white; margin-bottom: 8px; user-select: none; padding: 4px 20px 6px 20px;" name="usePushButton" type="button" value="Push" onclick="changeMode('push')" />
-
-            <input id="useOTPButton" style="background-color: rgb(38, 114, 236); border: none; border-style: solid; border-width: 1px; height: 30px; min-width: 80px; width: auto;
-        color: white; margin-bottom: 8px; user-select: none; padding: 4px 20px 6px 20px;" name="useOTPButton" type="button" value="OTP" onclick="changeMode('otp')" />
-        </div>
-
     </form>
-
-    <script>
-        'use strict';
-
-        if (value("autoSubmit") === "1") {
-            document.forms["loginForm"].submit();
-        }
-
-        // Set alternate token button visibility
-        if (value("webAuthnSignRequest") === "") {
-            disable("useWebAuthnButton");
-        }
-
-        if (value("pushAvailable") === "0") {
-            disable("usePushButton");
-        }
-
-        if (value("pushAvailable") === "0" && value("webAuthnSignRequest") === "") {
-            disable("alternateTokenDiv");
-        }
-
-        // Set UI according to mode
-        if (value("mode") === "push") {
-            const pollingIntervals = [3, 2, 2, 1];
-            disable("otp");
-            disable("usePushButton");
-
-            var refreshTime = 2;
-            if (value("authCounter") > (pollingIntervals.length - 1)) {
-                refreshTime = pollingIntervals[(pollingIntervals.length - 1)];
-            } else {
-                refreshTime = pollingIntervals[Number(value("authCounter")) - 1];
-            }
-            refreshTime *= 1000;
-            setTimeout(() => {
-                document.forms["loginForm"].submit();
-            }, refreshTime);
-        }
-
-        if (value("mode") == "otp") {
-            disable("useOTPButton");
-        }
-
-        if (value("mode") == "webauthn") {
-            disable("otp");
-            disable("submitButton");
-            doWebAuthn();
-        }
-
-        // WebAuthn functions
-        function doWebAuthn() {
-            // If mode is push, we have to change it, otherwise the site will refresh while doing webauthn
-            if (value("mode") === "push") {
-                changeMode("webauthn");
-            }
-
-            if (!window.isSecureContext) {
-                alert("Unable to proceed with WebAuthn because the context is insecure!");
-                console.log("Insecure context detected: Aborting WebAuthn authentication!")
-                changeMode("otp");
-            }
-
-            const requestStr = value("webAuthnSignRequest");
-
-            if (requestStr.length === 0) {
-                set("mode", "otp");
-            }
-            else {
-                // Set origin
-                if (!window.location.origin) {
-                    window.location.origin = window.location.protocol + "//" + window.location.hostname + (window.location.port ? ':' + window.location.port : '');
-                }
-                set("origin", window.origin);
-
-                try {
-                    const requestjson = JSON.parse(requestStr);
-
-                    const webAuthnSignResponse = webAuthnSign(requestjson);
-                    webAuthnSignResponse.then((webauthnresponse) => {
-                        const response = JSON.stringify(webauthnresponse);
-                        set("webAuthnSignResponse", response);
-                        set("mode", "webauthn");
-                        document.forms["loginForm"].submit();
-                    });
-                } catch (err) {
-                    console.log("Error while signing WebAuthnSignRequest: " + err);
-                    alert("Error while signing WebAuthnSignRequest: " + err);
-                }
-            }
-        }
-
-    </script>
 </div>

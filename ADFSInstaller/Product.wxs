@@ -108,6 +108,10 @@
 			<RegistrySearch Id="SearchDebugLog" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
 							Name="debug_log" Win64="yes" Type="raw"/>
 		</Property>
+		<Property Id="AUTO_SUBMIT_OTP_LENGTH">
+			<RegistrySearch Id="SearchAutoSubmitOTPLength" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+							Name="auto_submit_otp_length" Win64="yes" Type="raw"/>
+		</Property>
 		<!-- END LOOKUP -->
 
 		<!-- INSTALL EXECUTE SEQUENCE -->
@@ -171,9 +175,9 @@
 					<RegistryValue Name='service_realm'				Type='string' Value=''/>
 					<RegistryValue Name='debug_log'					Type='string' Value='[DEBUGLOG]'/>
 					<RegistryValue Name='otp_hint'					Type='string' Value='[OTP_HINT]'/>
-					<RegistryValue Name='tls_version'				Type='string' Value='""'/>
-					<RegistryValue Name='preferred_token_type'      Type='string' Value='""'/>
-					<RegistryValue Name='forward_headers'			Type='string' Value='""'/>
+					<RegistryValue Name='tls_version'				Type='string' Value=''/>
+					<RegistryValue Name='forward_headers'			Type='string' Value=''/>
+					<RegistryValue Name='auto_submit_otp_length'    Type='string' Value='[AUTO_SUBMIT_OTP_LENGTH]'/>
 				</RegistryKey>
 			</Component>
 

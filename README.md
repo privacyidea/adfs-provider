@@ -1,27 +1,14 @@
 # Acknowledgement
 This project builds on Stephan Traub's [original provider v1.3.8.2](https://github.com/sbidy/privacyIDEA-ADFSProvider/tree/f66100713e650d134ac50fcbd3965b71ae588d47). 
 
-## Preface
-If you face issues, please check the sections below on how to generate information that can be used to find the problem.
-
 ## Requirements
 To use the provider, the [.NET Framework 4.8](https://dotnet.microsoft.com/download/dotnet-framework/net48) is required on the target machine.
 
-## Signing
-The dll that is created by this solution requires to be signed to be deployed. Change the key file to your own in the project settings of the provider.
-
-## Windows Server 2019
-If you use a Windows Server 2019 please activate TLS 1.x for your .NET because TLS 1.0 is deprecated.
-Adding `"SchUseStrongCrypto"=dword:00000001` to `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft.NETFramework\v4.0.30319`
-and `HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft.NETFramework\v4.0.30319` fixes the problem.
-
-## Installation
-Run the MSI.
-
-## Event Log
-Errors will be written to the Windows Event Log in the `AD FS/Admin` category. To get a more detailed log, activate the `debug_log` setting as explained in the next section.
-
 ## Configuration
+Starting with v1.3.0, this provider *can* be used as primary authentication method in ADFS. However, ADFS will inject a form to request the username before this provider, even if it is configured as primary, which makes the experience of passkey usernameless authentication not great in ADFS.
+You could then choose to add "Forms Authentication" as additional, to have the password checked in the last step. Alternatively, have only this provider as primary and none as additional, if you are sure that there has been a multifactor authentication with this provider. This would be the case if you use passkey or webauthn with user_verification=required, because the PIN/Biometrics is the second factor.
+
+
 The provider is configured using the registry. The keys are located at `HKEY_LOCAL_MACHINE\SOFTWARE\NetKnights GmbH\PrivacyIDEA-ADFS`.
 After changing the configuration, the AD FS Service has to be restarted for the changes to become active. This can be done using the PowerShell command `Restart-Service adfssrv`.
 
@@ -40,10 +27,23 @@ After changing the configuration, the AD FS Service has to be restarted for the 
 | use_upn | Set this to `1` to use the Windows UPN (person@company.com) as the username for requests to privacyIDEA. |
 | tls_version | If you want to explicite the TLS version, set it to: `tls11`, `tls12` or `tls13`. Other values will be ignored and TLS version will stay as system default. |
 | forward_headers | If you want to forward specific headers to the privacyIDEA server, you can set them here. If the header does not exist or has no value, it will be ignored. The headers names should be separated with ','. |
-| preferred_token_type | Set the token type for which the UI should be first shown. This only matters if such token was triggered before. Possible values are `otp`, `push`, `u2f` and `webauthn`. The default is OTP mode. |
+| ~~preferred_token_type~~ | ~~Set the token type for which the UI should be first shown. This only matters if such token was triggered before. Possible values are `otp`, `push` or `webauthn`. The default is OTP mode.~~ **!!! This feature has been removed in v1.3.0 in favor of the preferred_client_mode policy in the privacyIDEA Server. !!!** |
+| auto_submit_otp_length | Set an OTP digit count for which to automatically submit the form |
+| disable_passkey | Disable the "Passkey Login" button |
 
 ### Domain to Realm Mapping
 It is possible to map different Windows domains to different privacyIDEA realms. To achieve this, add the subkey `HKLM\SOFTWARE\Netknights GmbH\PrivacyIDEA-ADFS\realm-mapping`. Now you can add REG_SZ entries that have the name of the Windows domain and the value of the corresponding privacyIDEA realm. Note that the realm mapping takes precedence over the general realm that can be configured as explained in the previous section.
+
+## Signing
+The dll that is created by this solution requires to be signed to be deployed. Change the key file to your own in the project settings of the provider.
+
+## Windows Server 2019
+If you use a Windows Server 2019 please activate TLS 1.x for your .NET because TLS 1.0 is deprecated.
+Adding `"SchUseStrongCrypto"=dword:00000001` to `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft.NETFramework\v4.0.30319`
+and `HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft.NETFramework\v4.0.30319` fixes the problem.
+
+## Event Log
+Errors will be written to the Windows Event Log in the `AD FS/Admin` category. To get a more detailed log, activate the `debug_log` setting as explained in the next section.
 
 ## Debugging
 Errors in the provider can be found by looking at the Windows Event Log or activating the `debug_log` setting.

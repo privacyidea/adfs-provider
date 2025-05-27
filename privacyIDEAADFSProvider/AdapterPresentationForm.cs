@@ -1,4 +1,5 @@
 ﻿using Microsoft.IdentityServer.Web.Authentication.External;
+using PrivacyIDEAADFSProvider;
 using System;
 
 namespace privacyIDEAADFSProvider
@@ -11,10 +12,18 @@ namespace privacyIDEAADFSProvider
         public string PushMessage { get; set; } = "";
         public string PushAvailable { get; set; } = "0";
         public string Mode { get; set; } = "otp";
+        public int AutoSubmitLength { get; set; } = 0;
+
+        // Whether the form should be submitted directly
         public string AutoSubmit { get; set; } = "0";
         public string WebAuthnSignRequest { get; set; } = "";
         public string OtpAvailable { get; set; } = "1";
         public string AuthCounter { get; set; } = "0";
+        public string PasskeyChallenge { get; set; } = "";
+        public string PasskeyRegistration { get; set; } = "";
+        public string DisablePasskey { get; set; } = "";
+        public string EnrollmentLink { get; set; } = "";
+        public string DisableOTP { get; set; } = "0"; // used for enroll_via_multichallenge with push, where the only option is push
 
         // TODO remove the following in future release. The AuthPage.html can then be adjusted to contain the image in the general login form (div)
         public string EnrollmentText { get; set; } = @"
@@ -39,7 +48,7 @@ namespace privacyIDEAADFSProvider
                  </ol>";
         public string EnrollmentUrl { get; set; } = "";
         public string EnrollmentImg { get; set; } = "";
-        private Action<string> _Log;
+        private readonly Action<string> _Log;
         public AdapterPresentationForm(Action<string> log)
         {
             _Log = log;
@@ -59,7 +68,7 @@ namespace privacyIDEAADFSProvider
 
             // Distinguish between the rollout feature of this provider and the rollout that can happen via /validate/check.
             // For the latter, just set the image and show the usual challenge message from the server
-            if(!string.IsNullOrEmpty(EnrollmentImg) && !string.IsNullOrEmpty(EnrollmentUrl))
+            if (!string.IsNullOrEmpty(EnrollmentImg) && !string.IsNullOrEmpty(EnrollmentUrl))
             {
                 htmlTemplate = htmlTemplate.Replace("#ENROLLMENT#", EnrollmentText);
                 htmlTemplate = htmlTemplate.Replace("#ENROLLVAL#", EnrollmentUrl);
@@ -67,12 +76,19 @@ namespace privacyIDEAADFSProvider
             }
             else if (!string.IsNullOrEmpty(EnrollmentImg))
             {
-                htmlTemplate = htmlTemplate.Replace("#ENROLLMENT#", $"<img id=\"enrollmentImg\" src=\"{EnrollmentImg}\" width=\"325px\" alt>");
+                string text = $"<img id=\"enrollmentImg\" src=\"{EnrollmentImg}\" width=\"325px\" alt>";
+                if (!string.IsNullOrEmpty(EnrollmentLink))
+                {
+                    text += $"\n<a href=\"{EnrollmentLink}\" target=\"_blank\">Alternatively, click on this link to enroll the new token.</a>";
+                }
+                htmlTemplate = htmlTemplate.Replace("#ENROLLMENT#", text);
             }
             else
             {
                 htmlTemplate = htmlTemplate.Replace("#ENROLLMENT#", "");
             }
+            htmlTemplate = htmlTemplate.Replace("#enrollmentImg#", EnrollmentImg);
+            htmlTemplate = htmlTemplate.Replace("#enrollmentLink#", EnrollmentLink);
 
             htmlTemplate = htmlTemplate.Replace("#ERROR#", !string.IsNullOrEmpty(this.ErrorMessage) ? this.ErrorMessage : "");
             htmlTemplate = htmlTemplate.Replace("#OTPTEXT#", otptext);
@@ -87,8 +103,15 @@ namespace privacyIDEAADFSProvider
             htmlTemplate = htmlTemplate.Replace("#pushMessage#", PushMessage);
             htmlTemplate = htmlTemplate.Replace("#modeChanged#", "0");
             htmlTemplate = htmlTemplate.Replace("#pollInterval#", "1");
+            if (AutoSubmitLength > 0)
+            {
+                htmlTemplate = htmlTemplate.Replace("#autoSubmitLength#", AutoSubmitLength.ToString());
+            }
             htmlTemplate = htmlTemplate.Replace("#autoSubmit#", AutoSubmit);
-
+            htmlTemplate = htmlTemplate.Replace("#disableOTP#", DisableOTP);
+            htmlTemplate = htmlTemplate.Replace("#disablePasskey#", DisablePasskey);
+            htmlTemplate = htmlTemplate.Replace("#passkeyChallenge#", PasskeyChallenge.Replace("\"", "&quot;"));
+            htmlTemplate = htmlTemplate.Replace("#passkeyRegistration#", PasskeyRegistration.Replace("\"", "&quot;"));
             return htmlTemplate;
         }
 

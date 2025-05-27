@@ -1,4 +1,6 @@
 ﻿using Microsoft.IdentityServer.Web.Authentication.External;
+using Newtonsoft.Json;
+using PrivacyIDEAADFSProvider;
 using PrivacyIDEASDK;
 using System;
 using System.Collections.Generic;
@@ -8,23 +10,18 @@ using System.DirectoryServices.AccountManagement;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Security.Principal;
 using Claim = System.Security.Claims.Claim;
 
 namespace privacyIDEAADFSProvider
 {
     public class Adapter : IAuthenticationAdapter, IPILog
     {
-        private readonly string version = typeof(Adapter).Assembly.GetName().Version.ToString();
+        private readonly string _version = typeof(Adapter).Assembly.GetName().Version.ToString();
 
-        private bool _UseUPN = false;
-        private bool _TriggerChallenge = false;
-        private bool _SendEmptyPassword = false;
-        private bool _EnrollmentEnabled = false;
-        private string _OtpHint = "";
-        private string _PreferredTokenType = "otp";
-        private List<string> _ForwardHeaders = new List<string>();
-        private PrivacyIDEA _PrivacyIDEA;
-        private bool _DebugLog = false;
+        private PrivacyIDEA _privacyIDEA;
+        private Configuration _config;
+        private bool _debugLog = true;
 
         public IAuthenticationAdapterMetadata Metadata
         {
@@ -32,7 +29,7 @@ namespace privacyIDEAADFSProvider
             {
                 AdapterMetadata meta = new AdapterMetadata();
                 meta.AdapterMetadataInit();
-                meta.AdapterVersion = version;
+                meta.AdapterVersion = _version;
                 return meta;
             }
         }
@@ -47,18 +44,19 @@ namespace privacyIDEAADFSProvider
         public IAdapterPresentation BeginAuthentication(Claim identityClaim, HttpListenerRequest request,
             IAuthenticationContext authContext)
         {
+            string username = "", domain = "";
             Log("BeginAuthentication: identityClaim: " + identityClaim.Value);
-            string username, domain;
-            // separates the username from the domain
+
+            // Separate the username from the domain
             string[] tmp = identityClaim.Value.Split('\\');
             string upn;
             if (tmp.Length > 1)
             {
                 username = tmp[1];
                 domain = tmp[0];
-                if (_UseUPN)
+                if (_config.UseUPN)
                 {
-                    // get UPN from sAMAccountName
+                    // Get the UPN from the sAMAccountName
                     Log("Getting UPN for user:" + username + " and domain: " + domain + "...");
                     PrincipalContext ctx = new PrincipalContext(ContextType.Domain, domain);
                     UserPrincipal user = UserPrincipal.FindByIdentity(ctx, username);
@@ -76,35 +74,32 @@ namespace privacyIDEAADFSProvider
                 upn = tmp[0];
                 domain = "";
             }
-
             Log("UPN value: " + upn + ", Domain value: " + domain);
-
-            // use upn or sam as loginname attribute
-            if (_UseUPN)
+            if (_config.UseUPN)
             {
                 username = upn;
             }
 
-            // Prepare the form
             var form = new AdapterPresentationForm(Log)
             {
-                OtpHint = _OtpHint
+                OtpHint = _config.OtpHint,
+                AutoSubmitLength = _config.AutoSubmitLength,
+                DisablePasskey = _config.DisablePasskey ? "1" : "0"
             };
 
-            // Collect headers to forward with next PI request
             List<KeyValuePair<string, string>> headers = GetHeadersToForward(request);
 
-            // trigger challenges with service account or empty pass if configured
+            // Trigger challenges with service account or empty pass if configured
             PIResponse response = null;
-            if (_PrivacyIDEA != null)
+            if (_privacyIDEA != null)
             {
-                if (_TriggerChallenge)
+                if (_config.TriggerChallenge)
                 {
-                    response = _PrivacyIDEA.TriggerChallenges(username, domain, headers);
+                    response = _privacyIDEA.TriggerChallenges(username, domain, headers);
                 }
-                else if (_SendEmptyPassword)
+                else if (_config.SendEmptyPassword)
                 {
-                    response = _PrivacyIDEA.ValidateCheck(username, "", domain: domain, headers: headers);
+                    response = _privacyIDEA.ValidateCheck(username, "", domain: domain, headers: headers);
                 }
             }
             else
@@ -119,7 +114,7 @@ namespace privacyIDEAADFSProvider
                 {
                     form = ExtractChallengeDataToForm(response, form, authContext);
                 }
-                else if (response.Value)
+                else if (response.isAuthenticationSuccessful())
                 {
                     // Success in step 1, carry this over to the second step so that step will be skipped
                     authContext.Data.Add("authSuccess", "1");
@@ -132,27 +127,23 @@ namespace privacyIDEAADFSProvider
                         Error("Error in first step: " + response.ErrorMessage);
                         form.ErrorMessage = response.ErrorMessage;
                     }
-                    else
-                    {
-                        Error("Sent something in first step and got failure without message");
-                    }
                 }
             }
 
-            if (String.IsNullOrEmpty(form.Mode))
+            if (string.IsNullOrEmpty(form.Mode))
             {
                 form.Mode = "otp";
             }
             authContext.Data.Add("userid", username);
             authContext.Data.Add("domain", domain);
 
-            // Perform optional user enrollment
+            // Perform optional token enrollment
             // If a challenge was triggered previously, checking if the user has a token is skipped
-            if (_EnrollmentEnabled &&
+            if (_config.EnrollmentEnabled &&
                 (response != null && string.IsNullOrEmpty(response.TransactionID) || (response == null)) &&
-                !_PrivacyIDEA.UserHasToken(username, domain))
+                !_privacyIDEA.UserHasToken(username, domain))
             {
-                PIEnrollResponse res = _PrivacyIDEA.TokenInit(username, domain);
+                PIEnrollResponse res = _privacyIDEA.TokenInit(username, domain);
                 form.EnrollmentUrl = res.TotpUrl;
                 form.EnrollmentImg = res.Base64TotpImage;
             }
@@ -175,7 +166,7 @@ namespace privacyIDEAADFSProvider
             // Early exit if step 2 can be skipped
             if (authContext != null)
             {
-                if ((string)GetFromDict(authContext.Data, "authSuccess", "") == "1")
+                if (GetString(authContext.Data, "authSuccess", "") == "1")
                 {
                     outgoingClaims = Claims();
                     return null;
@@ -188,70 +179,136 @@ namespace privacyIDEAADFSProvider
                 throw new ExternalAuthenticationException("Error - ProofData is empty", authContext);
             }
 
-            if (_PrivacyIDEA == null)
+            if (_privacyIDEA == null)
             {
                 Error("PrivacyIDEA is not initialized!");
                 throw new ExternalAuthenticationException("PrivacyIDEA is not initialized!", authContext);
             }
-
             Dictionary<string, object> contextDict = authContext.Data;
             Dictionary<string, object> proofDict = proofData.Properties;
             Log("ProofData: " + string.Join(", ", proofData.Properties));
             Log("AuthContext: " + string.Join(", ", authContext.Data));
 
-            // Prepare form to return, fill with values from proofData
-            var form = new AdapterPresentationForm(Log);
-            string otp = (string)GetFromDict(proofDict, "otp");
-            string mode = (string)GetFromDict(proofDict, "mode");
-            string modeChanged = (string)GetFromDict(proofDict, "modeChanged");
-            string pushAvailable = (string)GetFromDict(proofDict, "pushAvailable");
-            string message = (string)GetFromDict(proofDict, "message");
-            string webAuthnSignRequest = (string)GetFromDict(proofDict, "webAuthnSignRequest");
-
-            string strAuthCounter = (string)GetFromDict(proofDict, "authCounter", "0");
-            if (!string.IsNullOrEmpty(strAuthCounter))
+            // Get the form data and prepare the next form
+            var form = new AdapterPresentationForm(Log)
             {
-                form.AuthCounter = (int.Parse(strAuthCounter) + 1).ToString();
+                OtpHint = _config.OtpHint,
+                AutoSubmitLength = _config.AutoSubmitLength,
+                DisablePasskey = _config.DisablePasskey ? "1" : "0"
+            };
+            // Restore enrollment data if there was any
+            if (proofDict.TryGetValue("enrollmentImg", out object enrollmentImg))
+            {
+                form.EnrollmentImg = (string)enrollmentImg;
+            }
+            if (proofDict.TryGetValue("enrollmentLink", out object enrollmentLink))
+            {
+                form.EnrollmentLink = (string)enrollmentLink;
+            }
+            if (proofDict.TryGetValue("disableOTP", out object disableOtp))
+            {
+                form.DisableOTP = (string)disableOtp;
             }
 
-            form.Message = message;
+            // FormResult
+            if (!proofDict.TryGetValue("formResult", out object formResult))
+            {
+                form.ErrorMessage = "Internal error. Please try again.";
+                return form;
+            }
+            FormResult fr = JsonConvert.DeserializeObject<FormResult>((string)formResult);
+            bool modeChanged = fr.ModeChanged;
+            string mode = modeChanged ? fr.NewMode : GetString(proofDict, "mode", "otp");
+            string otp = GetString(proofDict, "otp");
+            form.Message = GetString(proofDict, "message");
             form.Mode = mode;
-            form.PushAvailable = pushAvailable;
+            form.PushAvailable = GetString(proofDict, "pushAvailable");
 
-            if (!string.IsNullOrEmpty(webAuthnSignRequest))
+            if (proofDict.TryGetValue("webAuthnSignRequest", out object signRequest))
             {
-                form.WebAuthnSignRequest = webAuthnSignRequest;
+                form.WebAuthnSignRequest = (string)signRequest;
+            }
+            if (proofDict.TryGetValue("authCounter", out object authCounter))
+            {
+                form.AuthCounter = (int.Parse((string)authCounter) + 1).ToString();
             }
 
-            string transactionid = (string)GetFromDict(contextDict, "transactionid");
-            string user = (string)GetFromDict(contextDict, "userid");
-            string domain = (string)GetFromDict(contextDict, "domain");
+            // Params from context
+            string transactionid = GetString(contextDict, "transactionid");
+            string user = GetString(contextDict, "userid");
+            string domain = GetString(contextDict, "domain");
+            string pushTransactionid = GetString(contextDict, "push_transaction_id");
+            string webauthnTransactionid = GetString(contextDict, "webauthn_transaction_id");
+            string passkeyTransactionid = GetString(contextDict, "passkey_transaction_id");
+            string otpTransactionid = GetString(contextDict, "otp_transaction_id");
 
             // Restore the previous response to set the challenges again in case of error
             PIResponse previousResponse = null;
-            string previousResponseStr = (string)GetFromDict(contextDict, "previousResponse");
-            if (!string.IsNullOrEmpty(previousResponseStr))
+            if (contextDict.TryGetValue("previousResponse", out object prevResponse))
             {
-                previousResponse = PIResponse.FromJSON(previousResponseStr, _PrivacyIDEA);
+                previousResponse = PIResponse.FromJSON((string)prevResponse, _privacyIDEA);
             }
 
-            if (modeChanged == "1")
+            if (modeChanged)
             {
                 return form;
             }
 
             // Collect headers to forward with next PI request
             List<KeyValuePair<string, string>> headers = GetHeadersToForward(request);
-
-            // Do the authentication according to the mode we are in
             PIResponse response = null;
-            if (mode == "push")
+            // Passkey login requested
+            if (fr.PasskeyLoginRequested)
             {
-                if (_PrivacyIDEA.PollTransaction(transactionid))
+                response = _privacyIDEA.ValidateInitialize("passkey", headers);
+                if (response != null)
+                {
+                    form.PasskeyChallenge = response.PasskeyChallenge;
+                    authContext.Data.Add("passkey_transaction_id", response.PasskeyTransactionID);
+                    return form;
+                }
+            }
+
+            // Do the authentication according to the mode or data present
+            // Passkey Authentication
+            if (!string.IsNullOrEmpty(fr.PasskeySignResponse))
+            {
+                if (string.IsNullOrEmpty(fr.Origin))
+                {
+                    Error("Incomplete data for Passkey authentication: Origin is missing!");
+                    form.ErrorMessage = "Could not complete Passkey authentication. Try again or use another token type.";
+                }
+                else
+                {
+                    response = _privacyIDEA.ValidateCheckPasskey(passkeyTransactionid, fr.PasskeySignResponse, fr.Origin,
+                        domain, headers);
+                }
+            }
+            // Passkey Registration (enroll_via_multichallenge)
+            else if (!string.IsNullOrEmpty(fr.PasskeyRegistrationResponse))
+            {
+                var serial = GetString(contextDict, "passkey_registration_serial");
+                var transactionId = GetString(contextDict, "transactionid");
+                if (string.IsNullOrEmpty(serial) || string.IsNullOrEmpty(transactionId) || string.IsNullOrEmpty(fr.Origin))
+                {
+                    Error($"Incomplete data for Passkey registration: Serial {serial}, transactionid {transactionId} " +
+                        $"or origin {fr.Origin} missing!");
+                    form.ErrorMessage = "Could not complete Passkey registration. Try again or use another token type.";
+                }
+                else
+                {
+                    response = _privacyIDEA.ValidateCheckCompletePasskeyRegistration(transactionId, serial, user,
+                        fr.PasskeyRegistrationResponse, fr.Origin);
+                }
+            }
+            // Push
+            else if (mode == "push")
+            {
+                if (_privacyIDEA.PollTransaction(pushTransactionid))
                 {
                     // Push confirmed, finish the authentication via /validate/check using an empty otp
                     // https://privacyidea.readthedocs.io/en/latest/tokens/authentication_modes.html#outofband-mode
-                    response = _PrivacyIDEA.ValidateCheck(user, "", transactionid, domain, headers);
+                    response = _privacyIDEA.ValidateCheck(user, "", pushTransactionid, domain, headers);
                 }
                 else
                 {
@@ -259,28 +316,27 @@ namespace privacyIDEAADFSProvider
                     form.ErrorMessage = "Authenication not confirmed yet!";
                 }
             }
-            else if (mode == "webauthn")
+            // WebAuthn
+            else if (!string.IsNullOrEmpty(fr.WebAuthnSignResponse))
             {
-                string origin = (string)GetFromDict(proofDict, "origin");
-                string webauthnresponse = (string)GetFromDict(proofDict, "webAuthnSignResponse");
-
-                if (string.IsNullOrEmpty(origin) || string.IsNullOrEmpty(webauthnresponse))
+                if (string.IsNullOrEmpty(fr.Origin))
                 {
-                    Error("Incomplete data for WebAuthn authentication: WebAuthnSignResponse or Origin is missing!");
+                    Error("Incomplete data for WebAuthn authentication: Origin is missing!");
                     form.ErrorMessage = "Could not complete WebAuthn authentication. Try again or use another token type.";
                 }
                 else
                 {
-                    response = _PrivacyIDEA.ValidateCheckWebAuthn(user, transactionid, webauthnresponse, origin, domain, headers);
+                    response = _privacyIDEA.ValidateCheckWebAuthn(user, webauthnTransactionid, fr.WebAuthnSignResponse, fr.Origin,
+                        domain, headers);
                 }
             }
             else
             {
                 // Mode == OTP
-                response = _PrivacyIDEA.ValidateCheck(user, otp, transactionid, domain, headers);
+                response = _privacyIDEA.ValidateCheck(user, otp, otpTransactionid, domain, headers);
             }
 
-            // If we get this far, the login data provided was wrong, an error occured or another challenge was triggered.
+            // Evaluate the response
             bool newChallenge = false;
             if (response != null)
             {
@@ -290,23 +346,37 @@ namespace privacyIDEAADFSProvider
                     form = ExtractChallengeDataToForm(response, form, authContext);
                     authContext.Data.Add("previousResponse", response.Raw);
                 }
-                else if (response.Value)
+                else if (response.isAuthenticationSuccessful())
                 {
-                    outgoingClaims = Claims();
-                    return null;
+                    if (!string.IsNullOrEmpty(response.Username) && response.Username != user)
+                    {
+                        Log("Passkey Authentication: Usernames do not match! User from privacyidea: " + response.Username +
+                            ", user from context: " + user);
+                        form.ErrorMessage = "The passkey is not for the user trying to log in!";
+                        return form;
+                    }
+                    else
+                    {
+                        outgoingClaims = Claims();
+                        return null;
+                    }
                 }
                 else
                 {
-                    Log("Response value was false!");
                     if (previousResponse != null)
                     {
-                        Log("Restoring values from previous response with challenges...");
                         form = ExtractChallengeDataToForm(previousResponse, form, authContext);
                     }
 
                     // Set the error message from the response or a default
-                    form.ErrorMessage = (!string.IsNullOrEmpty(response.ErrorMessage)) ? response.ErrorMessage + " (" + response.ErrorCode + ")"
-                        : "Wrong OTP value!";
+                    if (!string.IsNullOrEmpty(response.ErrorMessage))
+                    {
+                        form.ErrorMessage = response.ErrorMessage + " (" + response.ErrorCode + ")";
+                    }
+                    else
+                    {
+                        form.ErrorMessage = response.Message;
+                    }
                 }
             }
             else
@@ -346,95 +416,34 @@ namespace privacyIDEAADFSProvider
         /// <param name="configData"></param>
         public void OnAuthenticationPipelineLoad(IAuthenticationMethodConfigData configData)
         {
-            // Read logging entry first to be able to log the reading of the rest if needed
-            var registryReader = new RegistryReader(Log);
-            _DebugLog = registryReader.Read("debug_log") == "1";
+            Log("PrivacyIDEA AD FS Plugin " + _version + " - OnAuthenticationPipelineLoad");
 
-            Log("OnAuthenticationPipelineLoad: Provider Version " + version);
-            // Read the other defined keys into a dict
-            List<string> configKeys = new List<string>(new string[]
-            { "use_upn", "url", "disable_ssl", "tls_version", "enable_enrollment", "service_user", "service_pass", "service_realm",
-                "realm", "trigger_challenges", "send_empty_pass", "otp_hint", "forward_headers", "preferred_token_type" });
-
-            var configDict = new Dictionary<string, string>();
-            Log("Read config values:");
-            configKeys.ForEach(key =>
-            {
-                string value = registryReader.Read(key);
-                Log($"{key} = {value}");
-                configDict[key] = value;
-            });
-            string url = GetFromDict(configDict, "url");
-            if (string.IsNullOrEmpty(url))
+            _config = new Configuration(Log);
+            if (string.IsNullOrEmpty(_config.Url))
             {
                 Error("No server URL configured. Can not initialize privacyIDEA without a server URL.");
                 throw new Exception("No server URL configured. Can not initialize privacyIDEA without a server URL.");
             }
 
-            // Note: the config asks if ssl verify should be disabled, while the constructor parameter indicates if ssl verify should be enabled!
-            bool shouldUseSSL = GetFromDict(configDict, "disable_ssl", "0") != "1";
-
-            // Check if TLS version should be overwritten
-            string tlsVersion = GetFromDict(configDict, "tls_version", "");
-            if (!string.IsNullOrEmpty(tlsVersion))
-            {
-                if (tlsVersion.Contains("tls11"))
-                {
-                    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls11;
-                    Log("Setting TLS version to 1.1");
-                }
-                else if (tlsVersion.Contains("tls12"))
-                {
-                    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
-                    Log("Setting TLS version to 1.2");
-                }
-                else if (tlsVersion.Contains("tls13"))
-                {
-                    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls13;
-                    Log("Setting TLS version to 1.3");
-                }
-                else
-                {
-                    Log($"Given TLS version ({tlsVersion}) has wrong format! Using default version from system.");
-                }
-            }
-
-            // Check if headers to forward are set
-            string headersToForward = GetFromDict(configDict, "forward_headers", "");
-            headersToForward.Replace(" ", "");
-            if (!string.IsNullOrEmpty(headersToForward))
-            {
-                _ForwardHeaders = headersToForward.Split(',').ToList();
-            }
-
-            _PrivacyIDEA = new PrivacyIDEA(url, "PrivacyIDEA-ADFS", shouldUseSSL)
+            _privacyIDEA = new PrivacyIDEA(_config.Url, "PrivacyIDEA-ADFS/" + _version, !_config.DisableSSL)
             {
                 Logger = this
             };
 
-            string serviceUser = GetFromDict(configDict, "service_user", "");
-            string servicePass = GetFromDict(configDict, "service_pass", "");
-
-            if (!string.IsNullOrEmpty(serviceUser) && !string.IsNullOrEmpty(servicePass))
+            if (!string.IsNullOrEmpty(_config.Realm))
             {
-                _PrivacyIDEA.SetServiceAccount(serviceUser, servicePass, GetFromDict(configDict, "service_realm"));
+                _privacyIDEA.Realm = _config.Realm;
             }
-            _OtpHint = GetFromDict(configDict, "otp_hint", "");
-            _PreferredTokenType = GetFromDict(configDict, "preferred_token_type", "otp");
-            _UseUPN = GetFromDict(configDict, "use_upn", "0") == "1";
 
-            _EnrollmentEnabled = GetFromDict(configDict, "enable_enrollment", "0") == "1";
-
-            _TriggerChallenge = GetFromDict(configDict, "trigger_challenges", "0") == "1";
-            if (!_TriggerChallenge)
+            if (_config.ServiceAccountAvailable())
             {
-                // Only if triggerChallenge is disabled, sendEmptyPassword COULD be set
-                _SendEmptyPassword = GetFromDict(configDict, "send_empty_pass", "0") == "1";
+                _privacyIDEA.SetServiceAccount(_config.ServiceUser, _config.ServicePass, _config.ServiceRealm);
             }
-            _PrivacyIDEA.Realm = GetFromDict(configDict, "realm", "");
-            var realmmap = registryReader.GetRealmMapping();
-            Log("realmmapping = " + string.Join(" , ", realmmap));
-            _PrivacyIDEA.RealmMap = realmmap;
+
+            if (_config.RealmMap.Count > 0)
+            {
+                _privacyIDEA.RealmMap = _config.RealmMap;
+            }
         }
 
         /// <summary>
@@ -442,7 +451,7 @@ namespace privacyIDEAADFSProvider
         /// </summary>
         public void OnAuthenticationPipelineUnload()
         {
-            _PrivacyIDEA.Dispose();
+            _privacyIDEA.Dispose();
         }
 
         /// <summary> 
@@ -462,34 +471,39 @@ namespace privacyIDEAADFSProvider
         }
 
         /// This function should only be used if the response contains challenges that were triggered.
-        private AdapterPresentationForm ExtractChallengeDataToForm(PIResponse response, AdapterPresentationForm form, IAuthenticationContext authContext)
+        private AdapterPresentationForm ExtractChallengeDataToForm(PIResponse response, AdapterPresentationForm form,
+            IAuthenticationContext authContext)
         {
-            // Explicitly overwrite here. If another challenge was triggered, it will have a different transaction_id.
-            authContext.Data["transactionid"] = response.TransactionID;
-            // Reset WebAuthn and mode
-            form.WebAuthnSignRequest = "";
-            form.Mode = "otp";
-
-            form.Message = response.Message;
-
-            if (response.TriggeredTokenTypes().Contains("push"))
+            if (response == null)
             {
-                form.PushAvailable = "1";
-                form.PushMessage = response.PushMessage();
+                return form;
             }
 
-            if (response.TriggeredTokenTypes().Contains("webauthn"))
+            // Reset values
+            form.WebAuthnSignRequest = "";
+            form.Mode = "otp";
+            form.PushAvailable = "0";
+            form.EnrollmentImg = "";
+            form.EnrollmentLink = "";
+            form.DisableOTP = "0";
+
+            // New values
+            form.Message = response.Message;
+
+            if (response.PushMessage() is string pushMessage)
             {
-                form.WebAuthnSignRequest = response.MergedSignRequest();
+                form.PushAvailable = "1";
+                form.PushMessage = pushMessage;
+            }
+
+            if (response.MergedSignRequest() is string webAuthnSignRequest)
+            {
+                form.WebAuthnSignRequest = webAuthnSignRequest;
             }
 
             if (!string.IsNullOrEmpty(response.PreferredClientMode))
             {
                 form.Mode = response.PreferredClientMode;
-            }
-            else if (response.TriggeredTokenTypes().Contains(_PreferredTokenType))
-            {
-                form.Mode = _PreferredTokenType;
             }
 
             if (form.Mode == "webauthn" && (form.WebAuthnSignRequest == null || string.IsNullOrEmpty(form.WebAuthnSignRequest)))
@@ -497,30 +511,42 @@ namespace privacyIDEAADFSProvider
                 form.Mode = "otp";
             }
 
-            // Check if there is an image that should be shown in the current mode
-            // TODO using the client_mode of the challenges as our modes (e.g. interactive, poll) would simplify this
-            IEnumerable<PIChallenge> challenges;
-            if (form.Mode == "otp")
+            // Check for an image, which indicates enroll_via_multichallenge
+            var challengeWithImage = response.Challenges.FirstOrDefault(challenge => !string.IsNullOrEmpty(challenge.Image));
+            if (challengeWithImage != null)
             {
-                challenges = response.Challenges.Where(challenge => challenge.ClientMode == "interactive");
-            }
-            else if (form.Mode == "push")
-            {
-                challenges = response.Challenges.Where(challenge => challenge.ClientMode == "poll");
-            }
-            else
-            {
-                challenges = response.Challenges.Where(challenge => challenge.ClientMode == form.Mode);
+                form.EnrollmentImg = challengeWithImage.Image;
+                form.EnrollmentLink = response.EnrollmentLink;
+                form.Mode = challengeWithImage.Type;
+                if (form.Mode == "push")
+                {
+                    form.DisableOTP = "1"; // Disable OTP input if it is push
+                }
             }
 
-            if (challenges.Any())
+            if (!string.IsNullOrEmpty(response.PasskeyRegistration))
             {
-                // Default for PIResponse class is null
-                var challengeWithImage = challenges.FirstOrDefault(challenge => !string.IsNullOrEmpty(challenge.Image));
-                if (challengeWithImage != null)
-                {
-                    form.EnrollmentImg = challengeWithImage.Image;
-                }
+                form.PasskeyRegistration = response.PasskeyRegistration;
+                form.PasskeyChallenge = "";
+                authContext.Data["passkey_registration_serial"] = response.Serial;
+            }
+            // Transaction IDs
+            authContext.Data["transactionid"] = response.TransactionID;
+            if (!string.IsNullOrEmpty(response.OTPTransactionID))
+            {
+                authContext.Data["otp_transaction_id"] = response.OTPTransactionID;
+            }
+            if (!string.IsNullOrEmpty(response.PasskeyTransactionID))
+            {
+                authContext.Data["passkey_transaction_id"] = response.PasskeyTransactionID;
+            }
+            if (!string.IsNullOrEmpty(response.PushTransactionID))
+            {
+                authContext.Data["push_transaction_id"] = response.PushTransactionID;
+            }
+            if (!string.IsNullOrEmpty(response.WebAuthnTransactionID))
+            {
+                authContext.Data["webauthn_transaction_id"] = response.WebAuthnTransactionID;
             }
 
             return form;
@@ -536,7 +562,7 @@ namespace privacyIDEAADFSProvider
             NameValueCollection requestHeaders = request.Headers;
             List<KeyValuePair<string, string>> headersToForward = new List<KeyValuePair<string, string>>();
 
-            foreach (string header in _ForwardHeaders)
+            foreach (string header in _config.ForwardHeaders)
             {
                 string[] headerValues = requestHeaders.GetValues(header);
 
@@ -560,9 +586,18 @@ namespace privacyIDEAADFSProvider
         private Claim[] Claims()
         {
             return new[] {
-                     new Claim(
+                    new Claim(
                             "http://schemas.microsoft.com/ws/2008/06/identity/claims/authenticationmethod",
                             "http://schemas.microsoft.com/ws/2012/12/authmethod/otp")
+                        };
+        }
+
+        private Claim[] NewClaims()
+        {
+            return new[] {
+                     new Claim(
+                            "http://schemas.microsoft.com/ws/2008/06/identity/claims/authenticationmethod",
+                            "http://schemas.microsoft.com/ws/2012/12/authmethod/privacyidea")
                         };
         }
 
@@ -570,7 +605,17 @@ namespace privacyIDEAADFSProvider
         {
             if (dict.ContainsKey(key))
             {
-                return (T)dict[key];
+                return dict[key];
+            }
+            Log("Key '" + key + "' could not be found in dict, returning default value '" + defaultValue + "'.");
+            return defaultValue;
+        }
+
+        private string GetString(Dictionary<string, object> dict, string key, string defaultValue = "")
+        {
+            if (dict.ContainsKey(key))
+            {
+                return (string)dict[key];
             }
             Log("Key '" + key + "' could not be found in dict, returning default value '" + defaultValue + "'.");
             return defaultValue;
@@ -601,23 +646,19 @@ namespace privacyIDEAADFSProvider
 
         private void EventError(string message)
         {
-            using (EventLog eventLog = new EventLog("AD FS/Admin"))
-            {
-                eventLog.Source = "privacyIDEAProvider";
-                eventLog.WriteEntry(message, EventLogEntryType.Error, 9901, 0);
-            }
+            using EventLog eventLog = new EventLog("AD FS/Admin");
+            eventLog.Source = "privacyIDEAProvider";
+            eventLog.WriteEntry(message, EventLogEntryType.Error, 9901, 0);
         }
 
         public async void LogImpl(string msg)
         {
-            if (_DebugLog)
+            if (_debugLog)
             {
                 try
                 {
-                    using (StreamWriter streamWriter = new StreamWriter("C:\\PrivacyIDEA-ADFS log.txt", append: true))
-                    {
-                        await streamWriter.WriteLineAsync(msg);
-                    }
+                    using StreamWriter streamWriter = new StreamWriter("C:\\PrivacyIDEA-ADFS log.txt", append: true);
+                    await streamWriter.WriteLineAsync(msg);
                 }
                 catch (Exception e)
                 {
