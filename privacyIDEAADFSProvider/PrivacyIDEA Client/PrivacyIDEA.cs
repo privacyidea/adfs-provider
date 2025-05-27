@@ -331,9 +331,13 @@ namespace PrivacyIDEASDK
                 { "transaction_id", transactionid }
             };
 
-            foreach (var entry in ParseFIDO2AttestationResponse(attestationResponse))
+            var parsedResponse = ParseFIDO2AttestationResponse(attestationResponse);
+            if (parsedResponse != null)
             {
-                parameters.Add(entry.Key, entry.Value);
+                foreach (var entry in parsedResponse)
+                {
+                    parameters.Add(entry.Key, entry.Value);
+                }
             }
 
             AddRealmForDomain(domain, parameters);
