@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -54,7 +53,7 @@ namespace PrivacyIDEASDK
 
         // The webauthn parameters should not be url encoded because they already have the correct format.
         // Comparison is done in lower case, so add them there in lower case
-        private static readonly List<string> _exludeFromURIEscape = new List<string>(new string[]
+        private static readonly List<string> _excludeFromURIEscape = new List<string>(new string[]
            { "credentialid", "credential_id", "clientdata", "clientdatajson", "signaturedata", "signature", "authenticatordata",
                "userhandle", "raw_id", "rawid", "assertionclientextensions", "authenticatorattachment", "attestationobject" });
 
@@ -631,7 +630,7 @@ namespace PrivacyIDEASDK
             foreach (var element in dict)
             {
                 sb.Append(element.Key).Append("=");
-                sb.Append((_exludeFromURIEscape.Contains(element.Key.ToLower())) ? element.Value : Uri.EscapeDataString(element.Value));
+                sb.Append((_excludeFromURIEscape.Contains(element.Key.ToLower())) ? element.Value : Uri.EscapeDataString(element.Value));
                 sb.Append("&");
             }
 
