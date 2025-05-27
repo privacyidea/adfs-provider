@@ -87,6 +87,7 @@ namespace privacyIDEAADFSProvider
             {
                 htmlTemplate = htmlTemplate.Replace("#ENROLLMENT#", "");
             }
+
             htmlTemplate = htmlTemplate.Replace("#enrollmentImg#", EnrollmentImg);
             htmlTemplate = htmlTemplate.Replace("#enrollmentLink#", EnrollmentLink);
 

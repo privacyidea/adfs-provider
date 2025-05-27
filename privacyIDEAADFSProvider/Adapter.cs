@@ -592,25 +592,6 @@ namespace privacyIDEAADFSProvider
                         };
         }
 
-        private Claim[] NewClaims()
-        {
-            return new[] {
-                     new Claim(
-                            "http://schemas.microsoft.com/ws/2008/06/identity/claims/authenticationmethod",
-                            "http://schemas.microsoft.com/ws/2012/12/authmethod/privacyidea")
-                        };
-        }
-
-        private T GetFromDict<T>(Dictionary<string, T> dict, string key, T defaultValue = default)
-        {
-            if (dict.ContainsKey(key))
-            {
-                return dict[key];
-            }
-            Log("Key '" + key + "' could not be found in dict, returning default value '" + defaultValue + "'.");
-            return defaultValue;
-        }
-
         private string GetString(Dictionary<string, object> dict, string key, string defaultValue = "")
         {
             if (dict.ContainsKey(key))
