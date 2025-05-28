@@ -30,7 +30,14 @@ namespace privacyIDEAADFSProvider
         /// one of the methods listed in this property, the authentication attempt will fail.
         public virtual string[] AuthenticationMethods
         {
-            get { return new[] { "http://schemas.microsoft.com/ws/2012/12/authmethod/otp" }; }
+            get
+            {
+                return new[]
+                {
+                    "http://schemas.microsoft.com/ws/2012/12/authmethod/otp",
+                    "http://schemas.microsoft.com/ws/2012/12/authmethod/privacyidea"
+                };
+            }
         }
 
         /// Returns an array indicating which languages are supported by the provider. AD FS uses this information
@@ -83,10 +90,12 @@ namespace privacyIDEAADFSProvider
         /// "http://schemas.microsoft.com/ws/2008/06/identity/claims/primarysid"
         public string[] IdentityClaims
         {
-            get { return new[] { "http://schemas.microsoft.com/ws/2008/06/identity/claims/windowsaccountname" }; }
+           // get { return new string[] { }; }
+
+             get { return new[] { "http://schemas.microsoft.com/ws/2008/06/identity/claims/windowsaccountname" }; }
         }
 
-        //All external providers must return a value of "true" for this property.
+        // All external providers must return a value of "true" for this property.
         public bool RequiresIdentity
         {
             get { return true; }

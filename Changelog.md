@@ -1,3 +1,12 @@
+## 2025-06-02 v1.3.0
+
+**Use this version only with privacyIDEA 3.11 or higher**
+* Passkey. Unfortunately, usernameless is not possible with AD FS, see the README for recommendations for the use of this plugin. Passkey login can be disabled with the disable_passkey=1 setting.
+* Passkey enrollment via validate.
+* Changed the parameter names when doing WebAuthn to be uniform with passkey. That is why privacyIDEA 3.11 is required for WebAuthn to work.
+* Added auto_submit_otp_length setting to set a OTP digit count for which to automatically submit the form.
+* Removed preferred_client_mode setting in favor of the policy in the privacyIDEA server. 
+
 ## 2023-03-27 v1.2.0
 
 ### Features
