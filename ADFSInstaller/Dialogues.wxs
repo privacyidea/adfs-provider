@@ -23,12 +23,12 @@
                 </Control>
 				<Control Type="CheckBox" Id="cbox_enroll" Width="150" Height="17" X="200" Y="154" Text="Enable token enrollment using service account" CheckBoxValue="1" Property="ENABLEENROLL"/>
                 <!-- USERNAME AND PASSWORD INPUT -->
-                <Control Type="Edit" Id="in_serviceuser" Width="78" Height="15" X="65" Y="178" Text="Username" Property="SERVICEUSER" Help="Username of the service account." ToolTip="Username of the the service account.">
+                <Control Type="Edit" Id="in_serviceuser" Width="78" Height="15" X="65" Y="178" Text="Username" Property="SERVICEUSER" Help="Service user" ToolTip="Username of the the service account.">
                     <Condition Action="disable">TRIGGERCHALLENGES&lt;&gt;1</Condition>
                     <Condition Action="enable">TRIGGERCHALLENGES=1</Condition>
 					<Condition Action="enable">ENABLEENROLL=1</Condition>
                 </Control>
-                <Control Type="Edit" Id="in_servicepass" Width="78" Height="15" X="170" Y="178" Text="Password" Property="SERVICEPASS" Help="Password of the service account." ToolTip="Password of the service account.">
+                <Control Type="Edit" Id="in_servicepass" Width="78" Height="15" X="170" Y="178" Text="Password" Property="SERVICEPASS" Help="Service password" ToolTip="Password of the service account.">
                     <Condition Action="disable">TRIGGERCHALLENGES&lt;&gt;1</Condition>
                     <Condition Action="enable">TRIGGERCHALLENGES=1</Condition>
 					<Condition Action="enable">ENABLEENROLL=1</Condition>
