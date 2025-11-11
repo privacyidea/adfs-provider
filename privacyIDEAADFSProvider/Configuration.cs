@@ -1,4 +1,4 @@
-﻿using PrivacyIDEASDK;
+﻿using PrivacyIDEAADFSProvider.PrivacyIDEA_Client;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -10,6 +10,8 @@ namespace PrivacyIDEAADFSProvider
         public string Url { get; set; }
         public string Realm { get; set; } = "";
         public List<string> ForwardHeaders { get; set; } = new List<string>();
+        public bool ForwardClientIP { get; set; } = false;
+        public bool ForwardClientUserAgent { get; set; } = false;
         public bool DebugLog { get; set; } = false;
         public string OtpHint { get; set; } = "One-Time-Password";
         public bool UseUPN { get; set; } = false;
@@ -27,7 +29,7 @@ namespace PrivacyIDEAADFSProvider
 
         private List<string> _ConfigKeys = new List<string>(new string[]
             { "use_upn", "url", "disable_ssl", "tls_version", "enable_enrollment", "service_user", "service_pass", "service_realm", "disable_passkey",
-                "realm", "trigger_challenges", "send_empty_pass", "otp_hint", "forward_headers", "auto_submit_otp_length" });
+                "realm", "trigger_challenges", "send_empty_pass", "otp_hint", "forward_headers", "forward_client_ip", "forward_client_user_agent", "auto_submit_otp_length" });
 
         public Configuration(LogFunction logFunction)
         {
@@ -109,6 +111,9 @@ namespace PrivacyIDEAADFSProvider
             }
 
             DisablePasskey = Config.ContainsKey("disable_passkey") && Config["disable_passkey"] == "1";
+            ForwardClientIP = Config.ContainsKey("forward_client_ip") && Config["forward_client_ip"] == "1";
+            ForwardClientUserAgent = Config.ContainsKey("forward_client_user_agent") && Config["forward_client_user_agent"] == "1";
+
         }
 
         public bool ServiceAccountAvailable() => !string.IsNullOrEmpty(ServiceUser) && !string.IsNullOrEmpty(ServicePass);
