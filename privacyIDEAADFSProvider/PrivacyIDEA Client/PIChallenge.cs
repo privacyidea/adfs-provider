@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
+namespace PrivacyIDEASDK
 {
     public class PIChallenge
     {
