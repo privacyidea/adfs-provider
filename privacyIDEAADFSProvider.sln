@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.14.36623.8 d17.14
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29609.76
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "privacyIDEAADFSProvider", "privacyIDEAADFSProvider\privacyIDEAADFSProvider.csproj", "{3A9A54D7-F23B-469C-BA61-8C69CBAF50F5}"
 EndProject
@@ -26,7 +26,6 @@ Global
 		{3A9A54D7-F23B-469C-BA61-8C69CBAF50F5}.Release|x64.ActiveCfg = Release|Any CPU
 		{3A9A54D7-F23B-469C-BA61-8C69CBAF50F5}.Release|x64.Build.0 = Release|Any CPU
 		{9EDAE53B-0CC3-4E1C-8F94-48A8176F6850}.Debug|Any CPU.ActiveCfg = Debug|x64
-		{9EDAE53B-0CC3-4E1C-8F94-48A8176F6850}.Debug|Any CPU.Build.0 = Debug|x64
 		{9EDAE53B-0CC3-4E1C-8F94-48A8176F6850}.Debug|x64.ActiveCfg = Debug|x64
 		{9EDAE53B-0CC3-4E1C-8F94-48A8176F6850}.Release|Any CPU.ActiveCfg = Release|x86
 		{9EDAE53B-0CC3-4E1C-8F94-48A8176F6850}.Release|x64.ActiveCfg = Release|x64
