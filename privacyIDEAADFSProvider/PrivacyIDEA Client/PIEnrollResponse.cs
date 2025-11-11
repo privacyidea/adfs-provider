@@ -1,7 +1,7 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
+namespace PrivacyIDEASDK
 {
     public class PIEnrollResponse
     {
