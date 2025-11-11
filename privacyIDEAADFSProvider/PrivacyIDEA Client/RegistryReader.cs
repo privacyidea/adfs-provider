@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using Microsoft.Win32;
 
-namespace PrivacyIDEASDK
+namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
 {
 
     public delegate void LogFunction(string message);
