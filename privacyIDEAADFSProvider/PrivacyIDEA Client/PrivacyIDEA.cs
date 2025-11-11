@@ -1,16 +1,15 @@
-﻿using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.DirectoryServices.ActiveDirectory;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
-namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
+namespace PrivacyIDEASDK
 {
     public class PrivacyIDEA : IDisposable
     {
@@ -84,10 +83,9 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// <param name="username">username to trigger challenges for</param>
         /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
         /// <param name="headers">optional headers which can be forwarded to the privacyIDEA server</param>
-        /// <param name="customParameters">Dictionary of custom parameters to add</param>
         /// <returns>PIResponse object or null on error</returns>
         public PIResponse TriggerChallenges(string username, string domain = null,
-            List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
+            List<KeyValuePair<string, string>> headers = null)
         {
             if (!GetJWT())
             {
@@ -107,9 +105,8 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// </summary>
         /// <param name="type"></param>
         /// <param name="headers"></param>
-        /// <param name="customParameters">Dictionary of custom parameters to add</param>
         /// <returns>PIResponse object or null on error</returns>
-        public PIResponse ValidateInitialize(string type, List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
+        public PIResponse ValidateInitialize(string type, List<KeyValuePair<string, string>> headers = null)
         {
             var parameters = BuildParameters(new Dictionary<string, string> { { "type", type } }, "", customParameters);
             string response = SendRequest("/validate/initialize", parameters, headers, "GET");
@@ -121,9 +118,8 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// This is done using the /validate/polltransaction endpoint.
         /// </summary>
         /// <param name="transactionid"></param>
-        /// <param name="customParameters">Dictionary of custom parameters to add</param>
         /// <returns>true if challenge was answered. false if not or error</returns>
-        public bool PollTransaction(string transactionid, Dictionary<string, string> customParameters = null)
+        public bool PollTransaction(string transactionid)
         {
             if (!string.IsNullOrEmpty(transactionid))
             {
@@ -157,9 +153,8 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// </summary>
         /// <param name="user">username</param>
         /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
-        /// <param name="customParameters">Dictionary of custom parameters to add</param>
         /// <returns>true if token exists. false if not or error</returns>
-        public bool UserHasToken(string user, string domain = null, Dictionary<string, string> customParameters = null)
+        public bool UserHasToken(string user, string domain = null)
         {
             if (!GetJWT())
             {
@@ -193,9 +188,8 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// </summary>
         /// <param name="user">username</param>
         /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
-        /// <param name="customParameters">Dictionary of custom parameters to add</param>
         /// <returns>PIEnrollResponse object or null on error</returns>
-        public PIEnrollResponse TokenInit(string user, string domain = null, Dictionary<string, string> customParameters = null)
+        public PIEnrollResponse TokenInit(string user, string domain = null)
         {
             var map = new Dictionary<string, string>
             {
@@ -218,10 +212,9 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// <param name="transactionid">optional transaction id to refer to a challenge</param>
         /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
         /// <param name="headers">optional headers which can be forwarded to the privacyIDEA server</param>
-        /// <param name="customParameters">Dictionary of custom parameters to add</param>
         /// <returns>PIResponse object or null on error</returns>
         public PIResponse ValidateCheck(string user, string otp, string transactionid = null, string domain = null,
-            List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
+            List<KeyValuePair<string, string>> headers = null)
         {
             var map = new Dictionary<string, string>
             {
@@ -249,10 +242,9 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// <param name="origin">origin also returned by the browser</param>
         /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
         /// <param name="headers">optional headers which can be forwarded to the privacyIDEA server</param>
-        /// <param name="customParameters">Dictionary of custom parameters to add</param>
         /// <returns>PIResponse object or null on error</returns>
         public PIResponse ValidateCheckWebAuthn(string user, string transactionid, string webAuthnSignResponse, string origin,
-            string domain = null, List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
+            string domain = null, List<KeyValuePair<string, string>> headers = null)
         {
             if (string.IsNullOrEmpty(user) || string.IsNullOrEmpty(transactionid) || string.IsNullOrEmpty(webAuthnSignResponse)
                 || string.IsNullOrEmpty(origin))
@@ -267,8 +259,6 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                 { "user", user },
                 { "pass", "" }
             };
-            AddCustomParameters(customParameters, parameters);
-
             return FIDO2AuthenticationRequest(parameters, transactionid, webAuthnSignResponse, origin, domain, headers);
         }
 
@@ -280,10 +270,9 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// <param name="origin">Origin as returned by the browser. Will be added as Origin Header.</param>
         /// <param name="domain">Optional domain of the user</param>
         /// <param name="headers">Optional headers to add to the request</param>
-        /// <param name="customParameters">Dictionary of custom parameters to add</param>
         /// <returns></returns>
         public PIResponse ValidateCheckPasskey(string transactionid, string assertionResponse, string origin, string domain = null,
-            List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
+            List<KeyValuePair<string, string>> headers = null)
         {
             if (string.IsNullOrEmpty(transactionid) || string.IsNullOrEmpty(assertionResponse) || string.IsNullOrEmpty(origin))
             {
@@ -291,14 +280,11 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                     + ", assertionResponse=" + assertionResponse + ", origin=" + origin);
                 return null;
             }
-            var parameters = new Dictionary<string, string>();
-            AddCustomParameters(customParameters, parameters);
-
-            return FIDO2AuthenticationRequest(parameters, transactionid, assertionResponse, origin, domain, headers);
+            return FIDO2AuthenticationRequest(new Dictionary<string, string>(), transactionid, assertionResponse, origin, domain, headers);
         }
 
         /// <summary>
-        /// Completes the passkey registration at the /validate/check endpoint.
+        /// 
         /// </summary>
         /// <param name="transactionid"></param>
         /// <param name="serial"></param>
@@ -307,11 +293,9 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// <param name="origin"></param>
         /// <param name="domain"></param>
         /// <param name="headers"></param>
-        /// <param name="customParameters">Dictionary of custom parameters to add</param>
         /// <returns></returns>
         public PIResponse ValidateCheckCompletePasskeyRegistration(string transactionid, string serial, string username,
-            string attestationResponse, string origin, string domain = null, List<KeyValuePair<string, string>> headers = null,
-            Dictionary<string, string> customParameters = null)
+            string attestationResponse, string origin, string domain = null, List<KeyValuePair<string, string>> headers = null)
         {
             if (string.IsNullOrEmpty(transactionid) || string.IsNullOrEmpty(serial) || string.IsNullOrEmpty(username)
                 || string.IsNullOrEmpty(attestationResponse) || string.IsNullOrEmpty(origin))
@@ -354,19 +338,8 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             return PIResponse.FromJSON(response, this);
         }
 
-        /// <summary>
-        /// Initiates the FIDO2 authentication request.
-        /// </summary>
-        /// <param name="parameters"></param>
-        /// <param name="transactionid"></param>
-        /// <param name="assertionResponse"></param>
-        /// <param name="origin"></param>
-        /// <param name="domain"></param>
-        /// <param name="headers"></param>
-        /// <param name="customParameters"></param>
-        /// <returns></returns>
         private PIResponse FIDO2AuthenticationRequest(Dictionary<string, string> parameters, string transactionid, string assertionResponse,
-            string origin, string domain = null, List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
+            string origin, string domain = null, List<KeyValuePair<string, string>> headers = null)
         {
             foreach (var entry in ParseFIDO2AssertionResponse(assertionResponse))
             {
@@ -385,7 +358,6 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             }
 
             AddRealmForDomain(domain, parameters);
-            AddCustomParameters(customParameters, parameters);
 
             // The origin has to be set in the header for FIDO2 authentication
             headers.Add(new KeyValuePair<string, string>("Origin", origin));
@@ -394,11 +366,6 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             return PIResponse.FromJSON(response, this);
         }
 
-        /// <summary>
-        /// Parses the FIDO2 assertion response from the browser and extracts the required parameters.
-        /// </summary>
-        /// <param name="assertionResponse"></param>
-        /// <returns></returns>
         private Dictionary<string, string> ParseFIDO2AssertionResponse(string assertionResponse)
         {
             var parameters = new Dictionary<string, string>();
@@ -439,12 +406,6 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             return parameters;
         }
 
-        /// <summary>
-        /// Gets the first JToken found for the given list of keys.
-        /// </summary>
-        /// <param name="root"></param>
-        /// <param name="keys"></param>
-        /// <returns></returns>
         private JToken GetJTokenFirstOf(JToken root, List<string> keys)
         {
             JToken ret = null;
@@ -459,11 +420,6 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             return ret;
         }
 
-        /// <summary>
-        /// Parses the FIDO2 attestation response from the browser and extracts the required parameters.
-        /// </summary>
-        /// <param name="attestationResponse"></param>
-        /// <returns></returns>
         private Dictionary<string, string> ParseFIDO2AttestationResponse(string attestationResponse)
         {
             var parameters = new Dictionary<string, string>();
@@ -505,9 +461,8 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// Gets an auth token from the privacyIDEA server using the service account.
         /// Afterward, the token is set as the default authentication header for the HttpClient.
         /// </summary>
-        /// <param name="customParameters">Dictionary of custom parameters to add</param>
         /// <returns>true if success, false otherwise</returns>
-        private bool GetJWT(Dictionary<string, string> customParameters = null)
+        private bool GetJWT()
         {
             if (!ServiceAccountAvailable())
             {
@@ -554,12 +509,6 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             return false;
         }
 
-        /// <summary>
-        /// Sets the service account credentials to be used for authentication.
-        /// </summary>
-        /// <param name="user"></param>
-        /// <param name="pass"></param>
-        /// <param name="realm"></param>
         public void SetServiceAccount(string user, string pass, string realm = "")
         {
             _serviceUser = user;
@@ -570,14 +519,6 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             }
         }
 
-        /// <summary>
-        /// Sends a request to the privacyIDEA server.
-        /// </summary>
-        /// <param name="endpoint"></param>
-        /// <param name="parameters"></param>
-        /// <param name="headers"></param>
-        /// <param name="method"></param>
-        /// <returns></returns>
         private string SendRequest(string endpoint, Dictionary<string, string> parameters, List<KeyValuePair<string, string>> headers = null, string method = "POST")
         {
             Log("Sending [" + string.Join(" , ", parameters) + "] to [" + endpoint + "] with method [" + method + "]");
@@ -730,10 +671,6 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             return new StringContent(ret, Encoding.UTF8, "application/x-www-form-urlencoded"); ;
         }
 
-        /// <summary>
-        /// Checks if the service account credentials are available.
-        /// </summary>
-        /// <returns></returns>
         internal bool ServiceAccountAvailable()
         {
             return !string.IsNullOrEmpty(_serviceUser) && !string.IsNullOrEmpty(_servicePass);

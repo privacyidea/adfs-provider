@@ -1,6 +1,6 @@
 using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using PrivacyIDEAADFSProvider.PrivacyIDEA_Client;
+using PrivacyIDEASDK;
 using WireMock.RequestBuilders;
 using WireMock.ResponseBuilders;
 using WireMock.Server;
@@ -8,7 +8,7 @@ using WireMock.Server;
 namespace Tests
 {
     [TestClass]
-    public class PrivacyIDEAClientTests
+    public class SDKTests
     {
         WireMockServer server;
         PrivacyIDEA privacyIDEA;

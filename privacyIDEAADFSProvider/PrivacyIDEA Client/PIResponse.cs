@@ -1,10 +1,10 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using PrivacyIDEAADFSProvider.PrivacyIDEA_Client;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-
-namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
+namespace PrivacyIDEASDK
 {
     public class PIResponse
     {
