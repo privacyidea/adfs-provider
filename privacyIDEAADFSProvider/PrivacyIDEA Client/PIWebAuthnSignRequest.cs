@@ -1,4 +1,4 @@
-﻿namespace PrivacyIDEASDK
+﻿namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
 {
     class PIWebAuthnSignRequest: PIChallenge
     {
