@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
+namespace PrivacyIDEASDK
 {
     public interface IPILog
     {
