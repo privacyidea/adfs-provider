@@ -1,4 +1,5 @@
-﻿namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
+﻿
+namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
 {
     public enum PIAuthenticationStatus
     {
