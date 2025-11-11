@@ -2,6 +2,7 @@
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.DirectoryServices.ActiveDirectory;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -93,14 +94,8 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                 Error("Unable to trigger challenges without an auth token!");
                 return null;
             }
-            var parameters = new Dictionary<string, string>
-            {
-                { "user", username }
-            };
 
-            AddRealmForDomain(domain, parameters);
-            AddCustomParameters(customParameters, parameters);
-
+            var parameters = BuildParameters(new Dictionary<string, string> { { "user", username } }, domain, customParameters);
             string response = SendRequest("/validate/triggerchallenge", parameters, headers);
             PIResponse ret = PIResponse.FromJSON(response, this);
 
@@ -116,13 +111,8 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// <returns>PIResponse object or null on error</returns>
         public PIResponse ValidateInitialize(string type, List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
         {
-            var map = new Dictionary<string, string>
-            {
-                    { "type", type }
-            };
-            AddCustomParameters(customParameters, map);
-
-            string response = SendRequest("/validate/initialize", map, headers, "GET");
+            var parameters = BuildParameters(new Dictionary<string, string> { { "type", type } }, "", customParameters);
+            string response = SendRequest("/validate/initialize", parameters, headers, "GET");
             return PIResponse.FromJSON(response, this);
         }
 
@@ -137,13 +127,8 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         {
             if (!string.IsNullOrEmpty(transactionid))
             {
-                var map = new Dictionary<string, string>
-                {
-                    { "transaction_id", transactionid }
-                };
-                AddCustomParameters(customParameters, map);
-
-                string response = SendRequest("/validate/polltransaction", map, new List<KeyValuePair<string, string>>(), "GET");
+                var parameters = BuildParameters(new Dictionary<string, string> { { "transaction_id", transactionid } }, "", customParameters);
+                string response = SendRequest("/validate/polltransaction", parameters, new List<KeyValuePair<string, string>>(), "GET");
 
                 if (string.IsNullOrEmpty(response))
                 {
@@ -181,14 +166,10 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                 Error("Unable to lookup tokens without an auth token!");
                 return false;
             }
-            var parameters = new Dictionary<string, string>
-            {
-                { "user", user }
-            };
-            AddRealmForDomain(domain, parameters);
-            AddCustomParameters(customParameters, parameters);
 
+            var parameters = BuildParameters(new Dictionary<string, string> { { "user", user } }, domain, customParameters);
             string response = SendRequest("/token/", parameters, new List<KeyValuePair<string, string>>(), "GET");
+
             if (string.IsNullOrEmpty(response))
             {
                 Error("/token/ did not respond!");
@@ -216,15 +197,13 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// <returns>PIEnrollResponse object or null on error</returns>
         public PIEnrollResponse TokenInit(string user, string domain = null, Dictionary<string, string> customParameters = null)
         {
-            var parameters = new Dictionary<string, string>
+            var map = new Dictionary<string, string>
             {
                 { "user", user },
                 { "type", "totp" },
                 { "genkey", "1" }
             };
-            AddRealmForDomain(domain, parameters);
-            AddCustomParameters(customParameters, parameters);
-
+            var parameters = BuildParameters(map, domain, customParameters);
             string response = SendRequest("/token/init", parameters, new List<KeyValuePair<string, string>>());
             return PIEnrollResponse.FromJSON(response, this);
         }
@@ -244,7 +223,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         public PIResponse ValidateCheck(string user, string otp, string transactionid = null, string domain = null,
             List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
         {
-            var parameters = new Dictionary<string, string>
+            var map = new Dictionary<string, string>
             {
                 { "user", user },
                 { "pass", otp }
@@ -252,12 +231,10 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
 
             if (transactionid != null)
             {
-                parameters.Add("transaction_id", transactionid);
+                map.Add("transaction_id", transactionid);
             }
-
-            AddRealmForDomain(domain, parameters);
-            AddCustomParameters(customParameters, parameters);
-
+            
+            var parameters = BuildParameters(map, domain, customParameters);
             string response = SendRequest("/validate/check", parameters, headers);
             return PIResponse.FromJSON(response, this);
         }
@@ -345,7 +322,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                 return null;
             }
 
-            var parameters = new Dictionary<string, string>
+            var map = new Dictionary<string, string>
             {
                 { "type", "passkey" },
                 { "serial", serial },
@@ -358,12 +335,11 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             {
                 foreach (var entry in parsedResponse)
                 {
-                    parameters.Add(entry.Key, entry.Value);
+                    map.Add(entry.Key, entry.Value);
                 }
             }
 
-            AddRealmForDomain(domain, parameters);
-            AddCustomParameters(customParameters, parameters);
+            var parameters = BuildParameters(map, domain, customParameters);
 
             var h = new List<KeyValuePair<string, string>>()
             {
@@ -549,9 +525,9 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             {
                 map.Add("realm", _serviceRealm);
             }
-            AddCustomParameters(customParameters, map);
+            var parameters = BuildParameters(map, "", customParameters);
 
-            string response = SendRequest("/auth", map);
+            string response = SendRequest("/auth", parameters);
 
             if (string.IsNullOrEmpty(response))
             {
@@ -704,13 +680,29 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// <param name="parameters">The dictionary to add the parameters to.</param>
         private static void AddCustomParameters(Dictionary<string, string>? customParameters, Dictionary<string, string> parameters)
         {
-            if (customParameters != null)
+            if (customParameters == null) return;
+            foreach (var attribute in customParameters)
             {
-                foreach (var attribute in customParameters)
-                {
-                    parameters.Add(attribute.Key, attribute.Value);
-                }
+                parameters[attribute.Key] = attribute.Value;
             }
+        }
+
+        /// <summary>
+        /// Helper to build request parameters.
+        /// </summary>
+        /// <param name="baseParams"></param>
+        /// <param name="domain"></param>
+        /// <param name="customParameters"></param>
+        /// <returns></returns>
+        private Dictionary<string, string> BuildParameters(Dictionary<string, string> baseParams, string domain, Dictionary<string, string> customParameters)
+        {
+            var parameters = new Dictionary<string, string>(baseParams);
+            if (!string.IsNullOrEmpty(domain))
+            {
+                AddRealmForDomain(domain, parameters);
+            }
+            AddCustomParameters(customParameters, parameters);
+            return parameters;
         }
 
         /// <summary>
