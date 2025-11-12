@@ -10,12 +10,19 @@
         <input id="context" type="hidden" name="Context" value="%Context%" />
         <!-- End inputs are required by the presentation framework. -->
 
+        <!-- Cancel Enrollment -->
+        <input id="cancelEnrollmentButton" name="cancelEnrollmentButton" type="button" value="Cancel Enrollment" onclick="cancelEnrollmentViaMc()"
+               aria-label="Cancel Enrollment"
+               style="background-color: rgb(220, 53, 69); border: none; border-style: solid; border-width: 1px; height: 35px;
+               min-width: 160px; width: auto; color: white; margin-bottom: 8px; user-select: none; padding: 8px 25px 12px 25px;" />
+
         <p id="pageIntroductionText" style="color:red">#ERROR#</p>
         <br />
         <label for="otp" class="block" aria-label="#MESSAGE#">#MESSAGE#</label>
         <input id="otp" name="otp" type="password" value="" class="text" placeholder="#OTPTEXT#" size="35" autocomplete="new-password" autofocus />
         <input id="submitButton" type="submit" name="Submit" value="#SUBMIT#" onclick="submitForm()" />
 
+        <!-- Hidden inputs to persist state -->
         <input id="autoSubmit" type="hidden" name="autoSubmit" value="#autoSubmit#" />
         <input id="mode" type="hidden" name="mode" value="#mode#" />
         <input id="pushAvailable" type="hidden" name="pushAvailable" value="#pushAvailable#" />
@@ -27,6 +34,8 @@
         <input id="disablePasskey" type="hidden" name="disablePasskey" value="#disablePasskey#" />
         <input id="autoSubmitLength" type="hidden" name="autoSubmitLength" value="#autoSubmitLength#" />
         <input id="formResult" type="hidden" name="formResult" value="" />
+        <input id="isEnrollmentViaMultichallengeOptional" type="hidden" name="isEnrollmentViaMultichallengeOptional"
+        value="#isEnrollmentViaMultichallengeOptional#" />
         <input id="disableOTP" type="hidden" name="disableOTP" value="#disableOTP#" />
 
         <!-- Extra inputs to persist some data -->
@@ -79,9 +88,11 @@
                 passkeySignResponse: "",
                 passkeyRegistrationResponse: "",
                 origin: "",
+                enrollmentCancelled: false
             };
             disable("retryPasskeyLogin");
             disable("retryPasskeyRegistration");
+            disable("cancelEnrollmentButton");
 
             if (value("autoSubmit") === "1") {
                 submitForm();
@@ -126,6 +137,10 @@
                 disable("otp");
                 disable("submit");
                 disable("useOTPButton");
+            }
+
+            if (value("isEnrollmentViaMultichallengeOptional") === "1") {
+                enable("cancelEnrollmentButton");
             }
 
             // Set UI according to mode
@@ -190,6 +205,12 @@
             }
 
             // Helper functions
+
+            function cancelEnrollmentViaMc() {
+                formResult.enrollmentCancelled = true;
+                submitForm();
+            }
+
             function setLoginOptionsVisibility() {
                 let ids = ["passkeyLoginButton", "retryPasskeyLogin", "useOTPButton", "usePushButton", "useWebAuthnButton"]
                 let shouldShow = false;
