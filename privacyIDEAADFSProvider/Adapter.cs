@@ -44,17 +44,7 @@ namespace privacyIDEAADFSProvider
         public IAdapterPresentation BeginAuthentication(Claim identityClaim, HttpListenerRequest request,
             IAuthenticationContext authContext)
         {
-            Dictionary<string, string> customParameters = new Dictionary<string, string>();
-            if (_config.ForwardClientIP)
-            {
-                customParameters.Add("client", GetClientIPAddress(request));
-                //Log("Client IP address: " + customParameters["client"]);
-            }
-            if (_config.ForwardClientUserAgent)
-            {
-                customParameters.Add("client_user_agent", request.Headers["User-Agent"]);
-                //Log("Client User-Agent: " + customParameters["client_user_agent"]);
-            }
+            Dictionary<string, string> customParameters = CollectCustomParams(request);
 
             string username = "", domain = "";
             Log("BeginAuthentication: identityClaim: " + identityClaim.Value);
@@ -111,7 +101,7 @@ namespace privacyIDEAADFSProvider
                 }
                 else if (_config.SendEmptyPassword)
                 {
-                    response = _privacyIDEA.ValidateCheck(username, "", domain, headers:headers, customParameters:customParameters);
+                    response = _privacyIDEA.ValidateCheck(username, "", domain, headers: headers, customParameters: customParameters);
                 }
             }
             else
@@ -266,18 +256,7 @@ namespace privacyIDEAADFSProvider
                 return form;
             }
 
-            // Prepare custom parameters
-            Dictionary<string, string> customParameters = new Dictionary<string, string>();
-            if (_config.ForwardClientIP)
-            {
-                customParameters.Add("client", GetClientIPAddress(request));
-                //Log("Client IP address: " + customParameters["client"]);
-            }
-            if (_config.ForwardClientUserAgent)
-            {
-                customParameters.Add("client_user_agent", request.Headers["User-Agent"]);
-                //Log("Client User-Agent: " + customParameters["client_user_agent"]);
-            }
+            Dictionary<string, string> customParameters = CollectCustomParams(request);
 
             // Collect headers to forward with next PI request
             List<KeyValuePair<string, string>> headers = GetHeadersToForward(request);
@@ -433,6 +412,29 @@ namespace privacyIDEAADFSProvider
         {
             // Available for all users
             return true;
+        }
+
+        /// <summary>
+        /// Collect custom parameters to forward to privacyIDEA based on configuration.
+        /// </summary>
+        /// <param name="request"></param>
+        /// <returns></returns>
+        private Dictionary<string, string> CollectCustomParams(HttpListenerRequest request)
+        {
+            Dictionary<string, string> customParameters = new Dictionary<string, string>();
+            if (_config.ForwardClientIP)
+            {
+                customParameters.Add("client", GetClientIPAddress(request));
+                //Log("Client IP address: " + customParameters["client"]);
+            }
+            if (_config.ForwardClientUserAgent)
+            {
+                string userAgent = request.Headers?["User-Agent"];
+                customParameters.Add("client_user_agent", userAgent ?? string.Empty);
+                //Log("Client User-Agent: " + customParameters["client_user_agent"]);
+            }
+
+            return customParameters;
         }
 
         /// <summary>
