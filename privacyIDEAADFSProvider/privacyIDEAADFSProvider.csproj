@@ -36,7 +36,7 @@
     <SignAssembly>true</SignAssembly>
   </PropertyGroup>
   <PropertyGroup>
-    <AssemblyOriginatorKeyFile>adfsKeyFile.pfx</AssemblyOriginatorKeyFile>
+    <AssemblyOriginatorKeyFile>adfskeyfile.pfx</AssemblyOriginatorKeyFile>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Microsoft.IdentityServer.Web">
@@ -94,7 +94,7 @@
   <ItemGroup>
     <Content Include="AuthPage.html" />
     <Content Include="icon.ico" />
-    <None Include="adfsKeyFile.pfx" />
+    <None Include="adfskeyfile.pfx" />
     <None Include="adfssigner.pfx" />
     <None Include="Install.ps1" />
     <None Include="packages.config" />
