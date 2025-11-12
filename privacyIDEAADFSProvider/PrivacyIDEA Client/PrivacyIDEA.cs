@@ -7,6 +7,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
+using static PrivacyIDEAADFSProvider.PrivacyIDEA_Client.PIConstants;
 
 namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
 {
@@ -35,7 +36,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                             HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
                     }
                     _httpClient = new HttpClient(_httpClientHandler);
-                    _httpClient.DefaultRequestHeaders.Add("User-Agent", _userAgent);
+                    _httpClient.DefaultRequestHeaders.Add(USER_AGENT, _userAgent);
                     _sslVerify = SSLVerify;
                 }
             }
@@ -54,11 +55,11 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         // The webauthn parameters should not be url encoded because they already have the correct format.
         // Comparison is done in lower case, so add them there in lower case
         private static readonly List<string> _excludeFromURIEscape = new List<string>(new string[]
-           { "credentialid", "credential_id", "clientdata", "clientdatajson", "signaturedata", "signature", "authenticatordata",
-               "userhandle", "raw_id", "rawid", "assertionclientextensions", "authenticatorattachment", "attestationobject" });
+           { CREDENTIALID, CREDENTIAL_ID, CLIENTDATA, CLIENTDATAJSON, SIGNATUREDATA, SIGNATURE, AUTHENTICATORDATA,
+               USERHANDLE, RAW_ID, RAWID, ASSERTIONCLIENTEXTENSIONS, AUTHENTICATORATTACHMENT, ATTESTATIONOBJECT });
 
         private static readonly List<string> _logExcludedEndpoints = new List<string>(new string[]
-           { "/auth", "/validate/polltransaction" });
+           { AUTH_ENDPOINT, POLLTRANSACTION_ENDPOINT });
 
         public PrivacyIDEA(string url, string useragent, bool sslVerify = true)
         {
@@ -73,7 +74,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                     HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
             }
             _httpClient = new HttpClient(_httpClientHandler);
-            _httpClient.DefaultRequestHeaders.Add("User-Agent", useragent);
+            _httpClient.DefaultRequestHeaders.Add(USER_AGENT, useragent);
         }
 
         /// <summary>
@@ -93,8 +94,8 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                 return null;
             }
 
-            var parameters = BuildParameters(new Dictionary<string, string> { { "user", username } }, domain, customParameters);
-            string response = SendRequest("/validate/triggerchallenge", parameters, headers);
+            var parameters = BuildParameters(new Dictionary<string, string> { { USER, username } }, domain, customParameters);
+            string response = SendRequest(TRIGGERCHALLENGE_ENDPOINT, parameters, headers);
             PIResponse ret = PIResponse.FromJSON(response, this);
 
             return ret;
@@ -109,8 +110,8 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// <returns>PIResponse object or null on error</returns>
         public PIResponse ValidateInitialize(string type, List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
         {
-            var parameters = BuildParameters(new Dictionary<string, string> { { "type", type } }, "", customParameters);
-            string response = SendRequest("/validate/initialize", parameters, headers, "GET");
+            var parameters = BuildParameters(new Dictionary<string, string> { { TYPE, type } }, "", customParameters);
+            string response = SendRequest(VALIDATE_INITIALIZE_ENDPOINT, parameters, headers, GET);
             return PIResponse.FromJSON(response, this);
         }
 
@@ -125,8 +126,8 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         {
             if (!string.IsNullOrEmpty(transactionid))
             {
-                var parameters = BuildParameters(new Dictionary<string, string> { { "transaction_id", transactionid } }, "", customParameters);
-                string response = SendRequest("/validate/polltransaction", parameters, new List<KeyValuePair<string, string>>(), "GET");
+                var parameters = BuildParameters(new Dictionary<string, string> { { TRANSACTION_ID, transactionid } }, "", customParameters);
+                string response = SendRequest(POLLTRANSACTION_ENDPOINT, parameters, new List<KeyValuePair<string, string>>(), GET);
 
                 if (string.IsNullOrEmpty(response))
                 {
@@ -165,8 +166,8 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                 return false;
             }
 
-            var parameters = BuildParameters(new Dictionary<string, string> { { "user", user } }, domain, customParameters);
-            string response = SendRequest("/token/", parameters, new List<KeyValuePair<string, string>>(), "GET");
+            var parameters = BuildParameters(new Dictionary<string, string> { { USER, user } }, domain, customParameters);
+            string response = SendRequest(TOKEN_ENDPOINT, parameters, new List<KeyValuePair<string, string>>(), GET);
 
             if (string.IsNullOrEmpty(response))
             {
@@ -197,12 +198,12 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         {
             var map = new Dictionary<string, string>
             {
-                { "user", user },
-                { "type", "totp" },
-                { "genkey", "1" }
+                { USER, user },
+                { TYPE, TOTP },
+                { GENKEY, "1" }
             };
             var parameters = BuildParameters(map, domain, customParameters);
-            string response = SendRequest("/token/init", parameters, new List<KeyValuePair<string, string>>());
+            string response = SendRequest(TOKEN_INIT_ENDPOINT, parameters, new List<KeyValuePair<string, string>>());
             return PIEnrollResponse.FromJSON(response, this);
         }
 
@@ -223,17 +224,17 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         {
             var map = new Dictionary<string, string>
             {
-                { "user", user },
-                { "pass", otp }
+                { USER, user },
+                { PASS, otp }
             };
 
             if (transactionid != null)
             {
-                map.Add("transaction_id", transactionid);
+                map.Add(TRANSACTION_ID, transactionid);
             }
             
             var parameters = BuildParameters(map, domain, customParameters);
-            string response = SendRequest("/validate/check", parameters, headers);
+            string response = SendRequest(VALIDATE_CHECK_ENDPOINT, parameters, headers);
             return PIResponse.FromJSON(response, this);
         }
 
@@ -262,8 +263,8 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
 
             var parameters = new Dictionary<string, string>
             {
-                { "user", user },
-                { "pass", "" }
+                { USER, user },
+                { PASS, "" }
             };
             AddCustomParameters(customParameters, parameters);
 
@@ -322,10 +323,10 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
 
             var map = new Dictionary<string, string>
             {
-                { "type", "passkey" },
-                { "serial", serial },
-                { "user", username },
-                { "transaction_id", transactionid }
+                { TYPE, TOKEN_TYPE_PASSKEY },
+                { SERIAL, serial },
+                { USER, username },
+                { TRANSACTION_ID, transactionid }
             };
 
             var parsedResponse = ParseFIDO2AttestationResponse(attestationResponse);
@@ -341,14 +342,14 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
 
             var h = new List<KeyValuePair<string, string>>()
             {
-                new KeyValuePair<string, string>("Origin", origin)
+                new KeyValuePair<string, string>(ORIGIN, origin)
             };
 
             if (headers is { })
             {
                 h.AddRange(headers);
             }
-            string response = SendRequest("/validate/check", parameters, h);
+            string response = SendRequest(VALIDATE_CHECK_ENDPOINT, parameters, h);
             return PIResponse.FromJSON(response, this);
         }
 
@@ -370,11 +371,11 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             {
                 parameters.Add(entry.Key, entry.Value);
             }
-            parameters.Add("transaction_id", transactionid);
+            parameters.Add(TRANSACTION_ID, transactionid);
 
             var h = new List<KeyValuePair<string, string>>()
             {
-                new KeyValuePair<string, string>("Origin", origin)
+                new KeyValuePair<string, string>(ORIGIN, origin)
             };
 
             if (headers is { })
@@ -386,9 +387,9 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             AddCustomParameters(customParameters, parameters);
 
             // The origin has to be set in the header for FIDO2 authentication
-            headers.Add(new KeyValuePair<string, string>("Origin", origin));
+            headers.Add(new KeyValuePair<string, string>(ORIGIN, origin));
 
-            string response = SendRequest("/validate/check", parameters, headers);
+            string response = SendRequest(VALIDATE_CHECK_ENDPOINT, parameters, headers);
             return PIResponse.FromJSON(response, this);
         }
 
@@ -412,25 +413,25 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                 return null;
             }
 
-            if (GetJTokenFirstOf(root, new List<string>() { "credential_id", "credentialid" }) is JToken credential_id)
+            if (GetJTokenFirstOf(root, new List<string>() { CREDENTIAL_ID, CREDENTIALID }) is JToken credential_id)
             {
-                parameters.Add("credential_id", (string)credential_id);
+                parameters.Add(CREDENTIAL_ID, (string)credential_id);
             }
-            if (GetJTokenFirstOf(root, new List<string>() { "clientDataJSON", "clientdata" }) is JToken clientDataJSON)
+            if (GetJTokenFirstOf(root, new List<string>() { CLIENTDATAJSON_CAM, CLIENTDATA }) is JToken clientDataJSON)
             {
-                parameters.Add("clientDataJSON", (string)clientDataJSON);
+                parameters.Add(CLIENTDATAJSON_CAM, (string)clientDataJSON);
             }
-            if (GetJTokenFirstOf(root, new List<string>() { "signature", "signaturedata" }) is JToken signature)
+            if (GetJTokenFirstOf(root, new List<string>() { SIGNATURE, SIGNATUREDATA }) is JToken signature)
             {
-                parameters.Add("signature", (string)signature);
+                parameters.Add(SIGNATURE, (string)signature);
             }
-            if (GetJTokenFirstOf(root, new List<string>() { "authenticatorData", "authenticatordata" }) is JToken authenticatorData)
+            if (GetJTokenFirstOf(root, new List<string>() { AUTHENTICATORDATA_CAM, AUTHENTICATORDATA }) is JToken authenticatorData)
             {
-                parameters.Add("authenticatorData", (string)authenticatorData);
+                parameters.Add(AUTHENTICATORDATA_CAM, (string)authenticatorData);
             }
-            if (GetJTokenFirstOf(root, new List<string>() { "userHandle", "userhandle" }) is JToken userHandle)
+            if (GetJTokenFirstOf(root, new List<string>() { USERHANDLE_CAM, USERHANDLE }) is JToken userHandle)
             {
-                parameters.Add("userHandle", (string)userHandle);
+                parameters.Add(USERHANDLE_CAM, (string)userHandle);
             }
             // TODO clientassertionextensions are currently not supported
 
@@ -475,25 +476,25 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                 Error("AttestationResponse does not have the required format (json)! " + jex.Message);
                 return null;
             }
-            if (root["credential_id"] is JToken credential_id)
+            if (root[CREDENTIAL_ID] is JToken credential_id)
             {
-                parameters.Add("credential_id", (string)credential_id);
+                parameters.Add(CREDENTIAL_ID, (string)credential_id);
             }
-            if (root["clientDataJSON"] is JToken clientDataJSON)
+            if (root[CLIENTDATAJSON_CAM] is JToken clientDataJSON)
             {
-                parameters.Add("clientDataJSON", (string)clientDataJSON);
+                parameters.Add(CLIENTDATAJSON_CAM, (string)clientDataJSON);
             }
-            if (root["attestationObject"] is JToken attestationObject)
+            if (root[ATTESTATIONOBJECT_CAM] is JToken attestationObject)
             {
-                parameters.Add("attestationObject", (string)attestationObject);
+                parameters.Add(ATTESTATIONOBJECT_CAM, (string)attestationObject);
             }
-            if (root["rawId"] is JToken rawId)
+            if (root[RAWID_CAM] is JToken rawId)
             {
-                parameters.Add("rawId", (string)rawId);
+                parameters.Add(RAWID_CAM, (string)rawId);
             }
-            if (root["authenticatorAttachment"] is JToken authenticatorAttachment)
+            if (root[AUTHENTICATORATTACHMENT_CAM] is JToken authenticatorAttachment)
             {
-                parameters.Add("authenticatorAttachment", (string)authenticatorAttachment);
+                parameters.Add(AUTHENTICATORATTACHMENT_CAM, (string)authenticatorAttachment);
             }
 
             return parameters;
@@ -515,17 +516,17 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
 
             var map = new Dictionary<string, string>
             {
-                { "username", _serviceUser },
-                { "password", _servicePass }
+                { USERNAME, _serviceUser },
+                { PASSWORD, _servicePass }
             };
 
             if (!string.IsNullOrEmpty(_serviceRealm))
             {
-                map.Add("realm", _serviceRealm);
+                map.Add(REALM, _serviceRealm);
             }
             var parameters = BuildParameters(map, "", customParameters);
 
-            string response = SendRequest("/auth", parameters);
+            string response = SendRequest(AUTH_ENDPOINT, parameters);
 
             if (string.IsNullOrEmpty(response))
             {
@@ -583,7 +584,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             var stringContent = DictToEncodedStringContent(parameters);
 
             HttpRequestMessage request = new HttpRequestMessage();
-            if (method == "POST")
+            if (method == POST)
             {
                 request.Method = HttpMethod.Post;
                 request.RequestUri = new Uri(this.Url + endpoint);
@@ -655,7 +656,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
 
                 if (!string.IsNullOrEmpty(r))
                 {
-                    parameters.Add("realm", r);
+                    parameters.Add(REALM, r);
                 }
                 else
                 {
@@ -666,7 +667,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             {
                 if (!string.IsNullOrEmpty(Realm))
                 {
-                    parameters.Add("realm", Realm);
+                    parameters.Add(REALM, Realm);
                 }
             }
         }
@@ -725,7 +726,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             }
 
             string ret = sb.ToString();
-            return new StringContent(ret, Encoding.UTF8, "application/x-www-form-urlencoded"); ;
+            return new StringContent(ret, Encoding.UTF8, MEDIA_TYPE_URLENCODED);
         }
 
         /// <summary>
