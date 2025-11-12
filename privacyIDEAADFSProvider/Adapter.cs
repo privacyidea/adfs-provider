@@ -1,7 +1,7 @@
 ﻿using Microsoft.IdentityServer.Web.Authentication.External;
 using Newtonsoft.Json;
 using PrivacyIDEAADFSProvider;
-using PrivacyIDEASDK;
+using PrivacyIDEAADFSProvider.PrivacyIDEA_Client;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
@@ -44,6 +44,8 @@ namespace privacyIDEAADFSProvider
         public IAdapterPresentation BeginAuthentication(Claim identityClaim, HttpListenerRequest request,
             IAuthenticationContext authContext)
         {
+            Dictionary<string, string> customParameters = CollectCustomParams(request);
+
             string username = "", domain = "";
             Log("BeginAuthentication: identityClaim: " + identityClaim.Value);
 
@@ -95,11 +97,11 @@ namespace privacyIDEAADFSProvider
             {
                 if (_config.TriggerChallenge)
                 {
-                    response = _privacyIDEA.TriggerChallenges(username, domain, headers);
+                    response = _privacyIDEA.TriggerChallenges(username, domain, headers, customParameters);
                 }
                 else if (_config.SendEmptyPassword)
                 {
-                    response = _privacyIDEA.ValidateCheck(username, "", domain: domain, headers: headers);
+                    response = _privacyIDEA.ValidateCheck(username, "", domain, headers: headers, customParameters: customParameters);
                 }
             }
             else
@@ -141,9 +143,9 @@ namespace privacyIDEAADFSProvider
             // If a challenge was triggered previously, checking if the user has a token is skipped
             if (_config.EnrollmentEnabled &&
                 (response != null && string.IsNullOrEmpty(response.TransactionID) || (response == null)) &&
-                !_privacyIDEA.UserHasToken(username, domain))
+                !_privacyIDEA.UserHasToken(username, domain, customParameters))
             {
-                PIEnrollResponse res = _privacyIDEA.TokenInit(username, domain);
+                PIEnrollResponse res = _privacyIDEA.TokenInit(username, domain, customParameters);
                 form.EnrollmentUrl = res.TotpUrl;
                 form.EnrollmentImg = res.Base64TotpImage;
             }
@@ -254,13 +256,15 @@ namespace privacyIDEAADFSProvider
                 return form;
             }
 
+            Dictionary<string, string> customParameters = CollectCustomParams(request);
+
             // Collect headers to forward with next PI request
             List<KeyValuePair<string, string>> headers = GetHeadersToForward(request);
             PIResponse response = null;
             // Passkey login requested
             if (fr.PasskeyLoginRequested)
             {
-                response = _privacyIDEA.ValidateInitialize("passkey", headers);
+                response = _privacyIDEA.ValidateInitialize("passkey", headers, customParameters);
                 if (response != null)
                 {
                     form.PasskeyChallenge = response.PasskeyChallenge;
@@ -281,7 +285,7 @@ namespace privacyIDEAADFSProvider
                 else
                 {
                     response = _privacyIDEA.ValidateCheckPasskey(passkeyTransactionid, fr.PasskeySignResponse, fr.Origin,
-                        domain, headers);
+                        domain, headers, customParameters);
                 }
             }
             // Passkey Registration (enroll_via_multichallenge)
@@ -298,17 +302,17 @@ namespace privacyIDEAADFSProvider
                 else
                 {
                     response = _privacyIDEA.ValidateCheckCompletePasskeyRegistration(transactionId, serial, user,
-                        fr.PasskeyRegistrationResponse, fr.Origin);
+                        fr.PasskeyRegistrationResponse, fr.Origin, headers: null, customParameters:customParameters);
                 }
             }
             // Push
             else if (mode == "push")
             {
-                if (_privacyIDEA.PollTransaction(pushTransactionid))
+                if (_privacyIDEA.PollTransaction(pushTransactionid, customParameters))
                 {
                     // Push confirmed, finish the authentication via /validate/check using an empty otp
                     // https://privacyidea.readthedocs.io/en/latest/tokens/authentication_modes.html#outofband-mode
-                    response = _privacyIDEA.ValidateCheck(user, "", pushTransactionid, domain, headers);
+                    response = _privacyIDEA.ValidateCheck(user, "", pushTransactionid, domain, headers, customParameters);
                 }
                 else
                 {
@@ -327,13 +331,13 @@ namespace privacyIDEAADFSProvider
                 else
                 {
                     response = _privacyIDEA.ValidateCheckWebAuthn(user, webauthnTransactionid, fr.WebAuthnSignResponse, fr.Origin,
-                        domain, headers);
+                        domain, headers, customParameters);
                 }
             }
             else
             {
                 // Mode == OTP
-                response = _privacyIDEA.ValidateCheck(user, otp, otpTransactionid, domain, headers);
+                response = _privacyIDEA.ValidateCheck(user, otp, otpTransactionid, domain, headers, customParameters);
             }
 
             // Evaluate the response
@@ -408,6 +412,46 @@ namespace privacyIDEAADFSProvider
         {
             // Available for all users
             return true;
+        }
+
+        /// <summary>
+        /// Collect custom parameters to forward to privacyIDEA based on configuration.
+        /// </summary>
+        /// <param name="request"></param>
+        /// <returns></returns>
+        private Dictionary<string, string> CollectCustomParams(HttpListenerRequest request)
+        {
+            Dictionary<string, string> customParameters = new Dictionary<string, string>();
+            if (_config.ForwardClientIP)
+            {
+                customParameters.Add("client", GetClientIPAddress(request));
+                //Log("Client IP address: " + customParameters["client"]);
+            }
+            if (_config.ForwardClientUserAgent)
+            {
+                string userAgent = request.Headers?["User-Agent"];
+                customParameters.Add("client_user_agent", userAgent ?? string.Empty);
+                //Log("Client User-Agent: " + customParameters["client_user_agent"]);
+            }
+
+            return customParameters;
+        }
+
+        /// <summary>
+        /// Get the client IP address from the request, considering possible proxy headers.
+        /// </summary>
+        /// <param name="request"></param>
+        /// <returns></returns>
+        private string GetClientIPAddress(HttpListenerRequest request)
+        {
+            // Check X-Forwarded-For header first (for clients behind proxy)
+            string clientIP = request.Headers["X-Forwarded-For"];
+            if (string.IsNullOrEmpty(clientIP))
+            {
+                // If no X-Forwarded-For, use RemoteEndPoint
+                clientIP = request.RemoteEndPoint?.Address?.ToString();
+            }
+            return clientIP ?? "unknown";
         }
 
         /// <summary>

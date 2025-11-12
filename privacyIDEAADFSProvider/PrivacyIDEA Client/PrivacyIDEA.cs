@@ -1,14 +1,15 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
-namespace PrivacyIDEASDK
+namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
 {
     public class PrivacyIDEA : IDisposable
     {
@@ -82,22 +83,18 @@ namespace PrivacyIDEASDK
         /// <param name="username">username to trigger challenges for</param>
         /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
         /// <param name="headers">optional headers which can be forwarded to the privacyIDEA server</param>
+        /// <param name="customParameters">Dictionary of custom parameters to add</param>
         /// <returns>PIResponse object or null on error</returns>
         public PIResponse TriggerChallenges(string username, string domain = null,
-            List<KeyValuePair<string, string>> headers = null)
+            List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
         {
             if (!GetJWT())
             {
                 Error("Unable to trigger challenges without an auth token!");
                 return null;
             }
-            var parameters = new Dictionary<string, string>
-            {
-                { "user", username }
-            };
 
-            AddRealmForDomain(domain, parameters);
-
+            var parameters = BuildParameters(new Dictionary<string, string> { { "user", username } }, domain, customParameters);
             string response = SendRequest("/validate/triggerchallenge", parameters, headers);
             PIResponse ret = PIResponse.FromJSON(response, this);
 
@@ -109,14 +106,12 @@ namespace PrivacyIDEASDK
         /// </summary>
         /// <param name="type"></param>
         /// <param name="headers"></param>
+        /// <param name="customParameters">Dictionary of custom parameters to add</param>
         /// <returns>PIResponse object or null on error</returns>
-        public PIResponse ValidateInitialize(string type, List<KeyValuePair<string, string>> headers = null)
+        public PIResponse ValidateInitialize(string type, List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
         {
-            var map = new Dictionary<string, string>
-            {
-                    { "type", type }
-            };
-            string response = SendRequest("/validate/initialize", map, headers, "GET");
+            var parameters = BuildParameters(new Dictionary<string, string> { { "type", type } }, "", customParameters);
+            string response = SendRequest("/validate/initialize", parameters, headers, "GET");
             return PIResponse.FromJSON(response, this);
         }
 
@@ -125,17 +120,14 @@ namespace PrivacyIDEASDK
         /// This is done using the /validate/polltransaction endpoint.
         /// </summary>
         /// <param name="transactionid"></param>
+        /// <param name="customParameters">Dictionary of custom parameters to add</param>
         /// <returns>true if challenge was answered. false if not or error</returns>
-        public bool PollTransaction(string transactionid)
+        public bool PollTransaction(string transactionid, Dictionary<string, string> customParameters = null)
         {
             if (!string.IsNullOrEmpty(transactionid))
             {
-                var map = new Dictionary<string, string>
-                {
-                    { "transaction_id", transactionid }
-                };
-
-                string response = SendRequest("/validate/polltransaction", map, new List<KeyValuePair<string, string>>(), "GET");
+                var parameters = BuildParameters(new Dictionary<string, string> { { "transaction_id", transactionid } }, "", customParameters);
+                string response = SendRequest("/validate/polltransaction", parameters, new List<KeyValuePair<string, string>>(), "GET");
 
                 if (string.IsNullOrEmpty(response))
                 {
@@ -164,21 +156,19 @@ namespace PrivacyIDEASDK
         /// </summary>
         /// <param name="user">username</param>
         /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
+        /// <param name="customParameters">Dictionary of custom parameters to add</param>
         /// <returns>true if token exists. false if not or error</returns>
-        public bool UserHasToken(string user, string domain = null)
+        public bool UserHasToken(string user, string domain = null, Dictionary<string, string> customParameters = null)
         {
             if (!GetJWT())
             {
                 Error("Unable to lookup tokens without an auth token!");
                 return false;
             }
-            var parameters = new Dictionary<string, string>
-            {
-                { "user", user }
-            };
-            AddRealmForDomain(domain, parameters);
 
+            var parameters = BuildParameters(new Dictionary<string, string> { { "user", user } }, domain, customParameters);
             string response = SendRequest("/token/", parameters, new List<KeyValuePair<string, string>>(), "GET");
+
             if (string.IsNullOrEmpty(response))
             {
                 Error("/token/ did not respond!");
@@ -202,17 +192,17 @@ namespace PrivacyIDEASDK
         /// </summary>
         /// <param name="user">username</param>
         /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
+        /// <param name="customParameters">Dictionary of custom parameters to add</param>
         /// <returns>PIEnrollResponse object or null on error</returns>
-        public PIEnrollResponse TokenInit(string user, string domain = null)
+        public PIEnrollResponse TokenInit(string user, string domain = null, Dictionary<string, string> customParameters = null)
         {
-            var parameters = new Dictionary<string, string>
+            var map = new Dictionary<string, string>
             {
                 { "user", user },
                 { "type", "totp" },
                 { "genkey", "1" }
             };
-            AddRealmForDomain(domain, parameters);
-
+            var parameters = BuildParameters(map, domain, customParameters);
             string response = SendRequest("/token/init", parameters, new List<KeyValuePair<string, string>>());
             return PIEnrollResponse.FromJSON(response, this);
         }
@@ -227,11 +217,12 @@ namespace PrivacyIDEASDK
         /// <param name="transactionid">optional transaction id to refer to a challenge</param>
         /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
         /// <param name="headers">optional headers which can be forwarded to the privacyIDEA server</param>
+        /// <param name="customParameters">Dictionary of custom parameters to add</param>
         /// <returns>PIResponse object or null on error</returns>
         public PIResponse ValidateCheck(string user, string otp, string transactionid = null, string domain = null,
-            List<KeyValuePair<string, string>> headers = null)
+            List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
         {
-            var parameters = new Dictionary<string, string>
+            var map = new Dictionary<string, string>
             {
                 { "user", user },
                 { "pass", otp }
@@ -239,11 +230,10 @@ namespace PrivacyIDEASDK
 
             if (transactionid != null)
             {
-                parameters.Add("transaction_id", transactionid);
+                map.Add("transaction_id", transactionid);
             }
-
-            AddRealmForDomain(domain, parameters);
-
+            
+            var parameters = BuildParameters(map, domain, customParameters);
             string response = SendRequest("/validate/check", parameters, headers);
             return PIResponse.FromJSON(response, this);
         }
@@ -258,9 +248,10 @@ namespace PrivacyIDEASDK
         /// <param name="origin">origin also returned by the browser</param>
         /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
         /// <param name="headers">optional headers which can be forwarded to the privacyIDEA server</param>
+        /// <param name="customParameters">Dictionary of custom parameters to add</param>
         /// <returns>PIResponse object or null on error</returns>
         public PIResponse ValidateCheckWebAuthn(string user, string transactionid, string webAuthnSignResponse, string origin,
-            string domain = null, List<KeyValuePair<string, string>> headers = null)
+            string domain = null, List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
         {
             if (string.IsNullOrEmpty(user) || string.IsNullOrEmpty(transactionid) || string.IsNullOrEmpty(webAuthnSignResponse)
                 || string.IsNullOrEmpty(origin))
@@ -275,6 +266,8 @@ namespace PrivacyIDEASDK
                 { "user", user },
                 { "pass", "" }
             };
+            AddCustomParameters(customParameters, parameters);
+
             return FIDO2AuthenticationRequest(parameters, transactionid, webAuthnSignResponse, origin, domain, headers);
         }
 
@@ -286,9 +279,10 @@ namespace PrivacyIDEASDK
         /// <param name="origin">Origin as returned by the browser. Will be added as Origin Header.</param>
         /// <param name="domain">Optional domain of the user</param>
         /// <param name="headers">Optional headers to add to the request</param>
+        /// <param name="customParameters">Dictionary of custom parameters to add</param>
         /// <returns></returns>
         public PIResponse ValidateCheckPasskey(string transactionid, string assertionResponse, string origin, string domain = null,
-            List<KeyValuePair<string, string>> headers = null)
+            List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
         {
             if (string.IsNullOrEmpty(transactionid) || string.IsNullOrEmpty(assertionResponse) || string.IsNullOrEmpty(origin))
             {
@@ -296,11 +290,14 @@ namespace PrivacyIDEASDK
                     + ", assertionResponse=" + assertionResponse + ", origin=" + origin);
                 return null;
             }
-            return FIDO2AuthenticationRequest(new Dictionary<string, string>(), transactionid, assertionResponse, origin, domain, headers);
+            var parameters = new Dictionary<string, string>();
+            AddCustomParameters(customParameters, parameters);
+
+            return FIDO2AuthenticationRequest(parameters, transactionid, assertionResponse, origin, domain, headers);
         }
 
         /// <summary>
-        /// 
+        /// Completes the passkey registration at the /validate/check endpoint.
         /// </summary>
         /// <param name="transactionid"></param>
         /// <param name="serial"></param>
@@ -309,9 +306,11 @@ namespace PrivacyIDEASDK
         /// <param name="origin"></param>
         /// <param name="domain"></param>
         /// <param name="headers"></param>
+        /// <param name="customParameters">Dictionary of custom parameters to add</param>
         /// <returns></returns>
         public PIResponse ValidateCheckCompletePasskeyRegistration(string transactionid, string serial, string username,
-            string attestationResponse, string origin, string domain = null, List<KeyValuePair<string, string>> headers = null)
+            string attestationResponse, string origin, string domain = null, List<KeyValuePair<string, string>> headers = null,
+            Dictionary<string, string> customParameters = null)
         {
             if (string.IsNullOrEmpty(transactionid) || string.IsNullOrEmpty(serial) || string.IsNullOrEmpty(username)
                 || string.IsNullOrEmpty(attestationResponse) || string.IsNullOrEmpty(origin))
@@ -322,7 +321,7 @@ namespace PrivacyIDEASDK
                 return null;
             }
 
-            var parameters = new Dictionary<string, string>
+            var map = new Dictionary<string, string>
             {
                 { "type", "passkey" },
                 { "serial", serial },
@@ -335,11 +334,12 @@ namespace PrivacyIDEASDK
             {
                 foreach (var entry in parsedResponse)
                 {
-                    parameters.Add(entry.Key, entry.Value);
+                    map.Add(entry.Key, entry.Value);
                 }
             }
 
-            AddRealmForDomain(domain, parameters);
+            var parameters = BuildParameters(map, domain, customParameters);
+
             var h = new List<KeyValuePair<string, string>>()
             {
                 new KeyValuePair<string, string>("Origin", origin)
@@ -353,8 +353,19 @@ namespace PrivacyIDEASDK
             return PIResponse.FromJSON(response, this);
         }
 
+        /// <summary>
+        /// Initiates the FIDO2 authentication request.
+        /// </summary>
+        /// <param name="parameters"></param>
+        /// <param name="transactionid"></param>
+        /// <param name="assertionResponse"></param>
+        /// <param name="origin"></param>
+        /// <param name="domain"></param>
+        /// <param name="headers"></param>
+        /// <param name="customParameters"></param>
+        /// <returns></returns>
         private PIResponse FIDO2AuthenticationRequest(Dictionary<string, string> parameters, string transactionid, string assertionResponse,
-            string origin, string domain = null, List<KeyValuePair<string, string>> headers = null)
+            string origin, string domain = null, List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
         {
             foreach (var entry in ParseFIDO2AssertionResponse(assertionResponse))
             {
@@ -373,6 +384,7 @@ namespace PrivacyIDEASDK
             }
 
             AddRealmForDomain(domain, parameters);
+            AddCustomParameters(customParameters, parameters);
 
             // The origin has to be set in the header for FIDO2 authentication
             headers.Add(new KeyValuePair<string, string>("Origin", origin));
@@ -381,6 +393,11 @@ namespace PrivacyIDEASDK
             return PIResponse.FromJSON(response, this);
         }
 
+        /// <summary>
+        /// Parses the FIDO2 assertion response from the browser and extracts the required parameters.
+        /// </summary>
+        /// <param name="assertionResponse"></param>
+        /// <returns></returns>
         private Dictionary<string, string> ParseFIDO2AssertionResponse(string assertionResponse)
         {
             var parameters = new Dictionary<string, string>();
@@ -421,6 +438,12 @@ namespace PrivacyIDEASDK
             return parameters;
         }
 
+        /// <summary>
+        /// Gets the first JToken found for the given list of keys.
+        /// </summary>
+        /// <param name="root"></param>
+        /// <param name="keys"></param>
+        /// <returns></returns>
         private JToken GetJTokenFirstOf(JToken root, List<string> keys)
         {
             JToken ret = null;
@@ -435,6 +458,11 @@ namespace PrivacyIDEASDK
             return ret;
         }
 
+        /// <summary>
+        /// Parses the FIDO2 attestation response from the browser and extracts the required parameters.
+        /// </summary>
+        /// <param name="attestationResponse"></param>
+        /// <returns></returns>
         private Dictionary<string, string> ParseFIDO2AttestationResponse(string attestationResponse)
         {
             var parameters = new Dictionary<string, string>();
@@ -476,8 +504,9 @@ namespace PrivacyIDEASDK
         /// Gets an auth token from the privacyIDEA server using the service account.
         /// Afterward, the token is set as the default authentication header for the HttpClient.
         /// </summary>
+        /// <param name="customParameters">Dictionary of custom parameters to add</param>
         /// <returns>true if success, false otherwise</returns>
-        private bool GetJWT()
+        private bool GetJWT(Dictionary<string, string> customParameters = null)
         {
             if (!ServiceAccountAvailable())
             {
@@ -495,8 +524,9 @@ namespace PrivacyIDEASDK
             {
                 map.Add("realm", _serviceRealm);
             }
+            var parameters = BuildParameters(map, "", customParameters);
 
-            string response = SendRequest("/auth", map);
+            string response = SendRequest("/auth", parameters);
 
             if (string.IsNullOrEmpty(response))
             {
@@ -523,6 +553,12 @@ namespace PrivacyIDEASDK
             return false;
         }
 
+        /// <summary>
+        /// Sets the service account credentials to be used for authentication.
+        /// </summary>
+        /// <param name="user"></param>
+        /// <param name="pass"></param>
+        /// <param name="realm"></param>
         public void SetServiceAccount(string user, string pass, string realm = "")
         {
             _serviceUser = user;
@@ -533,6 +569,14 @@ namespace PrivacyIDEASDK
             }
         }
 
+        /// <summary>
+        /// Sends a request to the privacyIDEA server.
+        /// </summary>
+        /// <param name="endpoint"></param>
+        /// <param name="parameters"></param>
+        /// <param name="headers"></param>
+        /// <param name="method"></param>
+        /// <returns></returns>
         private string SendRequest(string endpoint, Dictionary<string, string> parameters, List<KeyValuePair<string, string>> headers = null, string method = "POST")
         {
             Log("Sending [" + string.Join(" , ", parameters) + "] to [" + endpoint + "] with method [" + method + "]");
@@ -628,6 +672,43 @@ namespace PrivacyIDEASDK
             }
         }
 
+        /// <summary>
+        /// Adds custom parameters to request.
+        /// </summary>
+        /// <param name="customParameters">Dictionary of custom parameters to add.</param>
+        /// <param name="parameters">The dictionary to add the parameters to.</param>
+        private static void AddCustomParameters(Dictionary<string, string>? customParameters, Dictionary<string, string> parameters)
+        {
+            if (customParameters == null) return;
+            foreach (var attribute in customParameters)
+            {
+                parameters[attribute.Key] = attribute.Value;
+            }
+        }
+
+        /// <summary>
+        /// Helper to build request parameters.
+        /// </summary>
+        /// <param name="baseParams"></param>
+        /// <param name="domain"></param>
+        /// <param name="customParameters"></param>
+        /// <returns></returns>
+        private Dictionary<string, string> BuildParameters(Dictionary<string, string> baseParams, string domain, Dictionary<string, string> customParameters)
+        {
+            var parameters = new Dictionary<string, string>(baseParams);
+            if (!string.IsNullOrEmpty(domain))
+            {
+                AddRealmForDomain(domain, parameters);
+            }
+            AddCustomParameters(customParameters, parameters);
+            return parameters;
+        }
+
+        /// <summary>
+        /// Converts a dictionary to a StringContent with url encoded values.
+        /// </summary>
+        /// <param name="dict"></param>
+        /// <returns></returns>
         internal StringContent DictToEncodedStringContent(Dictionary<string, string> dict)
         {
             StringBuilder sb = new StringBuilder();
@@ -648,6 +729,10 @@ namespace PrivacyIDEASDK
             return new StringContent(ret, Encoding.UTF8, "application/x-www-form-urlencoded"); ;
         }
 
+        /// <summary>
+        /// Checks if the service account credentials are available.
+        /// </summary>
+        /// <returns></returns>
         internal bool ServiceAccountAvailable()
         {
             return !string.IsNullOrEmpty(_serviceUser) && !string.IsNullOrEmpty(_servicePass);
