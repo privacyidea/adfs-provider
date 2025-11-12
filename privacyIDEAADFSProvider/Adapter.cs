@@ -10,7 +10,6 @@ using System.DirectoryServices.AccountManagement;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Security.Principal;
 using Claim = System.Security.Claims.Claim;
 
 namespace privacyIDEAADFSProvider
