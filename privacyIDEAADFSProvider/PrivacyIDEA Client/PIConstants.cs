@@ -83,5 +83,48 @@
         public const string ATTESTATIONOBJECT_CAM = "attestationObject";
 
         public const string MEDIA_TYPE_URLENCODED = "application/x-www-form-urlencoded";
+
+        // ADAPTER
+        public const string NOT_USED = "not used";
+        public const string AUTH_SUCCESS = "authSuccess";
+        public const string USERID = "userid";
+        public const string DOMAIN = "domain";
+        public const string FORM_RESULT = "formResult";
+        public const string PUSH_AVAILABLE = "pushAvailable";
+        public const string TRANSACTIONID = "transactionid";
+        public const string CLIENT = "client";
+        public const string CLIENT_USER_AGENT = "client_user_agent";
+        public const string X_FORWARDED_FOR = "X-Forwarded-For";
+        public const string UNKNOWN = "unknown";
+        public const string PRIVACYIDEA_ADFS_USERAGENT = "PrivacyIDEA-ADFS/";
+        public const string DATE_FORMAT = "yyyy-MM-ddTHH\\:mm\\:ss;";
+        public const string EVENT_LOG_ADFS_ADMIN = "AD FS/Admin";
+        public const string EVENT_LOG_SOURCE = "privacyIDEAProvider";
+        public const string STREAM_WRITER_LOG = "C:\\PrivacyIDEA-ADFS log.txt";
+        public const string MS_SCHEMA_CLAIM_AUTHENTICATIONMETHOD = "http://schemas.microsoft.com/ws/2008/06/identity/claims/authenticationmethod";
+        public const string MS_SCHEMA_AUTHMETHOD_OTP = "http://schemas.microsoft.com/ws/2012/12/authmethod/otp";
+
+        // FORM
+        public const string ENROLLMENT_IMG = "enrollmentImg";
+        public const string ENROLLMENT_LINK = "enrollmentLink";
+        public const string DISABLE_OTP = "disableOTP";
+        public const string AUTH_COUNTER = "authCounter";
+        public const string PREVIOUS_RESPONSE = "previousResponse";
+
+        // PASSKEY
+        public const string PASSKEY_REGISTRATION_SERIAL = "passkey_registration_serial";
+
+        // TOKEN'S TRANSACTION ID
+        public const string PUSH_TRANSACTION_ID = "push_transaction_id";
+        public const string WEBAUTHN_TRANSACTION_ID = "webauthn_transaction_id";
+        public const string PASSKEY_TRANSACTION_ID = "passkey_transaction_id";
+        public const string OTP_TRANSACTION_ID = "otp_transaction_id";
+
+        // MODE
+        public const string MODE = "mode";
+        public const string PUSH_MODE = "push";
+        public const string OTP_MODE = "otp";
+        public const string WEBAUTHN_MODE = "webauthn";
+        public const string PASSKEY_MODE = "passkey";
     }
 }
