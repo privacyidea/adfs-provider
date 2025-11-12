@@ -354,6 +354,27 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         }
 
         /// <summary>
+        /// Cancels an ongoing enrollment process at the /validate/check endpoint.
+        /// </summary>
+        /// <param name="transactionid"></param>
+        /// <param name="domain"></param>
+        /// <param name="headers"></param>
+        /// <param name="customParameters"></param>
+        /// <returns></returns>
+        public PIResponse ValidateCheckCancelEnrollment(string transactionid, string domain = null,
+            List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
+        {
+            var map = new Dictionary<string, string>
+            {
+                { TRANSACTION_ID, transactionid },
+                { CANCEL_ENROLLMENT, "true" }
+            };
+            var parameters = BuildParameters(map, domain, customParameters);
+            string response = SendRequest(VALIDATE_CHECK_ENDPOINT, parameters, headers);
+            return PIResponse.FromJSON(response, this);
+        }
+
+        /// <summary>
         /// Initiates the FIDO2 authentication request.
         /// </summary>
         /// <param name="parameters"></param>
