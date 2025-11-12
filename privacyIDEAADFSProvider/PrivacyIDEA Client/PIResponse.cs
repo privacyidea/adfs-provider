@@ -31,8 +31,8 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         public string OTPTransactionID { get; set; } = "";
         public string PushTransactionID { get; set; } = "";
         public string PasskeyTransactionID { get; set; } = "";
-        public bool IsEnrollmentViaMultichallenge = false;
-        public bool IsEnrollmentViaMultichallengeOptional = false;
+        public bool IsEnrollmentViaMultichallenge { get; set; } = false;
+        public bool IsEnrollmentViaMultichallengeOptional { get; set; } = false;
 
         private PIResponse() { }
 
@@ -53,7 +53,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             return null;
         }
 
-        public bool isAuthenticationSuccessful()
+        public bool IsAuthenticationSuccessful()
         {
             if (AuthenticationStatus != PIAuthenticationStatus.UNDEFINED)
             {
@@ -190,8 +190,15 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                     {
                         ret.Username = (string)username;
                     }
-                    ret.IsEnrollmentViaMultichallenge = (bool)detail[ENROLLMENT_VIA_MULTICHALLENGE];
-                    ret.IsEnrollmentViaMultichallengeOptional = (bool)detail[ENROLLMENT_VIA_MULTICHALLENGE_OPTIONAL];
+                    if (detail[ENROLLMENT_VIA_MULTICHALLENGE] is JToken enrollmentViaMultichallenge)
+                    {
+                        ret.IsEnrollmentViaMultichallenge = (bool)enrollmentViaMultichallenge;
+
+                    }
+                    if (detail[ENROLLMENT_VIA_MULTICHALLENGE_OPTIONAL] is JToken enrollmentViaMultichallengeOptional)
+                    {
+                        ret.IsEnrollmentViaMultichallengeOptional = (bool)enrollmentViaMultichallengeOptional;
+                    }
 
                     // Check if the response contains "preferred_client_mode" (PI >=3.8). If so, translate the values that use other names
                     if (detail[PREFERRED_CLIENT_MODE] is JToken pcm)
