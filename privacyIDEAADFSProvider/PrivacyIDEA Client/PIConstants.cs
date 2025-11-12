@@ -40,6 +40,8 @@
         public const string PASSKEY_REGISTRATION = "passkey_registration";
         public const string LINK = "link";
         public const string WEBAUTHNSIGNREQUEST = "webAuthnSignRequest";
+        public const string ENROLLMENT_VIA_MULTICHALLENGE = "enroll_via_multichallenge";
+        public const string ENROLLMENT_VIA_MULTICHALLENGE_OPTIONAL = "enroll_via_multichallenge_optional";
         public const string CANCEL_ENROLLMENT = "cancel_enrollment";
 
         // REQUEST PARAMETERS
