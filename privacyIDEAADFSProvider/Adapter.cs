@@ -2,7 +2,6 @@
 using Newtonsoft.Json;
 using PrivacyIDEAADFSProvider;
 using PrivacyIDEAADFSProvider.PrivacyIDEA_Client;
-using static PrivacyIDEAADFSProvider.PrivacyIDEA_Client.PIConstants;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
@@ -11,6 +10,7 @@ using System.DirectoryServices.AccountManagement;
 using System.IO;
 using System.Linq;
 using System.Net;
+using static PrivacyIDEAADFSProvider.PrivacyIDEA_Client.PIConstants;
 using Claim = System.Security.Claims.Claim;
 
 namespace privacyIDEAADFSProvider
@@ -116,7 +116,7 @@ namespace privacyIDEAADFSProvider
                 {
                     form = ExtractChallengeDataToForm(response, form, authContext);
                 }
-                else if (response.isAuthenticationSuccessful())
+                else if (response.IsAuthenticationSuccessful())
                 {
                     // Success in step 1, carry this over to the second step so that step will be skipped
                     authContext.Data.Add(AUTH_SUCCESS, "1");
@@ -261,6 +261,39 @@ namespace privacyIDEAADFSProvider
             // Collect headers to forward with next PI request
             List<KeyValuePair<string, string>> headers = GetHeadersToForward(request);
             PIResponse response = null;
+
+            // Enrollment cancelled
+            if (fr.EnrollmentCancelled)
+            {
+                Log("User cancelled enrollment.");
+
+                // Collect all possible transaction IDs
+                var transactionIds = new[]
+                {
+                    otpTransactionid,
+                    pushTransactionid,
+                    webauthnTransactionid,
+                    passkeyTransactionid
+                };
+                string collectedTransactionID = transactionIds.FirstOrDefault(id => !string.IsNullOrWhiteSpace(id));
+
+                response = _privacyIDEA.ValidateCheckCancelEnrollment(collectedTransactionID, domain, headers, customParameters);
+                if (response != null)
+                {
+                    if (response.ErrorMessage != null)
+                    {
+                        form.ErrorMessage = response.ErrorMessage;
+                        return form;
+                    }
+                    else if (response.IsAuthenticationSuccessful())
+                    {
+                        Log("Enrollment cancelled successfully: " + response.IsAuthenticationSuccessful()); //todo rm!!!
+                        outgoingClaims = Claims();
+                        return null;
+                    }
+                }
+            }
+
             // Passkey login requested
             if (fr.PasskeyLoginRequested)
             {
@@ -350,7 +383,7 @@ namespace privacyIDEAADFSProvider
                     form = ExtractChallengeDataToForm(response, form, authContext);
                     authContext.Data.Add(PREVIOUS_RESPONSE, response.Raw);
                 }
-                else if (response.isAuthenticationSuccessful())
+                else if (response.IsAuthenticationSuccessful())
                 {
                     if (!string.IsNullOrEmpty(response.Username) && response.Username != user)
                     {
@@ -530,6 +563,7 @@ namespace privacyIDEAADFSProvider
             form.EnrollmentImg = "";
             form.EnrollmentLink = "";
             form.DisableOTP = "0";
+            form.IsEnrollmentViaMultichallengeOptional = "0";
 
             // New values
             form.Message = response.Message;
@@ -548,6 +582,11 @@ namespace privacyIDEAADFSProvider
             if (!string.IsNullOrEmpty(response.PreferredClientMode))
             {
                 form.Mode = response.PreferredClientMode;
+            }
+
+            if (response.IsEnrollmentViaMultichallengeOptional)
+            {
+                form.IsEnrollmentViaMultichallengeOptional = "1";
             }
 
             if (form.Mode == WEBAUTHN_MODE && (form.WebAuthnSignRequest == null || string.IsNullOrEmpty(form.WebAuthnSignRequest)))
