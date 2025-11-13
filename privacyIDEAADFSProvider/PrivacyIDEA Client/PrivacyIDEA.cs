@@ -698,7 +698,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// </summary>
         /// <param name="customParameters">Dictionary of custom parameters to add.</param>
         /// <param name="parameters">The dictionary to add the parameters to.</param>
-        private static void AddCustomParameters(Dictionary<string, string>? customParameters, Dictionary<string, string> parameters)
+        private static void AddCustomParameters(Dictionary<string, string> customParameters, Dictionary<string, string> parameters)
         {
             if (customParameters == null) return;
             foreach (var attribute in customParameters)
