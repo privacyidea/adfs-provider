@@ -55,7 +55,7 @@
         public const string TOTP = "totp";
         public const string ORIGIN = "Origin";
         public const string PASSWORD = "password";
-        public const string USER_AGENT = "User-Agent";
+        public const string USER_AGENT_HEADER = "User-Agent";
 
         // TOKEN TYPES
         public const string TOKEN_TYPE_OTP = "otp";

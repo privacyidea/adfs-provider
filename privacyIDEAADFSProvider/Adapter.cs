@@ -461,7 +461,7 @@ namespace privacyIDEAADFSProvider
             }
             if (_config.ForwardClientUserAgent)
             {
-                string userAgent = request.Headers?[USER_AGENT];
+                string userAgent = request.Headers?[USER_AGENT_HEADER];
                 customParameters.Add(CLIENT_USER_AGENT, userAgent ?? string.Empty);
                 //Log("Client User-Agent: " + customParameters["client_user_agent"]);
             }

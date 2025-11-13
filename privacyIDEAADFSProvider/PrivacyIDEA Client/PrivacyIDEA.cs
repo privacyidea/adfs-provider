@@ -36,7 +36,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                             HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
                     }
                     _httpClient = new HttpClient(_httpClientHandler);
-                    _httpClient.DefaultRequestHeaders.Add(USER_AGENT, _userAgent);
+                    _httpClient.DefaultRequestHeaders.Add(USER_AGENT_HEADER, _userAgent);
                     _sslVerify = SSLVerify;
                 }
             }
@@ -74,7 +74,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                     HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
             }
             _httpClient = new HttpClient(_httpClientHandler);
-            _httpClient.DefaultRequestHeaders.Add(USER_AGENT, useragent);
+            _httpClient.DefaultRequestHeaders.Add(USER_AGENT_HEADER, useragent);
         }
 
         /// <summary>
