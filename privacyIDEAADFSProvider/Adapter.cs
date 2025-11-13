@@ -296,65 +296,21 @@ namespace privacyIDEAADFSProvider
             }
 
             // Do the authentication according to the mode or data present
-            // Passkey Authentication
             if (!string.IsNullOrEmpty(fr.PasskeySignResponse))
             {
-                if (string.IsNullOrEmpty(fr.Origin))
-                {
-                    Error("Incomplete data for Passkey authentication: Origin is missing!");
-                    form.ErrorMessage = "Could not complete Passkey authentication. Try again or use another token type.";
-                }
-                else
-                {
-                    response = _privacyIDEA.ValidateCheckPasskey(passkeyTransactionid, fr.PasskeySignResponse, fr.Origin,
-                        domain, headers, customParameters);
-                }
+                response = ProcessPasskeyAuthentication(form, fr, domain, passkeyTransactionid, customParameters, headers, response);
             }
-            // Passkey Registration (enroll_via_multichallenge)
             else if (!string.IsNullOrEmpty(fr.PasskeyRegistrationResponse))
             {
-                var serial = GetString(contextDict, PASSKEY_REGISTRATION_SERIAL);
-                var transactionId = GetString(contextDict, TRANSACTIONID);
-                if (string.IsNullOrEmpty(serial) || string.IsNullOrEmpty(transactionId) || string.IsNullOrEmpty(fr.Origin))
-                {
-                    Error($"Incomplete data for Passkey registration: Serial {serial}, transactionid {transactionId} " +
-                        $"or origin {fr.Origin} missing!");
-                    form.ErrorMessage = "Could not complete Passkey registration. Try again or use another token type.";
-                }
-                else
-                {
-                    response = _privacyIDEA.ValidateCheckCompletePasskeyRegistration(transactionId, serial, user,
-                        fr.PasskeyRegistrationResponse, fr.Origin, headers: null, customParameters: customParameters);
-                }
+                response = ProcessPasskeyRegistration(contextDict, form, fr, user, customParameters, response);
             }
-            // Push
             else if (mode == PUSH_MODE)
             {
-                if (_privacyIDEA.PollTransaction(pushTransactionid, customParameters))
-                {
-                    // Push confirmed, finish the authentication via /validate/check using an empty otp
-                    // https://privacyidea.readthedocs.io/en/latest/tokens/authentication_modes.html#outofband-mode
-                    response = _privacyIDEA.ValidateCheck(user, "", pushTransactionid, domain, headers, customParameters);
-                }
-                else
-                {
-                    // Else push not confirmed yet
-                    form.ErrorMessage = "Authenication not confirmed yet!";
-                }
+                response = ProcessPushAuthentication(form, user, domain, pushTransactionid, customParameters, headers, response);
             }
-            // WebAuthn
             else if (!string.IsNullOrEmpty(fr.WebAuthnSignResponse))
             {
-                if (string.IsNullOrEmpty(fr.Origin))
-                {
-                    Error("Incomplete data for WebAuthn authentication: Origin is missing!");
-                    form.ErrorMessage = "Could not complete WebAuthn authentication. Try again or use another token type.";
-                }
-                else
-                {
-                    response = _privacyIDEA.ValidateCheckWebAuthn(user, webauthnTransactionid, fr.WebAuthnSignResponse, fr.Origin,
-                        domain, headers, customParameters);
-                }
+                response = ProcessWebauthnAuthentication(form, fr, user, domain, webauthnTransactionid, customParameters, headers, response);
             }
             else
             {
@@ -422,6 +378,118 @@ namespace privacyIDEAADFSProvider
             }
             // Return form with error or new challenge
             return form;
+        }
+
+        /// <summary>
+        /// Process Webauthn Authentication.
+        /// </summary>
+        /// <param name="form"></param>
+        /// <param name="fr"></param>
+        /// <param name="user"></param>
+        /// <param name="domain"></param>
+        /// <param name="webauthnTransactionid"></param>
+        /// <param name="customParameters"></param>
+        /// <param name="headers"></param>
+        /// <param name="response"></param>
+        /// <returns></returns>
+        private PIResponse ProcessWebauthnAuthentication(AdapterPresentationForm form, FormResult fr, string user, string domain, string webauthnTransactionid, Dictionary<string, string> customParameters, List<KeyValuePair<string, string>> headers, PIResponse response)
+        {
+            if (string.IsNullOrEmpty(fr.Origin))
+            {
+                Error("Incomplete data for WebAuthn authentication: Origin is missing!");
+                form.ErrorMessage = "Could not complete WebAuthn authentication. Try again or use another token type.";
+            }
+            else
+            {
+                response = _privacyIDEA.ValidateCheckWebAuthn(user, webauthnTransactionid, fr.WebAuthnSignResponse, fr.Origin,
+                    domain, headers, customParameters);
+            }
+
+            return response;
+        }
+
+        /// <summary>
+        /// Process Push Authentication.
+        /// </summary>
+        /// <param name="form"></param>
+        /// <param name="user"></param>
+        /// <param name="domain"></param>
+        /// <param name="pushTransactionid"></param>
+        /// <param name="customParameters"></param>
+        /// <param name="headers"></param>
+        /// <param name="response"></param>
+        /// <returns></returns>
+        private PIResponse ProcessPushAuthentication(AdapterPresentationForm form, string user, string domain, string pushTransactionid, Dictionary<string, string> customParameters, List<KeyValuePair<string, string>> headers, PIResponse response)
+        {
+            if (_privacyIDEA.PollTransaction(pushTransactionid, customParameters))
+            {
+                // Push confirmed, finish the authentication via /validate/check using an empty otp
+                // https://privacyidea.readthedocs.io/en/latest/tokens/authentication_modes.html#outofband-mode
+                response = _privacyIDEA.ValidateCheck(user, "", pushTransactionid, domain, headers, customParameters);
+            }
+            else
+            {
+                // Else push not confirmed yet
+                form.ErrorMessage = "Authenication not confirmed yet!";
+            }
+
+            return response;
+        }
+
+        /// <summary>
+        /// Process Passkey Registration.
+        /// </summary>
+        /// <param name="contextDict"></param>
+        /// <param name="form"></param>
+        /// <param name="fr"></param>
+        /// <param name="user"></param>
+        /// <param name="customParameters"></param>
+        /// <param name="response"></param>
+        /// <returns></returns>
+        private PIResponse ProcessPasskeyRegistration(Dictionary<string, object> contextDict, AdapterPresentationForm form, FormResult fr, string user, Dictionary<string, string> customParameters, PIResponse response)
+        {
+            var serial = GetString(contextDict, PASSKEY_REGISTRATION_SERIAL);
+            var transactionId = GetString(contextDict, TRANSACTIONID);
+            if (string.IsNullOrEmpty(serial) || string.IsNullOrEmpty(transactionId) || string.IsNullOrEmpty(fr.Origin))
+            {
+                Error($"Incomplete data for Passkey registration: Serial {serial}, transactionid {transactionId} " +
+                    $"or origin {fr.Origin} missing!");
+                form.ErrorMessage = "Could not complete Passkey registration. Try again or use another token type.";
+            }
+            else
+            {
+                response = _privacyIDEA.ValidateCheckCompletePasskeyRegistration(transactionId, serial, user,
+                    fr.PasskeyRegistrationResponse, fr.Origin, headers: null, customParameters: customParameters);
+            }
+
+            return response;
+        }
+
+        /// <summary>
+        /// Process Passkey Authentication.
+        /// </summary>
+        /// <param name="form"></param>
+        /// <param name="fr"></param>
+        /// <param name="domain"></param>
+        /// <param name="passkeyTransactionid"></param>
+        /// <param name="customParameters"></param>
+        /// <param name="headers"></param>
+        /// <param name="response"></param>
+        /// <returns></returns>
+        private PIResponse ProcessPasskeyAuthentication(AdapterPresentationForm form, FormResult fr, string domain, string passkeyTransactionid, Dictionary<string, string> customParameters, List<KeyValuePair<string, string>> headers, PIResponse response)
+        {
+            if (string.IsNullOrEmpty(fr.Origin))
+            {
+                Error("Incomplete data for Passkey authentication: Origin is missing!");
+                form.ErrorMessage = "Could not complete Passkey authentication. Try again or use another token type.";
+            }
+            else
+            {
+                response = _privacyIDEA.ValidateCheckPasskey(passkeyTransactionid, fr.PasskeySignResponse, fr.Origin,
+                    domain, headers, customParameters);
+            }
+
+            return response;
         }
 
         /// <summary>
