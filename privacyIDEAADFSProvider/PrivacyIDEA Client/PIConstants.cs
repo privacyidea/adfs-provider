@@ -46,7 +46,6 @@
 
         // REQUEST PARAMETERS
         public const string REALM = "realm";
-        public const string TOKEN_TYPE = "token_type";
         public const string USERNAME = "username";
         public const string PASS = "pass";
         public const string OTP = "otp";
