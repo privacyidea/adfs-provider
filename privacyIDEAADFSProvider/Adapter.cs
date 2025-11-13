@@ -265,19 +265,9 @@ namespace privacyIDEAADFSProvider
             // Enrollment cancelled
             if (fr.EnrollmentCancelled)
             {
-                Log("User cancelled enrollment.");
-
-                // Collect all possible transaction IDs
-                var transactionIds = new[]
-                {
-                    otpTransactionid,
-                    pushTransactionid,
-                    webauthnTransactionid,
-                    passkeyTransactionid
-                };
-                string collectedTransactionID = transactionIds.FirstOrDefault(id => !string.IsNullOrWhiteSpace(id));
-
+                string collectedTransactionID = CollectFirstNonEmptyTransactionID(otpTransactionid, pushTransactionid, webauthnTransactionid, passkeyTransactionid);
                 response = _privacyIDEA.ValidateCheckCancelEnrollment(collectedTransactionID, domain, headers, customParameters);
+
                 if (response != null)
                 {
                     if (!string.IsNullOrEmpty(response.ErrorMessage))
@@ -659,6 +649,26 @@ namespace privacyIDEAADFSProvider
                 }
             }
             return headersToForward;
+        }
+
+        /// <summary>
+        /// Collect the first non-empty transaction ID from the provided ones.
+        /// </summary>
+        /// <param name="otpTransactionid"></param>
+        /// <param name="pushTransactionid"></param>
+        /// <param name="webauthnTransactionid"></param>
+        /// <param name="passkeyTransactionid"></param>
+        /// <returns></returns>
+        private string CollectFirstNonEmptyTransactionID(string otpTransactionid, string pushTransactionid, string webauthnTransactionid, string passkeyTransactionid)
+        {
+            var transactionIds = new[]
+            {
+                otpTransactionid,
+                pushTransactionid,
+                webauthnTransactionid,
+                passkeyTransactionid
+            };
+            return transactionIds.FirstOrDefault(id => !string.IsNullOrWhiteSpace(id));
         }
 
         /// <summary>
