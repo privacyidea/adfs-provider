@@ -3,6 +3,7 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using static PrivacyIDEAADFSProvider.PrivacyIDEA_Client.PIConstants;
 
 namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
 {
@@ -30,6 +31,8 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         public string OTPTransactionID { get; set; } = "";
         public string PushTransactionID { get; set; } = "";
         public string PasskeyTransactionID { get; set; } = "";
+        public bool IsEnrollmentViaMultichallenge { get; set; } = false;
+        public bool IsEnrollmentViaMultichallengeOptional { get; set; } = false;
 
         private PIResponse() { }
 
@@ -42,7 +45,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         {
             foreach (PIChallenge c in Challenges)
             {
-                if (c.Type == "push")
+                if (c.Type == TOKEN_TYPE_PUSH)
                 {
                     return c.Message;
                 }
@@ -50,7 +53,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             return null;
         }
 
-        public bool isAuthenticationSuccessful()
+        public bool IsAuthenticationSuccessful()
         {
             if (AuthenticationStatus != PIAuthenticationStatus.UNDEFINED)
             {
@@ -81,7 +84,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                 foreach (string signRequest in webAuthnSignRequests)
                 {
                     JObject jobj = JObject.Parse(signRequest);
-                    JArray jarray = jobj["allowCredentials"] as JArray;
+                    JArray jarray = jobj[ALLOW_CREDENTIALS] as JArray;
 
                     extracted.Add(jarray);
                 }
@@ -100,8 +103,8 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                 }
 
                 // Save extracted info in WebAuthn Sign Request
-                webAuthnSignRequest.Remove("allowCredentials");
-                webAuthnSignRequest.Add("allowCredentials", allowCredentials);
+                webAuthnSignRequest.Remove(ALLOW_CREDENTIALS);
+                webAuthnSignRequest.Add(ALLOW_CREDENTIALS, allowCredentials);
 
                 return webAuthnSignRequest.ToString();
             }
@@ -112,7 +115,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             List<string> ret = new List<string>();
             foreach (PIChallenge challenge in Challenges)
             {
-                if (challenge.Type == "webauthn")
+                if (challenge.Type == TOKEN_TYPE_WEBAUTHN)
                 {
                     string temp = (challenge as PIWebAuthnSignRequest).WebAuthnSignRequest;
                     ret.Add(temp);
@@ -138,19 +141,19 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             {
                 JObject jobj = JObject.Parse(json);
 
-                if (jobj.ContainsKey("result") && jobj["result"] is JToken result)
+                if (jobj.ContainsKey(RESULT) && jobj[RESULT] is JToken result)
                 {
-                    if (result["status"] is JToken status)
+                    if (result[STATUS] is JToken status)
                     {
                         ret.Status = (bool)status;
                     }
 
-                    if (result["value"] is JToken value)
+                    if (result[VALUE] is JToken value)
                     {
                         ret.Value = (bool)value;
                     }
 
-                    if (result["authentication"] is JToken authentication)
+                    if (result[AUTHENTICATION] is JToken authentication)
                     {
                         if (Enum.TryParse((string)authentication, out PIAuthenticationStatus authStatus))
                         {
@@ -158,89 +161,98 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                         }
                         else
                         {
-                            privacyIDEA?.Error($"Unknown authentication status: {authentication["status"]}");
+                            privacyIDEA?.Error($"Unknown authentication status: {authentication[STATUS]}");
                         }
                     }
 
-                    if (result.Contains("error"))
+                    if (result.Contains(ERROR))
                     {
-                        JToken error = result["error"];
-                        if (error.Contains("code"))
+                        JToken error = result[ERROR];
+                        if (error.Contains(CODE))
                         {
-                            ret.ErrorCode = (int)error["code"];
+                            ret.ErrorCode = (int)error[CODE];
                         }
-                        if (error.Contains("message"))
+                        if (error.Contains(MESSAGE))
                         {
-                            ret.ErrorMessage = (string)error["message"];
+                            ret.ErrorMessage = (string)error[MESSAGE];
                         }
                     }
                 }
 
-                if (jobj.ContainsKey("detail") && jobj["detail"] is JToken detail)
+                if (jobj.ContainsKey(DETAIL) && jobj[DETAIL] is JToken detail)
                 {
-                    ret.TransactionID = (string)detail["transaction_id"];
-                    ret.Message = (string)detail["message"];
-                    ret.Type = (string)detail["type"];
-                    ret.Serial = (string)detail["serial"];
+                    ret.TransactionID = (string)detail[TRANSACTION_ID];
+                    ret.Message = (string)detail[MESSAGE];
+                    ret.Type = (string)detail[TYPE];
+                    ret.Serial = (string)detail[SERIAL];
 
-                    if (detail["username"] is JToken username)
+                    if (detail[USERNAME] is JToken username)
                     {
                         ret.Username = (string)username;
                     }
+                    if (detail[ENROLLMENT_VIA_MULTICHALLENGE] is JToken enrollmentViaMultichallenge)
+                    {
+                        ret.IsEnrollmentViaMultichallenge = (bool)enrollmentViaMultichallenge;
+
+                    }
+                    if (detail[ENROLLMENT_VIA_MULTICHALLENGE_OPTIONAL] is JToken enrollmentViaMultichallengeOptional)
+                    {
+                        ret.IsEnrollmentViaMultichallengeOptional = (bool)enrollmentViaMultichallengeOptional;
+                    }
 
                     // Check if the response contains "preferred_client_mode" (PI >=3.8). If so, translate the values that use other names
-                    if (detail["preferred_client_mode"] is JToken pcm)
+                    if (detail[PREFERRED_CLIENT_MODE] is JToken pcm)
                     {
                         string prefClientMode = (string)pcm;
-                        if (prefClientMode == "interactive")
+                        if (prefClientMode == INTERACTIVE)
                         {
-                            ret.PreferredClientMode = "otp";
+                            ret.PreferredClientMode = OTP;
                         }
-                        else if (prefClientMode == "poll")
+                        else if (prefClientMode == POLL)
                         {
-                            ret.PreferredClientMode = "push";
+                            ret.PreferredClientMode = TOKEN_TYPE_PUSH;
                         }
                         else
                         {
                             ret.PreferredClientMode = prefClientMode;
                         }
                     }
-                    if (detail["passkey"] is JObject passkey)
+                    if (detail[PASSKEY] is JObject passkey)
                     {
                         ret.PasskeyChallenge = passkey.ToString(Formatting.None);
-                        if (passkey["transaction_id"] is JToken txid)
+                        if (passkey[TRANSACTION_ID] is JToken txid)
                         {
                             ret.PasskeyTransactionID = (string)txid;
                         }
                     }
 
-                    if (detail["multi_challenge"] is JArray multiChallenge)
+                    if (detail[MULTI_CHALLENGE] is JArray multiChallenge)
                     {
                         foreach (JToken challenge in multiChallenge.Children())
                         {
-                            string message = (string)challenge["message"];
-                            string transactionid = (string)challenge["transaction_id"];
-                            string type = (string)challenge["type"];
-                            string serial = (string)challenge["serial"];
-                            string clientMode = (string)challenge["client_mode"];
+                            string message = (string)challenge[MESSAGE];
+                            string transactionid = (string)challenge[TRANSACTION_ID];
+                            string type = (string)challenge[TYPE];
+                            string serial = (string)challenge[SERIAL];
+                            string clientMode = (string)challenge[CLIENT_MODE];
                             string image = "";
 
-                            if (challenge["image"] != null && challenge["image"].Type != JTokenType.Null
-                                && !string.IsNullOrEmpty((string)challenge["image"]))
+                            if (challenge[IMAGE] != null && challenge[IMAGE].Type != JTokenType.Null
+                                && !string.IsNullOrEmpty((string)challenge[IMAGE]))
                             {
-                                image = (string)challenge["image"];
+                                image = (string)challenge[IMAGE];
                             }
 
-                            if (challenge["passkey_registration"] is JToken passkeyRegistration)
+                            if (challenge[PASSKEY_REGISTRATION] is JToken passkeyRegistration)
                             {
                                 ret.PasskeyRegistration = passkeyRegistration.ToString(Formatting.None);
                             }
-                            if (challenge["link"] is JToken link)
+                            if (challenge[LINK] is JToken link)
                             {
                                 ret.EnrollmentLink = (string)link;
                             }
 
-                            if (type == "webauthn")
+                            if (type == TOKEN_TYPE_WEBAUTHN)
                             {
                                 ret.WebAuthnTransactionID = transactionid;
                                 PIWebAuthnSignRequest tmp = new PIWebAuthnSignRequest
@@ -253,9 +265,9 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                                     Image = image
                                 };
 
-                                if (challenge["attributes"] is JToken attr && attr.Type != JTokenType.Null)
+                                if (challenge[ATTRIBUTES] is JToken attr && attr.Type != JTokenType.Null)
                                 {
-                                    if (attr["webAuthnSignRequest"] is JToken signRequest)
+                                    if (attr[WEBAUTHNSIGNREQUEST] is JToken signRequest)
                                     {
                                         tmp.WebAuthnSignRequest = signRequest.ToString(Formatting.None);
                                         tmp.WebAuthnSignRequest.Replace("\n", "");
@@ -265,7 +277,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                             }
                             else
                             {
-                                if (type == "push")
+                                if (type == TOKEN_TYPE_PUSH)
                                 {
                                     ret.PushTransactionID = transactionid;
                                 }

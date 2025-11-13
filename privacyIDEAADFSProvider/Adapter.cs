@@ -10,7 +10,7 @@ using System.DirectoryServices.AccountManagement;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Security.Principal;
+using static PrivacyIDEAADFSProvider.PrivacyIDEA_Client.PIConstants;
 using Claim = System.Security.Claims.Claim;
 
 namespace privacyIDEAADFSProvider
@@ -67,7 +67,7 @@ namespace privacyIDEAADFSProvider
                 }
                 else
                 {
-                    upn = "not used";
+                    upn = NOT_USED;
                 }
             }
             else
@@ -116,10 +116,10 @@ namespace privacyIDEAADFSProvider
                 {
                     form = ExtractChallengeDataToForm(response, form, authContext);
                 }
-                else if (response.isAuthenticationSuccessful())
+                else if (response.IsAuthenticationSuccessful())
                 {
                     // Success in step 1, carry this over to the second step so that step will be skipped
-                    authContext.Data.Add("authSuccess", "1");
+                    authContext.Data.Add(AUTH_SUCCESS, "1");
                     form.AutoSubmit = "1";
                 }
                 else
@@ -134,10 +134,10 @@ namespace privacyIDEAADFSProvider
 
             if (string.IsNullOrEmpty(form.Mode))
             {
-                form.Mode = "otp";
+                form.Mode = OTP;
             }
-            authContext.Data.Add("userid", username);
-            authContext.Data.Add("domain", domain);
+            authContext.Data.Add(USERID, username);
+            authContext.Data.Add(DOMAIN, domain);
 
             // Perform optional token enrollment
             // If a challenge was triggered previously, checking if the user has a token is skipped
@@ -168,7 +168,7 @@ namespace privacyIDEAADFSProvider
             // Early exit if step 2 can be skipped
             if (authContext != null)
             {
-                if (GetString(authContext.Data, "authSuccess", "") == "1")
+                if (GetString(authContext.Data, AUTH_SUCCESS, "") == "1")
                 {
                     outgoingClaims = Claims();
                     return null;
@@ -199,54 +199,54 @@ namespace privacyIDEAADFSProvider
                 DisablePasskey = _config.DisablePasskey ? "1" : "0"
             };
             // Restore enrollment data if there was any
-            if (proofDict.TryGetValue("enrollmentImg", out object enrollmentImg))
+            if (proofDict.TryGetValue(ENROLLMENT_IMG, out object enrollmentImg))
             {
                 form.EnrollmentImg = (string)enrollmentImg;
             }
-            if (proofDict.TryGetValue("enrollmentLink", out object enrollmentLink))
+            if (proofDict.TryGetValue(ENROLLMENT_LINK, out object enrollmentLink))
             {
                 form.EnrollmentLink = (string)enrollmentLink;
             }
-            if (proofDict.TryGetValue("disableOTP", out object disableOtp))
+            if (proofDict.TryGetValue(DISABLE_OTP, out object disableOtp))
             {
                 form.DisableOTP = (string)disableOtp;
             }
 
             // FormResult
-            if (!proofDict.TryGetValue("formResult", out object formResult))
+            if (!proofDict.TryGetValue(FORM_RESULT, out object formResult))
             {
                 form.ErrorMessage = "Internal error. Please try again.";
                 return form;
             }
             FormResult fr = JsonConvert.DeserializeObject<FormResult>((string)formResult);
             bool modeChanged = fr.ModeChanged;
-            string mode = modeChanged ? fr.NewMode : GetString(proofDict, "mode", "otp");
-            string otp = GetString(proofDict, "otp");
-            form.Message = GetString(proofDict, "message");
+            string mode = modeChanged ? fr.NewMode : GetString(proofDict, MODE, OTP_MODE);
+            string otp = GetString(proofDict, OTP);
+            form.Message = GetString(proofDict, MESSAGE);
             form.Mode = mode;
-            form.PushAvailable = GetString(proofDict, "pushAvailable");
+            form.PushAvailable = GetString(proofDict, PUSH_AVAILABLE);
 
-            if (proofDict.TryGetValue("webAuthnSignRequest", out object signRequest))
+            if (proofDict.TryGetValue(WEBAUTHNSIGNREQUEST, out object signRequest))
             {
                 form.WebAuthnSignRequest = (string)signRequest;
             }
-            if (proofDict.TryGetValue("authCounter", out object authCounter))
+            if (proofDict.TryGetValue(AUTH_COUNTER, out object authCounter))
             {
                 form.AuthCounter = (int.Parse((string)authCounter) + 1).ToString();
             }
 
             // Params from context
-            string transactionid = GetString(contextDict, "transactionid");
-            string user = GetString(contextDict, "userid");
-            string domain = GetString(contextDict, "domain");
-            string pushTransactionid = GetString(contextDict, "push_transaction_id");
-            string webauthnTransactionid = GetString(contextDict, "webauthn_transaction_id");
-            string passkeyTransactionid = GetString(contextDict, "passkey_transaction_id");
-            string otpTransactionid = GetString(contextDict, "otp_transaction_id");
+            string transactionid = GetString(contextDict, TRANSACTIONID);
+            string user = GetString(contextDict, USERID);
+            string domain = GetString(contextDict, DOMAIN);
+            string pushTransactionid = GetString(contextDict, PUSH_TRANSACTION_ID);
+            string webauthnTransactionid = GetString(contextDict, WEBAUTHN_TRANSACTION_ID);
+            string passkeyTransactionid = GetString(contextDict, PASSKEY_TRANSACTION_ID);
+            string otpTransactionid = GetString(contextDict, OTP_TRANSACTION_ID);
 
             // Restore the previous response to set the challenges again in case of error
             PIResponse previousResponse = null;
-            if (contextDict.TryGetValue("previousResponse", out object prevResponse))
+            if (contextDict.TryGetValue(PREVIOUS_RESPONSE, out object prevResponse))
             {
                 previousResponse = PIResponse.FromJSON((string)prevResponse, _privacyIDEA);
             }
@@ -261,78 +261,56 @@ namespace privacyIDEAADFSProvider
             // Collect headers to forward with next PI request
             List<KeyValuePair<string, string>> headers = GetHeadersToForward(request);
             PIResponse response = null;
+
+            // Enrollment cancelled
+            if (fr.EnrollmentCancelled)
+            {
+                string collectedTransactionID = CollectFirstNonEmptyTransactionID(otpTransactionid, pushTransactionid, webauthnTransactionid, passkeyTransactionid);
+                response = _privacyIDEA.ValidateCheckCancelEnrollment(collectedTransactionID, domain, headers, customParameters);
+
+                if (response != null)
+                {
+                    if (!string.IsNullOrEmpty(response.ErrorMessage))
+                    {
+                        form.ErrorMessage = response.ErrorMessage;
+                        return form;
+                    }
+                    else if (response.IsAuthenticationSuccessful())
+                    {
+                        outgoingClaims = Claims();
+                        return null;
+                    }
+                }
+            }
+
             // Passkey login requested
             if (fr.PasskeyLoginRequested)
             {
-                response = _privacyIDEA.ValidateInitialize("passkey", headers, customParameters);
+                response = _privacyIDEA.ValidateInitialize(TOKEN_TYPE_PASSKEY, headers, customParameters);
                 if (response != null)
                 {
                     form.PasskeyChallenge = response.PasskeyChallenge;
-                    authContext.Data.Add("passkey_transaction_id", response.PasskeyTransactionID);
+                    authContext.Data.Add(PASSKEY_TRANSACTION_ID, response.PasskeyTransactionID);
                     return form;
                 }
             }
 
             // Do the authentication according to the mode or data present
-            // Passkey Authentication
             if (!string.IsNullOrEmpty(fr.PasskeySignResponse))
             {
-                if (string.IsNullOrEmpty(fr.Origin))
-                {
-                    Error("Incomplete data for Passkey authentication: Origin is missing!");
-                    form.ErrorMessage = "Could not complete Passkey authentication. Try again or use another token type.";
-                }
-                else
-                {
-                    response = _privacyIDEA.ValidateCheckPasskey(passkeyTransactionid, fr.PasskeySignResponse, fr.Origin,
-                        domain, headers, customParameters);
-                }
+                response = ProcessPasskeyAuthentication(form, fr, domain, passkeyTransactionid, customParameters, headers, response);
             }
-            // Passkey Registration (enroll_via_multichallenge)
             else if (!string.IsNullOrEmpty(fr.PasskeyRegistrationResponse))
             {
-                var serial = GetString(contextDict, "passkey_registration_serial");
-                var transactionId = GetString(contextDict, "transactionid");
-                if (string.IsNullOrEmpty(serial) || string.IsNullOrEmpty(transactionId) || string.IsNullOrEmpty(fr.Origin))
-                {
-                    Error($"Incomplete data for Passkey registration: Serial {serial}, transactionid {transactionId} " +
-                        $"or origin {fr.Origin} missing!");
-                    form.ErrorMessage = "Could not complete Passkey registration. Try again or use another token type.";
-                }
-                else
-                {
-                    response = _privacyIDEA.ValidateCheckCompletePasskeyRegistration(transactionId, serial, user,
-                        fr.PasskeyRegistrationResponse, fr.Origin, headers: null, customParameters:customParameters);
-                }
+                response = ProcessPasskeyRegistration(contextDict, form, fr, user, customParameters, response);
             }
-            // Push
-            else if (mode == "push")
+            else if (mode == PUSH_MODE)
             {
-                if (_privacyIDEA.PollTransaction(pushTransactionid, customParameters))
-                {
-                    // Push confirmed, finish the authentication via /validate/check using an empty otp
-                    // https://privacyidea.readthedocs.io/en/latest/tokens/authentication_modes.html#outofband-mode
-                    response = _privacyIDEA.ValidateCheck(user, "", pushTransactionid, domain, headers, customParameters);
-                }
-                else
-                {
-                    // Else push not confirmed yet
-                    form.ErrorMessage = "Authenication not confirmed yet!";
-                }
+                response = ProcessPushAuthentication(form, user, domain, pushTransactionid, customParameters, headers, response);
             }
-            // WebAuthn
             else if (!string.IsNullOrEmpty(fr.WebAuthnSignResponse))
             {
-                if (string.IsNullOrEmpty(fr.Origin))
-                {
-                    Error("Incomplete data for WebAuthn authentication: Origin is missing!");
-                    form.ErrorMessage = "Could not complete WebAuthn authentication. Try again or use another token type.";
-                }
-                else
-                {
-                    response = _privacyIDEA.ValidateCheckWebAuthn(user, webauthnTransactionid, fr.WebAuthnSignResponse, fr.Origin,
-                        domain, headers, customParameters);
-                }
+                response = ProcessWebauthnAuthentication(form, fr, user, domain, webauthnTransactionid, customParameters, headers, response);
             }
             else
             {
@@ -348,9 +326,9 @@ namespace privacyIDEAADFSProvider
                 {
                     newChallenge = true;
                     form = ExtractChallengeDataToForm(response, form, authContext);
-                    authContext.Data.Add("previousResponse", response.Raw);
+                    authContext.Data.Add(PREVIOUS_RESPONSE, response.Raw);
                 }
-                else if (response.isAuthenticationSuccessful())
+                else if (response.IsAuthenticationSuccessful())
                 {
                     if (!string.IsNullOrEmpty(response.Username) && response.Username != user)
                     {
@@ -403,6 +381,118 @@ namespace privacyIDEAADFSProvider
         }
 
         /// <summary>
+        /// Process Webauthn Authentication.
+        /// </summary>
+        /// <param name="form"></param>
+        /// <param name="fr"></param>
+        /// <param name="user"></param>
+        /// <param name="domain"></param>
+        /// <param name="webauthnTransactionid"></param>
+        /// <param name="customParameters"></param>
+        /// <param name="headers"></param>
+        /// <param name="response"></param>
+        /// <returns></returns>
+        private PIResponse ProcessWebauthnAuthentication(AdapterPresentationForm form, FormResult fr, string user, string domain, string webauthnTransactionid, Dictionary<string, string> customParameters, List<KeyValuePair<string, string>> headers, PIResponse response)
+        {
+            if (string.IsNullOrEmpty(fr.Origin))
+            {
+                Error("Incomplete data for WebAuthn authentication: Origin is missing!");
+                form.ErrorMessage = "Could not complete WebAuthn authentication. Try again or use another token type.";
+            }
+            else
+            {
+                response = _privacyIDEA.ValidateCheckWebAuthn(user, webauthnTransactionid, fr.WebAuthnSignResponse, fr.Origin,
+                    domain, headers, customParameters);
+            }
+
+            return response;
+        }
+
+        /// <summary>
+        /// Process Push Authentication.
+        /// </summary>
+        /// <param name="form"></param>
+        /// <param name="user"></param>
+        /// <param name="domain"></param>
+        /// <param name="pushTransactionid"></param>
+        /// <param name="customParameters"></param>
+        /// <param name="headers"></param>
+        /// <param name="response"></param>
+        /// <returns></returns>
+        private PIResponse ProcessPushAuthentication(AdapterPresentationForm form, string user, string domain, string pushTransactionid, Dictionary<string, string> customParameters, List<KeyValuePair<string, string>> headers, PIResponse response)
+        {
+            if (_privacyIDEA.PollTransaction(pushTransactionid, customParameters))
+            {
+                // Push confirmed, finish the authentication via /validate/check using an empty otp
+                // https://privacyidea.readthedocs.io/en/latest/tokens/authentication_modes.html#outofband-mode
+                response = _privacyIDEA.ValidateCheck(user, "", pushTransactionid, domain, headers, customParameters);
+            }
+            else
+            {
+                // Else push not confirmed yet
+                form.ErrorMessage = "Authentication not confirmed yet!";
+            }
+
+            return response;
+        }
+
+        /// <summary>
+        /// Process Passkey Registration.
+        /// </summary>
+        /// <param name="contextDict"></param>
+        /// <param name="form"></param>
+        /// <param name="fr"></param>
+        /// <param name="user"></param>
+        /// <param name="customParameters"></param>
+        /// <param name="response"></param>
+        /// <returns></returns>
+        private PIResponse ProcessPasskeyRegistration(Dictionary<string, object> contextDict, AdapterPresentationForm form, FormResult fr, string user, Dictionary<string, string> customParameters, PIResponse response)
+        {
+            var serial = GetString(contextDict, PASSKEY_REGISTRATION_SERIAL);
+            var transactionId = GetString(contextDict, TRANSACTIONID);
+            if (string.IsNullOrEmpty(serial) || string.IsNullOrEmpty(transactionId) || string.IsNullOrEmpty(fr.Origin))
+            {
+                Error($"Incomplete data for Passkey registration: Serial {serial}, transactionid {transactionId} " +
+                    $"or origin {fr.Origin} missing!");
+                form.ErrorMessage = "Could not complete Passkey registration. Try again or use another token type.";
+            }
+            else
+            {
+                response = _privacyIDEA.ValidateCheckCompletePasskeyRegistration(transactionId, serial, user,
+                    fr.PasskeyRegistrationResponse, fr.Origin, headers: null, customParameters: customParameters);
+            }
+
+            return response;
+        }
+
+        /// <summary>
+        /// Process Passkey Authentication.
+        /// </summary>
+        /// <param name="form"></param>
+        /// <param name="fr"></param>
+        /// <param name="domain"></param>
+        /// <param name="passkeyTransactionid"></param>
+        /// <param name="customParameters"></param>
+        /// <param name="headers"></param>
+        /// <param name="response"></param>
+        /// <returns></returns>
+        private PIResponse ProcessPasskeyAuthentication(AdapterPresentationForm form, FormResult fr, string domain, string passkeyTransactionid, Dictionary<string, string> customParameters, List<KeyValuePair<string, string>> headers, PIResponse response)
+        {
+            if (string.IsNullOrEmpty(fr.Origin))
+            {
+                Error("Incomplete data for Passkey authentication: Origin is missing!");
+                form.ErrorMessage = "Could not complete Passkey authentication. Try again or use another token type.";
+            }
+            else
+            {
+                response = _privacyIDEA.ValidateCheckPasskey(passkeyTransactionid, fr.PasskeySignResponse, fr.Origin,
+                    domain, headers, customParameters);
+            }
+
+            return response;
+        }
+
+        /// <summary>
         /// 
         /// </summary>
         /// <param name="identityClaim"></param>
@@ -424,13 +514,13 @@ namespace privacyIDEAADFSProvider
             Dictionary<string, string> customParameters = new Dictionary<string, string>();
             if (_config.ForwardClientIP)
             {
-                customParameters.Add("client", GetClientIPAddress(request));
+                customParameters.Add(CLIENT, GetClientIPAddress(request));
                 //Log("Client IP address: " + customParameters["client"]);
             }
             if (_config.ForwardClientUserAgent)
             {
-                string userAgent = request.Headers?["User-Agent"];
-                customParameters.Add("client_user_agent", userAgent ?? string.Empty);
+                string userAgent = request.Headers?[USER_AGENT_HEADER];
+                customParameters.Add(CLIENT_USER_AGENT, userAgent ?? string.Empty);
                 //Log("Client User-Agent: " + customParameters["client_user_agent"]);
             }
 
@@ -445,13 +535,13 @@ namespace privacyIDEAADFSProvider
         private string GetClientIPAddress(HttpListenerRequest request)
         {
             // Check X-Forwarded-For header first (for clients behind proxy)
-            string clientIP = request.Headers["X-Forwarded-For"];
+            string clientIP = request.Headers[X_FORWARDED_FOR];
             if (string.IsNullOrEmpty(clientIP))
             {
                 // If no X-Forwarded-For, use RemoteEndPoint
                 clientIP = request.RemoteEndPoint?.Address?.ToString();
             }
-            return clientIP ?? "unknown";
+            return clientIP ?? UNKNOWN;
         }
 
         /// <summary>
@@ -469,7 +559,7 @@ namespace privacyIDEAADFSProvider
                 throw new Exception("No server URL configured. Can not initialize privacyIDEA without a server URL.");
             }
 
-            _privacyIDEA = new PrivacyIDEA(_config.Url, "PrivacyIDEA-ADFS/" + _version, !_config.DisableSSL)
+            _privacyIDEA = new PrivacyIDEA(_config.Url, PRIVACYIDEA_ADFS_USERAGENT + _version, !_config.DisableSSL)
             {
                 Logger = this
             };
@@ -525,11 +615,12 @@ namespace privacyIDEAADFSProvider
 
             // Reset values
             form.WebAuthnSignRequest = "";
-            form.Mode = "otp";
+            form.Mode = OTP_MODE;
             form.PushAvailable = "0";
             form.EnrollmentImg = "";
             form.EnrollmentLink = "";
             form.DisableOTP = "0";
+            form.IsEnrollmentViaMultichallengeOptional = "0";
 
             // New values
             form.Message = response.Message;
@@ -550,9 +641,14 @@ namespace privacyIDEAADFSProvider
                 form.Mode = response.PreferredClientMode;
             }
 
-            if (form.Mode == "webauthn" && (form.WebAuthnSignRequest == null || string.IsNullOrEmpty(form.WebAuthnSignRequest)))
+            if (response.IsEnrollmentViaMultichallengeOptional)
             {
-                form.Mode = "otp";
+                form.IsEnrollmentViaMultichallengeOptional = "1";
+            }
+
+            if (form.Mode == WEBAUTHN_MODE && (form.WebAuthnSignRequest == null || string.IsNullOrEmpty(form.WebAuthnSignRequest)))
+            {
+                form.Mode = OTP_MODE;
             }
 
             // Check for an image, which indicates enroll_via_multichallenge
@@ -562,7 +658,7 @@ namespace privacyIDEAADFSProvider
                 form.EnrollmentImg = challengeWithImage.Image;
                 form.EnrollmentLink = response.EnrollmentLink;
                 form.Mode = challengeWithImage.Type;
-                if (form.Mode == "push")
+                if (form.Mode == PUSH_MODE)
                 {
                     form.DisableOTP = "1"; // Disable OTP input if it is push
                 }
@@ -572,25 +668,25 @@ namespace privacyIDEAADFSProvider
             {
                 form.PasskeyRegistration = response.PasskeyRegistration;
                 form.PasskeyChallenge = "";
-                authContext.Data["passkey_registration_serial"] = response.Serial;
+                authContext.Data[PASSKEY_REGISTRATION_SERIAL] = response.Serial;
             }
             // Transaction IDs
-            authContext.Data["transactionid"] = response.TransactionID;
+            authContext.Data[TRANSACTIONID] = response.TransactionID;
             if (!string.IsNullOrEmpty(response.OTPTransactionID))
             {
-                authContext.Data["otp_transaction_id"] = response.OTPTransactionID;
+                authContext.Data[OTP_TRANSACTION_ID] = response.OTPTransactionID;
             }
             if (!string.IsNullOrEmpty(response.PasskeyTransactionID))
             {
-                authContext.Data["passkey_transaction_id"] = response.PasskeyTransactionID;
+                authContext.Data[PASSKEY_TRANSACTION_ID] = response.PasskeyTransactionID;
             }
             if (!string.IsNullOrEmpty(response.PushTransactionID))
             {
-                authContext.Data["push_transaction_id"] = response.PushTransactionID;
+                authContext.Data[PUSH_TRANSACTION_ID] = response.PushTransactionID;
             }
             if (!string.IsNullOrEmpty(response.WebAuthnTransactionID))
             {
-                authContext.Data["webauthn_transaction_id"] = response.WebAuthnTransactionID;
+                authContext.Data[WEBAUTHN_TRANSACTION_ID] = response.WebAuthnTransactionID;
             }
 
             return form;
@@ -624,16 +720,35 @@ namespace privacyIDEAADFSProvider
         }
 
         /// <summary>
+        /// Collect the first non-empty transaction ID from the provided ones.
+        /// </summary>
+        /// <param name="otpTransactionid"></param>
+        /// <param name="pushTransactionid"></param>
+        /// <param name="webauthnTransactionid"></param>
+        /// <param name="passkeyTransactionid"></param>
+        /// <returns></returns>
+        private string CollectFirstNonEmptyTransactionID(string otpTransactionid, string pushTransactionid, string webauthnTransactionid, string passkeyTransactionid)
+        {
+            var transactionIds = new[]
+            {
+                otpTransactionid,
+                pushTransactionid,
+                webauthnTransactionid,
+                passkeyTransactionid
+            };
+            return transactionIds.FirstOrDefault(id => !string.IsNullOrWhiteSpace(id));
+        }
+
+        /// <summary>
         /// Return the required authentication method claim, indicating the particular authentication method used.
         /// </summary>
         /// <returns>Claims for this authentication method</returns>
         private Claim[] Claims()
         {
-            return new[] {
-                    new Claim(
-                            "http://schemas.microsoft.com/ws/2008/06/identity/claims/authenticationmethod",
-                            "http://schemas.microsoft.com/ws/2012/12/authmethod/otp")
-                        };
+            return new[]
+            {
+                new Claim(MS_SCHEMA_CLAIM_AUTHENTICATIONMETHOD, MS_SCHEMA_AUTHMETHOD_OTP)
+            };
         }
 
         private string GetString(Dictionary<string, object> dict, string key, string defaultValue = "")
@@ -648,13 +763,13 @@ namespace privacyIDEAADFSProvider
 
         public void Log(string message)
         {
-            string formatted = "[" + DateTime.Now.ToString("yyyy-MM-ddTHH\\:mm\\:ss") + "] " + message;
+            string formatted = "[" + DateTime.Now.ToString(DATE_FORMAT) + "] " + message;
             LogImpl(formatted);
         }
 
         public void Error(string message)
         {
-            string formatted = "[" + DateTime.Now.ToString("yyyy-MM-ddTHH\\:mm\\:ss") + "] " + message;
+            string formatted = "[" + DateTime.Now.ToString(DATE_FORMAT) + "] " + message;
             // write error to both
             EventError(formatted);
             LogImpl(formatted);
@@ -663,7 +778,7 @@ namespace privacyIDEAADFSProvider
         public void Error(Exception exception)
         {
             string message = exception.Message + ":\n" + exception.ToString();
-            string formatted = "[" + DateTime.Now.ToString("yyyy-MM-ddTHH\\:mm\\:ss") + "] " + message;
+            string formatted = "[" + DateTime.Now.ToString(DATE_FORMAT) + "] " + message;
             // Write error to both
             EventError(formatted);
             LogImpl(formatted);
@@ -671,8 +786,8 @@ namespace privacyIDEAADFSProvider
 
         private void EventError(string message)
         {
-            using EventLog eventLog = new EventLog("AD FS/Admin");
-            eventLog.Source = "privacyIDEAProvider";
+            using EventLog eventLog = new EventLog(EVENT_LOG_ADFS_ADMIN);
+            eventLog.Source = EVENT_LOG_SOURCE;
             eventLog.WriteEntry(message, EventLogEntryType.Error, 9901, 0);
         }
 
@@ -682,7 +797,7 @@ namespace privacyIDEAADFSProvider
             {
                 try
                 {
-                    using StreamWriter streamWriter = new StreamWriter("C:\\PrivacyIDEA-ADFS log.txt", append: true);
+                    using StreamWriter streamWriter = new StreamWriter(STREAM_WRITER_LOG, append: true);
                     await streamWriter.WriteLineAsync(msg);
                 }
                 catch (Exception e)
