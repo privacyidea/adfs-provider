@@ -280,14 +280,13 @@ namespace privacyIDEAADFSProvider
                 response = _privacyIDEA.ValidateCheckCancelEnrollment(collectedTransactionID, domain, headers, customParameters);
                 if (response != null)
                 {
-                    if (response.ErrorMessage != null)
+                    if (!string.IsNullOrEmpty(response.ErrorMessage))
                     {
                         form.ErrorMessage = response.ErrorMessage;
                         return form;
                     }
                     else if (response.IsAuthenticationSuccessful())
                     {
-                        Log("Enrollment cancelled successfully: " + response.IsAuthenticationSuccessful()); //todo rm!!!
                         outgoingClaims = Claims();
                         return null;
                     }
