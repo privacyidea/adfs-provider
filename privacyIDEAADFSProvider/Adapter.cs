@@ -430,7 +430,7 @@ namespace privacyIDEAADFSProvider
             else
             {
                 // Else push not confirmed yet
-                form.ErrorMessage = "Authenication not confirmed yet!";
+                form.ErrorMessage = "Authentication not confirmed yet!";
             }
 
             return response;
