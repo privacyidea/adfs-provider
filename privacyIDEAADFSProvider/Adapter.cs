@@ -334,7 +334,7 @@ namespace privacyIDEAADFSProvider
                 else
                 {
                     response = _privacyIDEA.ValidateCheckCompletePasskeyRegistration(transactionId, serial, user,
-                        fr.PasskeyRegistrationResponse, fr.Origin, headers: null, customParameters:customParameters);
+                        fr.PasskeyRegistrationResponse, fr.Origin, headers: null, customParameters: customParameters);
                 }
             }
             // Push
