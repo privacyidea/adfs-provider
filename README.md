@@ -30,6 +30,7 @@ After changing the configuration, the AD FS Service has to be restarted for the 
 | ~~preferred_token_type~~ | ~~Set the token type for which the UI should be first shown. This only matters if such token was triggered before. Possible values are `otp`, `push` or `webauthn`. The default is OTP mode.~~ **!!! This feature has been removed in v1.3.0 in favor of the preferred_client_mode policy in the privacyIDEA Server. !!!** |
 | auto_submit_otp_length | Set an OTP digit count for which to automatically submit the form |
 | disable_passkey | Disable the "Passkey Login" button |
+| otp_hint | The hint that is shown in the input field. The default is 'One-Time-Password' |
 
 ### Domain to Realm Mapping
 It is possible to map different Windows domains to different privacyIDEA realms. To achieve this, add the subkey `HKLM\SOFTWARE\Netknights GmbH\PrivacyIDEA-ADFS\realm-mapping`. Now you can add REG_SZ entries that have the name of the Windows domain and the value of the corresponding privacyIDEA realm. Note that the realm mapping takes precedence over the general realm that can be configured as explained in the previous section.
