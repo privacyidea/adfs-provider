@@ -22,6 +22,7 @@ namespace privacyIDEAADFSProvider
         public string PasskeyChallenge { get; set; } = "";
         public string PasskeyRegistration { get; set; } = "";
         public string DisablePasskey { get; set; } = "";
+        public string IsEnrollmentViaMultichallengeOptional { get; set; } = "0";
         public string EnrollmentLink { get; set; } = "";
         public string DisableOTP { get; set; } = "0"; // used for enroll_via_multichallenge with push, where the only option is push
 
@@ -113,6 +114,7 @@ namespace privacyIDEAADFSProvider
             htmlTemplate = htmlTemplate.Replace("#disablePasskey#", DisablePasskey);
             htmlTemplate = htmlTemplate.Replace("#passkeyChallenge#", PasskeyChallenge.Replace("\"", "&quot;"));
             htmlTemplate = htmlTemplate.Replace("#passkeyRegistration#", PasskeyRegistration.Replace("\"", "&quot;"));
+            htmlTemplate = htmlTemplate.Replace("#isEnrollmentViaMultichallengeOptional#", IsEnrollmentViaMultichallengeOptional);
             return htmlTemplate;
         }
 

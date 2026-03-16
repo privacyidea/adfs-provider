@@ -1,5 +1,6 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using static PrivacyIDEAADFSProvider.PrivacyIDEA_Client.PIConstants;
 
 namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
 {
@@ -31,37 +32,37 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             try
             {
                 JObject jobj = JObject.Parse(json);
-                JToken result = jobj["result"];
+                JToken result = jobj[RESULT];
                 if (result != null)
                 {
-                    ret.Status = (bool)result["status"];
+                    ret.Status = (bool)result[STATUS];
 
-                    JToken jVal = result["value"];
+                    JToken jVal = result[VALUE];
                     if (jVal != null)
                     {
                         ret.Value = (bool)jVal;
                     }
 
-                    JToken error = result["error"];
+                    JToken error = result[ERROR];
                     if (error != null)
                     {
-                        ret.ErrorCode = (int)error["code"];
-                        ret.ErrorMessage = (string)error["message"];
+                        ret.ErrorCode = (int)error[CODE];
+                        ret.ErrorMessage = (string)error[MESSAGE];
                     }
                 }
 
-                JToken detail = jobj["detail"];
+                JToken detail = jobj[DETAIL];
                 if (detail != null && detail.Type != JTokenType.Null)
                 {
                     
                     // ret.Type = (string)detail["type"];
-                    ret.Serial = (string)detail["serial"];
+                    ret.Serial = (string)detail[SERIAL];
 
-                    JToken googleTotp = detail["googleurl"];
+                    JToken googleTotp = detail[GOOGLEURL];
                     if (googleTotp != null && googleTotp.Type != JTokenType.Null)
                     {
-                        ret.TotpUrl = (string)googleTotp["value"];
-                        ret.Base64TotpImage = (string)googleTotp["img"];
+                        ret.TotpUrl = (string)googleTotp[VALUE];
+                        ret.Base64TotpImage = (string)googleTotp[IMAGE];
                     }
                 }
             }

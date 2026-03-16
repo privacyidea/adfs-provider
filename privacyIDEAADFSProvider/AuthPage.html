@@ -10,12 +10,19 @@
         <input id="context" type="hidden" name="Context" value="%Context%" />
         <!-- End inputs are required by the presentation framework. -->
 
+        <!-- Cancel Enrollment -->
+        <input id="cancelEnrollmentButton" name="cancelEnrollmentButton" type="button" value="Cancel Enrollment" onclick="cancelEnrollmentViaMc()"
+               aria-label="Cancel Enrollment"
+               style="background-color: rgb(220, 53, 69); border: none; border-style: solid; border-width: 1px; height: 35px;
+               min-width: 160px; width: auto; color: white; margin-bottom: 8px; user-select: none; padding: 8px 25px 12px 25px;" />
+
         <p id="pageIntroductionText" style="color:red">#ERROR#</p>
         <br />
         <label for="otp" class="block" aria-label="#MESSAGE#">#MESSAGE#</label>
         <input id="otp" name="otp" type="password" value="" class="text" placeholder="#OTPTEXT#" size="35" autocomplete="new-password" autofocus />
         <input id="submitButton" type="submit" name="Submit" value="#SUBMIT#" onclick="submitForm()" />
 
+        <!-- Hidden inputs to persist state -->
         <input id="autoSubmit" type="hidden" name="autoSubmit" value="#autoSubmit#" />
         <input id="mode" type="hidden" name="mode" value="#mode#" />
         <input id="pushAvailable" type="hidden" name="pushAvailable" value="#pushAvailable#" />
@@ -27,6 +34,8 @@
         <input id="disablePasskey" type="hidden" name="disablePasskey" value="#disablePasskey#" />
         <input id="autoSubmitLength" type="hidden" name="autoSubmitLength" value="#autoSubmitLength#" />
         <input id="formResult" type="hidden" name="formResult" value="" />
+        <input id="isEnrollmentViaMultichallengeOptional" type="hidden" name="isEnrollmentViaMultichallengeOptional"
+        value="#isEnrollmentViaMultichallengeOptional#" />
         <input id="disableOTP" type="hidden" name="disableOTP" value="#disableOTP#" />
 
         <!-- Extra inputs to persist some data -->
@@ -79,9 +88,11 @@
                 passkeySignResponse: "",
                 passkeyRegistrationResponse: "",
                 origin: "",
+                enrollmentCancelled: false
             };
             disable("retryPasskeyLogin");
             disable("retryPasskeyRegistration");
+            disable("cancelEnrollmentButton");
 
             if (value("autoSubmit") === "1") {
                 submitForm();
@@ -128,13 +139,17 @@
                 disable("useOTPButton");
             }
 
+            if (value("isEnrollmentViaMultichallengeOptional") === "1") {
+                enable("cancelEnrollmentButton");
+            }
+
             // Set UI according to mode
             if (value("mode") === "push") {
                 const pollingIntervals = [3, 2, 2, 1];
                 disable("otp");
                 disable("usePushButton");
                 disable("submitButton");
-                var refreshTime = 2;
+                let refreshTime = 2;
                 if (value("authCounter") > (pollingIntervals.length - 1)) {
                     refreshTime = pollingIntervals[(pollingIntervals.length - 1)];
                 } else {
@@ -190,6 +205,12 @@
             }
 
             // Helper functions
+
+            function cancelEnrollmentViaMc() {
+                formResult.enrollmentCancelled = true;
+                submitForm();
+            }
+
             function setLoginOptionsVisibility() {
                 let ids = ["passkeyLoginButton", "retryPasskeyLogin", "useOTPButton", "usePushButton", "useWebAuthnButton"]
                 let shouldShow = false;
@@ -230,7 +251,7 @@
 
 
             function value(id) {
-                var element = document.querySelector("#" + id);
+                const element = document.querySelector("#" + id);
                 if (element != null) {
                     return element.value;
                 } else {
@@ -240,7 +261,7 @@
             }
 
             function set(id, value) {
-                var element = document.querySelector("#" + id);
+                const element = document.querySelector("#" + id);
                 if (element != null) {
                     element.value = value;
                 } else {
@@ -249,7 +270,7 @@
             }
 
             function disable(id) {
-                var element = document.querySelector("#" + id);
+                const element = document.querySelector("#" + id);
                 if (element != null) {
                     element.style.display = "none";
                 } else {
@@ -258,7 +279,7 @@
             }
 
             function enable(id) {
-                var element = document.querySelector("#" + id);
+                const element = document.querySelector("#" + id);
                 if (element != null) {
                     element.style.display = "initial";
                 } else {
@@ -279,7 +300,7 @@
             }
 
             function copyTOTP() {
-                var copyText = document.querySelector("#enrollmentValue");
+                const copyText = document.querySelector("#enrollmentValue");
                 copyText.select();
                 copyText.setSelectionRange(0, 99999); /* For mobile devices */
                 navigator.clipboard.writeText(copyText.value);
@@ -466,9 +487,9 @@
             }
 
             function utf8ArrToStr(aBytes) {
-                var sView = "";
+                let sView = "";
 
-                for (var nPart, nLen = aBytes.length, nIdx = 0; nIdx < nLen; nIdx++) {
+                for (let nPart, nLen = aBytes.length, nIdx = 0; nIdx < nLen; nIdx++) {
                     nPart = aBytes[nIdx];
                     sView += String.fromCharCode(
                         nPart > 251 && nPart < 254 && nIdx + 5 < nLen ?
@@ -505,13 +526,13 @@
             }
 
             function strToUtf8Arr(sDOMStr) {
-                var aBytes;
-                var nChr;
-                var nStrLen = sDOMStr.length;
-                var nArrLen = 0;
+                let aBytes;
+                let nChr;
+                let nStrLen = sDOMStr.length;
+                let nArrLen = 0;
 
                 // Determine the byte-length of the string when encoded as UTF-8.
-                for (var nMapIdx = 0; nMapIdx < nStrLen; nMapIdx++) {
+                for (let nMapIdx = 0; nMapIdx < nStrLen; nMapIdx++) {
                     nChr = sDOMStr.charCodeAt(nMapIdx);
                     nArrLen += nChr < 0x80 ?
                         1
@@ -530,7 +551,7 @@
                 aBytes = new Uint8Array(nArrLen);
 
                 // Perform the encoding.
-                for (var nIdx = 0, nChrIdx = 0; nIdx < nArrLen; nChrIdx++) {
+                for (let nIdx = 0, nChrIdx = 0; nIdx < nArrLen; nChrIdx++) {
                     nChr = sDOMStr.charCodeAt(nChrIdx);
                     if (nChr < 128) {
                         /* one byte */
@@ -572,15 +593,15 @@
             }
 
             function base64DecToArr(sBase64, nBlockSize) {
-                var sB64Enc = sBase64.replace(/[^A-Za-z0-9+\/]/g, "");
-                var nInLen = sB64Enc.length;
-                var nOutLen = nBlockSize ?
+                let sB64Enc = sBase64.replace(/[^A-Za-z0-9+\/]/g, "");
+                let nInLen = sB64Enc.length;
+                let nOutLen = nBlockSize ?
                     Math.ceil((nInLen * 3 + 1 >>> 2) / nBlockSize) * nBlockSize
                     :
                     nInLen * 3 + 1 >>> 2;
-                var aBytes = new Uint8Array(nOutLen);
+                let aBytes = new Uint8Array(nOutLen);
 
-                for (var nMod3, nMod4, nUint24 = 0, nOutIdx = 0, nInIdx = 0; nInIdx < nInLen; nInIdx++) {
+                for (let nMod3, nMod4, nUint24 = 0, nOutIdx = 0, nInIdx = 0; nInIdx < nInLen; nInIdx++) {
                     nMod4 = nInIdx & 3;
                     nUint24 |= b64ToUint6(sB64Enc.charCodeAt(nInIdx)) << 18 - 6 * nMod4;
                     if (nMod4 === 3 || nInLen - nInIdx === 1) {
@@ -595,11 +616,11 @@
             };
 
             function base64EncArr(bytes) {
-                var aBytes = new Uint8Array(bytes)
-                var eqLen = (3 - (aBytes.length % 3)) % 3;
-                var sB64Enc = "";
+                let aBytes = new Uint8Array(bytes)
+                let eqLen = (3 - (aBytes.length % 3)) % 3;
+                let sB64Enc = "";
 
-                for (var nMod3, nLen = aBytes.length, nUint24 = 0, nIdx = 0; nIdx < nLen; nIdx++) {
+                for (let nMod3, nLen = aBytes.length, nUint24 = 0, nIdx = 0; nIdx < nLen; nIdx++) {
                     nMod3 = nIdx % 3;
 
                     // Split the output in lines 76-characters long
@@ -625,7 +646,7 @@
             };
 
             function webAuthnSign(webAuthnSignRequest) {
-                var publicKeyCredentialRequestOptions = {
+                const publicKeyCredentialRequestOptions = {
                     challenge: webAuthnBase64DecToArr(webAuthnSignRequest.challenge),
                     allowCredentials: webAuthnSignRequest.allowCredentials.map(function (x) {
                         return {
@@ -648,7 +669,7 @@
                             return Promise.reject();
                         }
 
-                        var webAuthnSignResponse = {
+                        const webAuthnSignResponse = {
                             credentialid: assertion.id,
                             clientdata: webAuthnBase64EncArr(assertion.response.clientDataJSON),
                             signaturedata: webAuthnBase64EncArr(assertion.response.signature),

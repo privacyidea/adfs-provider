@@ -66,6 +66,7 @@
     <Compile Include="FormResult.cs" />
     <Compile Include="PrivacyIDEA Client\PIAuthenticationStatus.cs" />
     <Compile Include="PrivacyIDEA Client\PIChallenge.cs" />
+    <Compile Include="PrivacyIDEA Client\PIConstants.cs" />
     <Compile Include="PrivacyIDEA Client\PIEnrollResponse.cs" />
     <Compile Include="PrivacyIDEA Client\PILog.cs" />
     <Compile Include="PrivacyIDEA Client\PIResponse.cs" />

@@ -11,5 +11,6 @@
         public string PasskeySignResponse { get; set; } = "";
         public string PasskeyRegistrationResponse { get; set; } = "";
         public string Origin { get; set; } = "";
+        public bool EnrollmentCancelled { get; set; } = false;
     }
 }
