@@ -64,6 +64,10 @@ namespace privacyIDEAADFSProvider
                     UserPrincipal user = UserPrincipal.FindByIdentity(ctx, username);
                     upn = user.UserPrincipalName;
                     Log("Found UPN: " + upn);
+
+                    // Set domain to UPN suffix instead of NetBIOS domain
+                    domain = upn.Contains("@") ? upn.Split('@')[1] : domain;
+                    Log("Domain for " + upn + ": " + domain);
                 }
                 else
                 {
