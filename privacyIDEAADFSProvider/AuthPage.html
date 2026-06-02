@@ -27,14 +27,14 @@
                 <li>
                     Download and/or install a TOTP compliant MFA app or Password Manager if you haven't already. Here are some recommendations:
                     <ul>
-                        <li>privacyIDEA Authenticator <a target="_blank" href="https://play.google.com/store/apps/details?id=it.netknights.piauthenticator&hl=en_US&gl=US">(Android)</a> <a target="_blank" href="https://apps.apple.com/us/app/privacyidea-authenticator/id1445401301">(iOS)</a></li>
-                        <li>Google Authenticator <a target="_blank" href="https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2&hl=en_US&gl=US">(Android)</a> <a target="_blank" href="https://apps.apple.com/us/app/google-authenticator/id388497605">(iOS)</a></li>
-                        <li>Authy <a target="_blank" href="https://authy.com/download/">(Mobile/Desktop)</a></li>
+                        <li>privacyIDEA Authenticator <a target="_blank" rel="noopener noreferrer" href="https://play.google.com/store/apps/details?id=it.netknights.piauthenticator&hl=en_US&gl=US">(Android)</a> <a target="_blank" rel="noopener noreferrer" href="https://apps.apple.com/us/app/privacyidea-authenticator/id1445401301">(iOS)</a></li>
+                        <li>Google Authenticator <a target="_blank" rel="noopener noreferrer" href="https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2&hl=en_US&gl=US">(Android)</a> <a target="_blank" rel="noopener noreferrer" href="https://apps.apple.com/us/app/google-authenticator/id388497605">(iOS)</a></li>
+                        <li>Authy <a target="_blank" rel="noopener noreferrer" href="https://authy.com/download/">(Mobile/Desktop)</a></li>
                     </ul>
                 </li>
                 <li>
                     Scan the following QR code or copy the text below into your MFA app of choice
-                    <img class="enrollment-img" src="#enrollmentImg#" width="325px" alt>
+                    <img class="enrollment-img" src="#enrollmentImg#" width="325px" alt="Enrollment QR code">
                     <input id="enrollmentValue" value="#enrollmentUrl#" class="text" size="30" readonly/>
                     <button onclick="copyTOTP()" style="background-color: #4CAF50; border: none; color: white; padding: 8px 10px; text-align: center; text-decoration: none; display: inline-block;">Copy text</button>
                 </li>
@@ -43,8 +43,8 @@
         </div>
         <!-- mode=image: QR from server-driven enroll_via_multichallenge + optional fallback link -->
         <div class="enrollment-image" style="display:none">
-            <img class="enrollment-img" src="#enrollmentImg#" width="325px" alt>
-            <a class="enrollment-link" href="#enrollmentLink#" target="_blank">Alternatively, click on this link to enroll the new token.</a>
+            <img class="enrollment-img" src="#enrollmentImg#" width="325px" alt="Enrollment QR code">
+            <a class="enrollment-link" href="#enrollmentLink#" target="_blank" rel="noopener noreferrer">Alternatively, click on this link to enroll the new token.</a>
         </div>
     </div>
    

@@ -164,6 +164,9 @@ namespace privacyIDEAADFSProvider
             form.EnrollmentImg = GetString(proofDict, "enrollmentImg");
             form.EnrollmentLink = GetString(proofDict, "enrollmentLink");
             form.DisableOTP = GetString(proofDict, "disableOTP", "0");
+            // Carry the optional-enrollment flag across poll reloads, otherwise the "Not Now"
+            // skip button (gated on enrollmentOptional=="1" in the page JS) disappears after the first poll.
+            form.EnrollmentOptional = GetString(proofDict, "enrollmentOptional", "0");
 
             if (!proofDict.TryGetValue("formResult", out object formResult))
             {
@@ -282,7 +285,11 @@ namespace privacyIDEAADFSProvider
                 }
                 else
                 {
-                    form.ErrorMessage = "Authenication not confirmed yet!";
+                    // enroll_via_multichallenge poll (smartphone/push token enrollment) carries a QR image;
+                    // a plain push-token login does not. Word the "still waiting" message accordingly.
+                    form.ErrorMessage = !string.IsNullOrEmpty(form.EnrollmentImg)
+                        ? "Registration not completed yet!"
+                        : "Authentication not confirmed yet!";
                 }
             }
             else if (!string.IsNullOrEmpty(fr.WebAuthnSignResponse))

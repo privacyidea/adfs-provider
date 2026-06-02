@@ -1,6 +1,7 @@
 ﻿using Microsoft.IdentityServer.Web.Authentication.External;
 using PrivacyIDEAADFSProvider.PrivacyIDEA_Client;
 using System.Collections.Generic;
+using System.Net;
 using System.Text.RegularExpressions;
 
 namespace PrivacyIDEAADFSProvider
@@ -64,7 +65,7 @@ namespace PrivacyIDEAADFSProvider
                 ["authCounter"] = AuthCounter,
                 ["mode"] = Mode,
                 ["pushAvailable"] = PushAvailable,
-                ["webAuthnSignRequest"] = HtmlAttrEscape(WebAuthnSignRequest),
+                ["webAuthnSignRequest"] = WebAuthnSignRequest,
                 ["pushMessage"] = PushMessage,
                 ["modeChanged"] = "0",
                 ["pollInterval"] = "1",
@@ -75,17 +76,18 @@ namespace PrivacyIDEAADFSProvider
                 ["disableOTP"] = DisableOTP,
                 ["enrollmentOptional"] = EnrollmentOptional,
                 ["disablePasskey"] = DisablePasskey,
-                ["passkeyChallenge"] = HtmlAttrEscape(PasskeyChallenge),
-                ["passkeyRegistration"] = HtmlAttrEscape(PasskeyRegistration),
+                ["passkeyChallenge"] = PasskeyChallenge,
+                ["passkeyRegistration"] = PasskeyRegistration,
             };
 
+            // Every value is HTML-encoded on substitution: these tokens land in text nodes, double-quoted
+            // attributes (aria-label, placeholder, href, hidden input values), so server/config-provided
+            // strings (messages, URLs) or JSON payloads must not break out of the markup. Encoding round-trips
+            // cleanly for the JS — it reads element.value / dataset, which the browser HTML-decodes first.
             // Unknown tokens (none expected) pass through as the literal #name# so they're easy to spot.
             return s_tokenRx.Replace(s_template, m =>
-                tokens.TryGetValue(m.Groups[1].Value, out string v) ? v : m.Value);
+                tokens.TryGetValue(m.Groups[1].Value, out string v) ? WebUtility.HtmlEncode(v) : m.Value);
         }
-
-        // These JSON payloads are dropped into HTML double-quoted attributes; escape the quotes so the markup stays well-formed.
-        private static string HtmlAttrEscape(string value) => value.Replace("\"", "&quot;");
 
         /// Return any external resources, ie references to libraries etc., that should be included in
         /// the HEAD section of the presentation form html. 

@@ -560,7 +560,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             if (method == "POST")
             {
                 byte[] bodyBytes = Encoding.UTF8.GetBytes(body);
-                request.ContentType = "application/x-www-form-urlencoded";
+                request.ContentType = "application/x-www-form-urlencoded; charset=utf-8";
                 request.ContentLength = bodyBytes.Length;
                 try
                 {

@@ -10,8 +10,11 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
     /// </summary>
     public sealed class PIRequestContext
     {
-        public string Domain { get; set; }
-        public List<KeyValuePair<string, string>> Headers { get; set; }
-        public Dictionary<string, string> CustomParameters { get; set; }
+        // Defaulted (not left null) to match the codebase's collection/string defaults. Consumers still
+        // use null-conditional access, so this is purely belt-and-suspenders; an empty Domain behaves
+        // exactly like null (BuildParameters skips the realm via IsNullOrEmpty).
+        public string Domain { get; set; } = "";
+        public List<KeyValuePair<string, string>> Headers { get; set; } = new List<KeyValuePair<string, string>>();
+        public Dictionary<string, string> CustomParameters { get; set; } = new Dictionary<string, string>();
     }
 }
