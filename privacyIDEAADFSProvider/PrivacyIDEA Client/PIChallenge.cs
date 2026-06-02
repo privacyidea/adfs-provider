@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-
-namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
+﻿namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
 {
     public class PIChallenge
     {
@@ -10,6 +8,5 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         public string Type { get; set; } = "";
         public string Image { get; set; } = "";
         public string ClientMode { get; set; } = "";
-        public Dictionary<string, object> Attributes { get; set; } = new Dictionary<string, object>();
     }
 }

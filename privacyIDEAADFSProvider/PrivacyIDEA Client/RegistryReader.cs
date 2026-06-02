@@ -48,38 +48,10 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             return "";
         }
 
-        public List<string> ReadMultiValue(string name)
-        {
-            try
-            {
-                using (RegistryKey key = Registry.LocalMachine.OpenSubKey(_RegistryPath))
-                {
-                    if (key != null)
-                    {
-                        Object o = key.GetValue(name);
-                        if (o != null)
-                        {
-                            return new List<string>(o as string[]);
-                        }
-                        else
-                        {
-                            _LogFunc?.Invoke("Object for key " + key + " is null.");
-                        }
-
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _LogFunc?.Invoke("RegistryReader exception occured: " + ex.Message);
-            }
-
-            return new List<string>();
-        }
-
         public Dictionary<string, string> GetRealmMapping()
         {
-            var ret = new Dictionary<string, string>();
+            // OrdinalIgnoreCase so PrivacyIDEA.AddRealmForDomain can look up the domain without uppercasing it.
+            var ret = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             try
             {
                 using (RegistryKey key = Registry.LocalMachine.OpenSubKey(_RealmMapPath))
@@ -88,7 +60,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                     {
                         foreach (string name in key.GetValueNames())
                         {
-                            ret.Add(name.ToUpper(), (string)key.GetValue(name));
+                            ret.Add(name, (string)key.GetValue(name));
                         }
                     }
                 }
