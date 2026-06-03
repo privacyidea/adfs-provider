@@ -53,30 +53,13 @@ function Gac-Util
 # IMPORTANT: the source is registered in the standard "Application" log. Do NOT use "AD FS/Admin":
 # that is an ETW *channel* owned by the AD FS publisher (Event Viewer > Applications and Services
 # Logs > AD FS > Admin). Registering it through the classic event-log API makes Windows create a
-# bogus  HKLM\SYSTEM\CurrentControlSet\Services\EventLog\AD FS/Admin  key that shadows the channel,
-# which breaks AD FS event logging entirely and has been observed to block Windows Update servicing.
-# Earlier versions of this script did exactly that; the block below stops doing it and repairs
-# machines that were already affected.
+# bogus  HKLM\SYSTEM\CurrentControlSet\Services\EventLog\AD FS/Admin  key that shadows the channel.
+# Earlier versions of this script did that; we now simply log to "Application" instead. We do NOT
+# touch any pre-existing "AD FS/Admin" classic log key — only re-point our own source if needed.
 $source = "privacyIDEAProvider"
 $logName = "Application"
 
-# Repair: remove the stray classic "AD FS/Admin" log key left by older installers. On a healthy
-# server "AD FS/Admin" exists only as a channel (under WINEVT), never as a classic log, so
-# EventLog::Exists returns $false there and this is a no-op.
-if ([System.Diagnostics.EventLog]::Exists("AD FS/Admin"))
-{
-    try
-    {
-        Remove-EventLog -LogName "AD FS/Admin"
-        Write-Host "Removed stray classic 'AD FS/Admin' event log created by a previous install."
-    }
-    catch
-    {
-        Write-Host "Could not remove stray 'AD FS/Admin' event log: $_"
-    }
-}
-
-# Re-point the source if an older install bound it to the wrong log.
+# Re-point the source if an older install bound it to the wrong log (e.g. "AD FS/Admin").
 if ([System.Diagnostics.EventLog]::SourceExists($source) -and
     [System.Diagnostics.EventLog]::LogNameFromSourceName($source, ".") -ne $logName)
 {
@@ -126,8 +109,20 @@ if (Test-Path $configKeyPath)
 
         # Grant the actual AD FS service identity read access. It is whatever adfssrv runs as — a gMSA,
         # a domain account, or a built-in identity. LocalSystem is already covered above, so skip it.
+        #
+        # CRITICAL: we have just disabled inheritance (stripping BUILTIN\Users' read). If we cannot
+        # determine or resolve the service account, committing this ACL would leave the account with NO
+        # access and the provider would fail to read its config -> total MFA outage. So if the account is
+        # unknown/unresolvable, we DO NOT apply the hardened ACL; we warn and leave the key as-is.
         $adfsAccount = (Get-CimInstance Win32_Service -Filter "Name='adfssrv'" -ErrorAction SilentlyContinue).StartName
-        if ($adfsAccount -and $adfsAccount -notin @('LocalSystem', 'NT AUTHORITY\System'))
+        $applyAcl = $true
+        if (-not $adfsAccount)
+        {
+            $applyAcl = $false
+            Write-Warning ("Could not determine the AD FS service account (adfssrv). Skipping ACL hardening to " +
+                "avoid locking the provider out of its configuration. Harden $configKeyPath manually if required.")
+        }
+        elseif ($adfsAccount -notin @('LocalSystem', 'NT AUTHORITY\System'))
         {
             try
             {
@@ -137,15 +132,18 @@ if (Test-Path $configKeyPath)
             }
             catch
             {
-                # Don't abort the install over this — but make it loud, because the provider can't read
-                # its config if the service account has no access, and SYSTEM/Admins still do.
-                Write-Warning ("Could not resolve the AD FS service account '$adfsAccount' to grant it read access: $_. " +
-                    "If the provider fails to read its configuration, grant '$adfsAccount' read on $configKeyPath manually.")
+                $applyAcl = $false
+                Write-Warning ("Could not resolve the AD FS service account '$adfsAccount': $_. Skipping ACL " +
+                    "hardening to avoid locking the provider out of its configuration. Grant '$adfsAccount' read " +
+                    "on $configKeyPath manually, then re-run this script.")
             }
         }
 
-        Set-Acl -Path $configKeyPath -AclObject $acl
-        Write-Host "Hardened ACL on $configKeyPath (removed non-admin read access)."
+        if ($applyAcl)
+        {
+            Set-Acl -Path $configKeyPath -AclObject $acl
+            Write-Host "Hardened ACL on $configKeyPath (removed non-admin read access)."
+        }
     }
     catch
     {

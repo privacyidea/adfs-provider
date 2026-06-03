@@ -211,33 +211,39 @@
             setLoginOptionsVisibility();
 
             function doWebAuthn() {
+                // changeMode() re-renders/submits the form, so return immediately after calling it —
+                // otherwise execution continues and may start a WebAuthn prompt against an unloading page
+                // (mirrors the early-return pattern in passkeyAuthentication()).
                 // Push mode auto-resubmits the form on a timer, which would interrupt the WebAuthn prompt.
                 if (value("mode") === MODE.PUSH) {
                     changeMode(MODE.WEBAUTHN);
+                    return;
                 }
 
                 if (!window.isSecureContext) {
                     console.log("Insecure context detected: Aborting WebAuthn authentication!")
                     changeMode(MODE.OTP);
+                    return;
                 }
 
                 const requestStr = value("webAuthnSignRequest");
 
                 if (requestStr.length === 0) {
                     changeMode(MODE.OTP);
-                } else {
-                    try {
-                        const requestjson = JSON.parse(requestStr);
+                    return;
+                }
 
-                        const webAuthnSignResponse = webAuthnSign(requestjson);
-                        webAuthnSignResponse.then((webauthnresponse) => {
-                            const response = JSON.stringify(webauthnresponse);
-                            formResult.webAuthnSignResponse = response;
-                            submitForm();
-                        });
-                    } catch (err) {
-                        console.log("Error while signing WebAuthnSignRequest: " + err);
-                    }
+                try {
+                    const requestjson = JSON.parse(requestStr);
+
+                    const webAuthnSignResponse = webAuthnSign(requestjson);
+                    webAuthnSignResponse.then((webauthnresponse) => {
+                        const response = JSON.stringify(webauthnresponse);
+                        formResult.webAuthnSignResponse = response;
+                        submitForm();
+                    });
+                } catch (err) {
+                    console.log("Error while signing WebAuthnSignRequest: " + err);
                 }
             }
 

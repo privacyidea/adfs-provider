@@ -11,7 +11,7 @@ Secret handling:
 
 Other changes:
 * Added more German-speaking LCIDs (de-AT, de-CH, de-LI, de-LU).
-* Updated the event log location this application writes to. It now writes to the general Windows **Application** log with the source "privacyIDEAProvider". The installer repairs the stray "AD FS/Admin" classic log key that earlier versions created, and removes the event source on uninstall.
+* Updated the event log location this application writes to. It now writes to the general Windows **Application** log with the source "privacyIDEAProvider" (if an earlier version registered the source under a different log, it is moved to Application automatically). The event source is removed on uninstall.
 * The installer now checks for .NET Framework 4.8 and aborts with instructions if it is missing.
 * The installer can now be launched in "Modify" mode from the Windows installed-apps list to change the configuration, and the service password field is masked.
 

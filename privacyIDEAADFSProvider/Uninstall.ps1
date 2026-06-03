@@ -1,19 +1,31 @@
 ﻿#Requires -RunAsAdministrator
 
-# Unset the provider from both primary and additional
+# Detach the provider from every global auth policy list so Unregister is allowed. Each list is cast to
+# List[string] before .Remove (the value Get-AdfsGlobalAuthenticationPolicy returns can be a fixed-size
+# array, on which .Remove throws), and each is written back via its OWN parameter — earlier versions
+# wrote the primary lists back via -AdditionalAuthenticationProvider, which never cleared the primary
+# assignment and clobbered the additional list, so the following Unregister failed with "in use".
 $policy = Get-AdfsGlobalAuthenticationPolicy
+$name = "privacyIDEAADFSProvider"
 
-$primaryIntranetProviders = $policy.PrimaryIntranetAuthenticationProvider
-$primaryIntranetProviders.Remove("privacyIDEAADFSProvider") 
-Set-AdfsGlobalAuthenticationPolicy -AdditionalAuthenticationProvider $primaryIntranetProviders
-
-$primaryExtranetProviders = $policy.PrimaryExtranetAuthenticationProvider
-$primaryExtranetProviders.Remove("privacyIDEAADFSProvider") 
-Set-AdfsGlobalAuthenticationPolicy -AdditionalAuthenticationProvider $primaryExtranetProviders
-
-$additionalProviders = $policy.AdditionalAuthenticationProvider
-$additionalProviders.Remove("privacyIDEAADFSProvider") 
-Set-AdfsGlobalAuthenticationPolicy -AdditionalAuthenticationProvider $additionalProviders
+if ($policy.PrimaryIntranetAuthenticationProvider -contains $name)
+{
+    $list = [System.Collections.Generic.List[string]]$policy.PrimaryIntranetAuthenticationProvider
+    [void]$list.Remove($name)
+    Set-AdfsGlobalAuthenticationPolicy -PrimaryIntranetAuthenticationProvider $list
+}
+if ($policy.PrimaryExtranetAuthenticationProvider -contains $name)
+{
+    $list = [System.Collections.Generic.List[string]]$policy.PrimaryExtranetAuthenticationProvider
+    [void]$list.Remove($name)
+    Set-AdfsGlobalAuthenticationPolicy -PrimaryExtranetAuthenticationProvider $list
+}
+if ($policy.AdditionalAuthenticationProvider -contains $name)
+{
+    $list = [System.Collections.Generic.List[string]]$policy.AdditionalAuthenticationProvider
+    [void]$list.Remove($name)
+    Set-AdfsGlobalAuthenticationPolicy -AdditionalAuthenticationProvider $list
+}
 
 # Unregister the provider and restart the AD FS service
 Set-Location -Path "C:\Program Files\PrivacyIDEA AD FS"
@@ -30,12 +42,6 @@ $publish.GacRemove($myDllFullName)
 if ([System.Diagnostics.EventLog]::SourceExists("privacyIDEAProvider"))
 {
     [System.Diagnostics.EventLog]::DeleteEventSource("privacyIDEAProvider")
-}
-# Clean up the stray classic "AD FS/Admin" log key if an older (buggy) install left one. This only
-# exists on affected machines; on a healthy server "AD FS/Admin" is a channel, not a classic log.
-if ([System.Diagnostics.EventLog]::Exists("AD FS/Admin"))
-{
-    try { Remove-EventLog -LogName "AD FS/Admin" } catch { Write-Host "Could not remove stray 'AD FS/Admin' event log: $_" }
 }
 
 Restart-Service adfssrv

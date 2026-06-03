@@ -49,7 +49,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             }
             catch (Exception ex)
             {
-                _LogFunc?.Invoke("RegistryReader exception occured: " + ex.Message);
+                _LogFunc?.Invoke("RegistryReader exception occurred: " + ex.Message);
             }
 
             return "";
@@ -79,7 +79,12 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                 }
                 catch (Exception ex)
                 {
-                    _EventLogFunc?.Invoke($"Failed to decrypt the stored secret '{name}': {ex.Message}");
+                    // DPAPI is machine-bound (LocalMachine scope): a value encrypted on another machine
+                    // (after a restore, clone or hardware change) cannot be decrypted here. Make the cause
+                    // and the fix explicit, because the empty value silently disables service-account features.
+                    _EventLogFunc?.Invoke($"Could not decrypt '{name}' (DPAPI). It was likely encrypted on a " +
+                        "different machine (e.g. a restored/cloned server). Re-enter the value via the installer " +
+                        $"or registry so it is re-encrypted on this machine. Details: {ex.Message}");
                     return "";
                 }
             }
@@ -89,8 +94,21 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             return stored;
         }
 
+        // Names we have already attempted to migrate in this process, so a write-back that keeps failing
+        // (e.g. the service account lacks SetValue) does not re-run DPAPI + re-log on every config reload.
+        // A successful migration flips the stored value to "enc:", so it never reaches here again anyway;
+        // this only bounds the failing case. Cleared on process restart, which is when an ACL fix lands.
+        private static readonly HashSet<string> s_writeBackAttempted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         private void TryWriteBackEncrypted(string name, string plaintext)
         {
+            lock (s_writeBackAttempted)
+            {
+                if (!s_writeBackAttempted.Add(name))
+                {
+                    return;
+                }
+            }
             try
             {
                 string encrypted = SecretProtector.Protect(plaintext);
@@ -128,7 +146,17 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                     {
                         foreach (string name in key.GetValueNames())
                         {
-                            ret.Add(name, (string)key.GetValue(name));
+                            // Indexer (not Add) so a case-only-duplicate name overwrites instead of throwing
+                            // and discarding the whole map. Skip non-REG_SZ values rather than letting a
+                            // bad cast abort every mapping.
+                            if (key.GetValue(name) is string value)
+                            {
+                                ret[name] = value;
+                            }
+                            else
+                            {
+                                _LogFunc?.Invoke($"Ignoring non-string realm-mapping entry '{name}'.");
+                            }
                         }
                     }
                 }

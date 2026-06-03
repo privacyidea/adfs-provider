@@ -23,7 +23,6 @@ namespace privacyIDEAADFSProvider
         private Configuration _config;
         private bool _debugLog = false;
         private AdapterMetadata _metadata;
-        private StreamWriter _logWriter;
 
         public IAuthenticationAdapterMetadata Metadata =>
             _metadata ??= new AdapterMetadata { AdapterVersion = _version };
@@ -362,7 +361,7 @@ namespace privacyIDEAADFSProvider
 
             if (string.IsNullOrEmpty(form.ErrorMessage) && !newChallenge)
             {
-                form.ErrorMessage = "An error occured.";
+                form.ErrorMessage = "An error occurred.";
             }
             return form;
         }
@@ -449,17 +448,6 @@ namespace privacyIDEAADFSProvider
             // open yet at this point and only exists when debug_log=1. The event log is always available.
             _config = new Configuration(Log, EventWarn);
             _debugLog = _config.DebugLog;
-            if (_debugLog)
-            {
-                try
-                {
-                    _logWriter = new StreamWriter(_config.LogPath, append: true) { AutoFlush = true };
-                }
-                catch (Exception e)
-                {
-                    EventError("Could not open log file '" + _config.LogPath + "': " + e.Message);
-                }
-            }
             Log("PrivacyIDEA AD FS Plugin " + _version + " - OnAuthenticationPipelineLoad");
 
             if (string.IsNullOrEmpty(_config.Url))
@@ -493,11 +481,6 @@ namespace privacyIDEAADFSProvider
         public void OnAuthenticationPipelineUnload()
         {
             _privacyIDEA?.Dispose();
-            lock (_logLock)
-            {
-                _logWriter?.Dispose();
-                _logWriter = null;
-            }
         }
 
         public IAdapterPresentation OnError(HttpListenerRequest request, ExternalAuthenticationException ex)
@@ -644,22 +627,29 @@ namespace privacyIDEAADFSProvider
         // registered in the Application log by Install.ps1.
         private static readonly EventLog s_eventLog = new EventLog("Application") { Source = "privacyIDEAProvider" };
 
-        private void EventError(string message)
-        {
-            lock (s_eventLog)
-            {
-                s_eventLog.WriteEntry(message, EventLogEntryType.Error, 9901, 0);
-            }
-        }
+        private void EventError(string message) => WriteEvent(message, EventLogEntryType.Error, 9901);
 
         // Warning-level event-log writes for notable-but-non-fatal conditions, e.g. the one-time
-        // migration of a plaintext secret to encrypted-at-rest (and its failures). Same serialization
-        // as EventError; independent of the debug log so these are always visible.
-        private void EventWarn(string message)
+        // migration of a plaintext secret to encrypted-at-rest (and its failures). Independent of the
+        // debug log so these are always visible.
+        private void EventWarn(string message) => WriteEvent(message, EventLogEntryType.Warning, 9902);
+
+        // Writes are serialized (EventLog instance members are not guaranteed thread-safe and ADFS calls
+        // in from many threads) and never throw: logging must not be able to abort provider load or an
+        // authentication. WriteEntry can throw (e.g. the source is registered under a different log on a
+        // machine the installer hasn't reconciled yet), so swallow it.
+        private static void WriteEvent(string message, EventLogEntryType type, int eventId)
         {
-            lock (s_eventLog)
+            try
             {
-                s_eventLog.WriteEntry(message, EventLogEntryType.Warning, 9902, 0);
+                lock (s_eventLog)
+                {
+                    s_eventLog.WriteEntry(message, type, eventId, 0);
+                }
+            }
+            catch
+            {
+                // Nothing safe to do here — the event log is our last-resort sink.
             }
         }
 
@@ -668,13 +658,20 @@ namespace privacyIDEAADFSProvider
 
         public void LogImpl(string msg)
         {
-            if (!_debugLog || _logWriter == null) return;
+            if (!_debugLog) return;
             try
             {
                 lock (_logLock)
                 {
-                    // _logWriter may have been disposed by OnAuthenticationPipelineUnload on a different thread.
-                    _logWriter?.WriteLine(msg);
+                    // Open per write: the file is not held exclusively while AD FS runs (admins can read,
+                    // tail, or delete it), and a transient open failure self-heals on the next call.
+                    // FileShare allows concurrent readers + deletion; _logLock serializes our own writes.
+                    using (var stream = new FileStream(_config.LogPath, FileMode.Append, FileAccess.Write,
+                               FileShare.ReadWrite | FileShare.Delete))
+                    using (var writer = new StreamWriter(stream))
+                    {
+                        writer.WriteLine(msg);
+                    }
                 }
             }
             catch (Exception e)

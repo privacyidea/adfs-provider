@@ -512,7 +512,13 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// </summary>
         private string SendRequest(string endpoint, Dictionary<string, string> parameters, List<KeyValuePair<string, string>> headers = null, string method = "POST")
         {
-            Log("Sending [" + ParametersForLog(parameters) + "] to [" + endpoint + "] with method [" + method + "]");
+            // Guard the string-building: ParametersForLog allocates and iterates every parameter, and this
+            // runs on every request. LogServerResponse mirrors debug_log, so when debugging is off we skip
+            // the work entirely instead of composing a string the logger would discard.
+            if (LogServerResponse)
+            {
+                Log("Sending [" + ParametersForLog(parameters) + "] to [" + endpoint + "] with method [" + method + "]");
+            }
 
             string body = BuildFormBody(parameters);
             string url = this.Url + endpoint + (method == "POST" ? "" : "?" + body);
@@ -555,7 +561,10 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                 }
             }
 
-            Log("Headers: " + FormatHeadersForLog(request.Headers));
+            if (LogServerResponse)
+            {
+                Log("Headers: " + FormatHeadersForLog(request.Headers));
+            }
 
             if (method == "POST")
             {

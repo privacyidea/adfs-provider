@@ -16,6 +16,8 @@ After changing the configuration, the AD FS Service has to be restarted for the 
 
 The `service_pass` is additionally encrypted at rest using Windows DPAPI. You can enter it as plaintext (via the installer dialog or directly in the registry); the provider encrypts it in place the first time it reads it, replacing the value with an `enc:`-prefixed ciphertext. To change it later, simply enter a new plaintext value — it will be re-encrypted on the next read. This protects the password in registry exports and backups; it is *not* a boundary against a local administrator, who on an AD FS server already controls the token-signing key.
 
+DPAPI encryption is bound to the machine, so an encrypted value cannot be decrypted on a different server (e.g. after a restore, clone, or migration). On a new machine — including each node of an AD FS farm — enter the password again and it will be re-encrypted locally. The provider logs an event if it finds an `enc:` value it cannot decrypt.
+
 | Key Name | Explanation |
 | ----- | ----- |
 | url | The url of the privacyIDEA server. Has to include https://! |
