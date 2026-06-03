@@ -244,6 +244,11 @@ namespace privacyIDEAADFSProvider
                     authContext.Data["passkeyTransactionId"] = response.PasskeyTransactionID;
                     return form;
                 }
+                // ValidateInitialize failed (e.g. the server was unreachable). Surface it instead of
+                // falling through to the final else, which would fire an empty-pass /validate/check.
+                Error("Failed to initialize Passkey authentication: no response from the server.");
+                form.ErrorMessage = "Could not start Passkey authentication. Try again or use another token type.";
+                return form;
             }
 
             if (!string.IsNullOrEmpty(fr.PasskeySignResponse))
