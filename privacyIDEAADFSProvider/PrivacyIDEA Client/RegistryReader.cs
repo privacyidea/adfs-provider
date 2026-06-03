@@ -80,11 +80,12 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                 catch (Exception ex)
                 {
                     // DPAPI is machine-bound (LocalMachine scope): a value encrypted on another machine
-                    // (after a restore, clone or hardware change) cannot be decrypted here. Make the cause
-                    // and the fix explicit, because the empty value silently disables service-account features.
-                    _EventLogFunc?.Invoke($"Could not decrypt '{name}' (DPAPI). It was likely encrypted on a " +
-                        "different machine (e.g. a restored/cloned server). Re-enter the value via the installer " +
-                        $"or registry so it is re-encrypted on this machine. Details: {ex.Message}");
+                    // (after a restore, clone or hardware change) cannot be decrypted here. The stored value
+                    // could also simply be corrupt. Make the cause and the fix explicit, because the empty
+                    // return silently disables service-account features.
+                    _EventLogFunc?.Invoke($"Could not decrypt '{name}' (DPAPI) — the stored value is corrupt or " +
+                        "was encrypted on a different machine (e.g. a restored/cloned server). Re-enter the value " +
+                        $"via the installer or registry so it is re-encrypted on this machine. Details: {ex.Message}");
                     return "";
                 }
             }

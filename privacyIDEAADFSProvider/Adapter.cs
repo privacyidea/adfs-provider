@@ -655,13 +655,17 @@ namespace privacyIDEAADFSProvider
 
         // Serializes writes across concurrent ADFS worker threads; static so all Adapter instances share it.
         private static readonly object _logLock = new object();
+        // Tracks whether the last log write failed, so a persistently unwritable log_path produces ONE
+        // event-log entry per failure streak instead of one per debug line (which floods the event log).
+        // Reset on the first successful write, so logging still self-heals if the path becomes writable.
+        private static bool _logWriteFailed;
 
         public void LogImpl(string msg)
         {
             if (!_debugLog) return;
-            try
+            lock (_logLock)
             {
-                lock (_logLock)
+                try
                 {
                     // Open per write: the file is not held exclusively while AD FS runs (admins can read,
                     // tail, or delete it), and a transient open failure self-heals on the next call.
@@ -672,11 +676,18 @@ namespace privacyIDEAADFSProvider
                     {
                         writer.WriteLine(msg);
                     }
+                    _logWriteFailed = false;
                 }
-            }
-            catch (Exception e)
-            {
-                EventError("Error while trying to write to logfile: " + e.Message);
+                catch (Exception e)
+                {
+                    // Report only the first failure of a streak — otherwise a bad log_path emits one error
+                    // event per log line across every worker thread.
+                    if (!_logWriteFailed)
+                    {
+                        _logWriteFailed = true;
+                        EventError("Error while writing to logfile (suppressing further log-write errors until it recovers): " + e.Message);
+                    }
+                }
             }
         }
     }

@@ -8,10 +8,13 @@
 $netRelease = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full' -ErrorAction SilentlyContinue).Release
 if (-not $netRelease -or $netRelease -lt 528040)
 {
+    # exit 1 (not return): run via the MSI as `powershell.exe -File`, `return` exits with code 0, so the
+    # CAQuietExec custom action (Return="check") would treat it as success and install anyway. A non-zero
+    # exit makes the MSI abort, which is the whole point of failing fast here.
     Write-Error (".NET Framework 4.8 is required but was not detected on this machine. " +
         "Install it from https://dotnet.microsoft.com/download/dotnet-framework/net48 (a reboot may be required), " +
         "then re-run this script.")
-    return
+    exit 1
 }
 
 Set-Location -Path "C:\Program Files\PrivacyIDEA AD FS"

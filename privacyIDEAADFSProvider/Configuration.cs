@@ -1,4 +1,5 @@
 using PrivacyIDEAADFSProvider.PrivacyIDEA_Client;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -81,8 +82,23 @@ namespace PrivacyIDEAADFSProvider
                 var match = _tlsVersions.FirstOrDefault(kv => tlsVersion.Contains(kv.Key));
                 if (match.Key != null)
                 {
-                    ServicePointManager.SecurityProtocol = match.Value.Protocol;
-                    logFunction("Setting TLS version to " + match.Value.Label);
+                    try
+                    {
+                        ServicePointManager.SecurityProtocol = match.Value.Protocol;
+                        logFunction("Setting TLS version to " + match.Value.Label);
+                    }
+                    catch (Exception ex)
+                    {
+                        // The framework/OS may not support the requested protocol (e.g. tls13 on a Windows
+                        // build without TLS 1.3 in SChannel). A TLS preference must not take down provider
+                        // load, so fall back to the system default — which negotiates the best protocol the
+                        // OS supports (TLS 1.2/1.3 on a modern server), a superset of the intent rather than
+                        // a downgrade. Surface it in the EVENT LOG (not just the debug file) so an admin who
+                        // pinned a version for compliance reasons can see it was not applied.
+                        eventLogFunction?.Invoke($"Requested TLS version '{match.Value.Label}' could not be applied " +
+                            $"({ex.Message}). Falling back to the system default TLS negotiation. If TLS {match.Value.Label} " +
+                            "is required, ensure the operating system supports it.");
+                    }
                 }
                 else
                 {

@@ -8,23 +8,33 @@
 $policy = Get-AdfsGlobalAuthenticationPolicy
 $name = "privacyIDEAADFSProvider"
 
-if ($policy.PrimaryIntranetAuthenticationProvider -contains $name)
+# Wrapped so a policy-update quirk (e.g. AD FS rejecting an empty primary list if this provider was the
+# sole primary method) doesn't abort the whole uninstall before GAC removal. If detach fails, the later
+# Unregister may report "in use" — surface that rather than leaving the machine half-uninstalled.
+try
 {
-    $list = [System.Collections.Generic.List[string]]$policy.PrimaryIntranetAuthenticationProvider
-    [void]$list.Remove($name)
-    Set-AdfsGlobalAuthenticationPolicy -PrimaryIntranetAuthenticationProvider $list
+    if ($policy.PrimaryIntranetAuthenticationProvider -contains $name)
+    {
+        $list = [System.Collections.Generic.List[string]]$policy.PrimaryIntranetAuthenticationProvider
+        [void]$list.Remove($name)
+        Set-AdfsGlobalAuthenticationPolicy -PrimaryIntranetAuthenticationProvider $list
+    }
+    if ($policy.PrimaryExtranetAuthenticationProvider -contains $name)
+    {
+        $list = [System.Collections.Generic.List[string]]$policy.PrimaryExtranetAuthenticationProvider
+        [void]$list.Remove($name)
+        Set-AdfsGlobalAuthenticationPolicy -PrimaryExtranetAuthenticationProvider $list
+    }
+    if ($policy.AdditionalAuthenticationProvider -contains $name)
+    {
+        $list = [System.Collections.Generic.List[string]]$policy.AdditionalAuthenticationProvider
+        [void]$list.Remove($name)
+        Set-AdfsGlobalAuthenticationPolicy -AdditionalAuthenticationProvider $list
+    }
 }
-if ($policy.PrimaryExtranetAuthenticationProvider -contains $name)
+catch
 {
-    $list = [System.Collections.Generic.List[string]]$policy.PrimaryExtranetAuthenticationProvider
-    [void]$list.Remove($name)
-    Set-AdfsGlobalAuthenticationPolicy -PrimaryExtranetAuthenticationProvider $list
-}
-if ($policy.AdditionalAuthenticationProvider -contains $name)
-{
-    $list = [System.Collections.Generic.List[string]]$policy.AdditionalAuthenticationProvider
-    [void]$list.Remove($name)
-    Set-AdfsGlobalAuthenticationPolicy -AdditionalAuthenticationProvider $list
+    Write-Warning "Could not fully detach the provider from the global auth policy: $_"
 }
 
 # Unregister the provider and restart the AD FS service
