@@ -2,7 +2,7 @@
 This project builds on Stephan Traub's [original provider v1.3.8.2](https://github.com/sbidy/privacyIDEA-ADFSProvider/tree/f66100713e650d134ac50fcbd3965b71ae588d47). 
 
 ## Requirements
-To use the provider, the [.NET Framework 4.8](https://dotnet.microsoft.com/download/dotnet-framework/net48) is required on the target machine.
+The [.NET Framework 4.8](https://dotnet.microsoft.com/download/dotnet-framework/net48) is required on the target machine. It is included in-box on Windows Server 2022 and newer, but **not** on Server 2016 (ships with 4.6.2) or Server 2019 (ships with 4.7.2) — installing the ADFS role does not add it. On those versions install .NET Framework 4.8 first (it is also commonly delivered via Windows Update). `Install.ps1` checks for it and aborts with instructions if it is missing.
 
 ## Configuration
 Starting with v1.3.0, this provider *can* be used as primary authentication method in ADFS. However, ADFS will inject a form to request the username before this provider, even if it is configured as primary, which makes the experience of passkey usernameless authentication not great in ADFS.
@@ -11,6 +11,10 @@ You could then choose to add "Forms Authentication" as additional, to have the p
 
 The provider is configured using the registry. The keys are located at `HKEY_LOCAL_MACHINE\SOFTWARE\NetKnights GmbH\PrivacyIDEA-ADFS`.
 After changing the configuration, the AD FS Service has to be restarted for the changes to become active. This can be done using the PowerShell command `Restart-Service adfssrv`.
+
+`Install.ps1` hardens the access control list on this key: by default `HKLM\SOFTWARE` grants the local *Users* group read access, which would let any non-admin on the machine read the `service_pass` in cleartext. After installation only `SYSTEM`, `Administrators`, and the AD FS service account can access the key. If you create the configuration key *after* running the installer, re-run `Install.ps1` so the ACL is applied.
+
+The `service_pass` is additionally encrypted at rest using Windows DPAPI. You can enter it as plaintext (via the installer dialog or directly in the registry); the provider encrypts it in place the first time it reads it, replacing the value with an `enc:`-prefixed ciphertext. To change it later, simply enter a new plaintext value — it will be re-encrypted on the next read. This protects the password in registry exports and backups; it is *not* a boundary against a local administrator, who on an AD FS server already controls the token-signing key.
 
 | Key Name | Explanation |
 | ----- | ----- |
@@ -44,7 +48,7 @@ Adding `"SchUseStrongCrypto"=dword:00000001` to `HKEY_LOCAL_MACHINE\SOFTWARE\Mic
 and `HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft.NETFramework\v4.0.30319` fixes the problem.
 
 ## Event Log
-Errors will be written to the Windows Event Log in the `AD FS/Admin` category. To get a more detailed log, activate the `debug_log` setting as explained in the next section.
+Errors will be written to the Windows **Application** event log under the `privacyIDEAProvider` source. To get a more detailed log, activate the `debug_log` setting as explained in the next section.
 
 ## Debugging
 Errors in the provider can be found by looking at the Windows Event Log or activating the `debug_log` setting.

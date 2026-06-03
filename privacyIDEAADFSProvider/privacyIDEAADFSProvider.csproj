@@ -51,6 +51,7 @@
     <Reference Include="System.DirectoryServices" />
     <Reference Include="System.DirectoryServices.AccountManagement" />
     <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.Security" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -75,6 +76,7 @@
     <Compile Include="PrivacyIDEA Client\PrivacyIDEA.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="PrivacyIDEA Client\RegistryReader.cs" />
+    <Compile Include="PrivacyIDEA Client\SecretProtector.cs" />
     <Compile Include="Properties\Settings.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTimeSharedInput>True</DesignTimeSharedInput>

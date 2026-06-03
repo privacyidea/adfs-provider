@@ -32,7 +32,10 @@
 
 		<Property Id="ARPURLINFOABOUT" Value="$(var.AppURLInfoAbout)"/>
 		<Property Id="ARPNOREPAIR" Value="yes" Secure="yes" />
-		<Property Id="ARPNOMODIFY" Value="yes" Secure="yes" />
+		<!-- Allow Modify from the installed-apps list so admins can change configuration (e.g. the
+		     service password) without re-downloading the MSI. The ConfigurationDlg Change flow is
+		     already wired below. -->
+		<Property Id="ARPNOMODIFY" Value="no" Secure="yes" />
 
 		<Condition Message="You need to be an administrator to install this product.">Privileged</Condition>
 

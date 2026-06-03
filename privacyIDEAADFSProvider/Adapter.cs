@@ -445,7 +445,9 @@ namespace privacyIDEAADFSProvider
 
         public void OnAuthenticationPipelineLoad(IAuthenticationMethodConfigData configData)
         {
-            _config = new Configuration(Log);
+            // EventWarn (not Log) for the secret-at-rest sink: Log writes to the debug file, which is not
+            // open yet at this point and only exists when debug_log=1. The event log is always available.
+            _config = new Configuration(Log, EventWarn);
             _debugLog = _config.DebugLog;
             if (_debugLog)
             {
@@ -633,15 +635,31 @@ namespace privacyIDEAADFSProvider
         public void Error(Exception exception) =>
             Error(exception.Message + ":\n" + exception);
 
-        // Cached so each error doesn't reopen the "AD FS/Admin" event log. Writes are serialized:
+        // Cached so each error doesn't reopen the event log. Writes are serialized:
         // EventLog instance members are not guaranteed thread-safe and ADFS calls in from many threads.
-        private static readonly EventLog s_eventLog = new EventLog("AD FS/Admin") { Source = "privacyIDEAProvider" };
+        // We log to the standard Windows "Application" log, NOT "AD FS/Admin": the latter is an ETW
+        // channel, and addressing it through the classic EventLog API makes Windows create a bogus
+        // HKLM\SYSTEM\CurrentControlSet\Services\EventLog\AD FS/Admin key that shadows the channel and
+        // breaks AD FS event logging (and Windows Update). The "privacyIDEAProvider" source is
+        // registered in the Application log by Install.ps1.
+        private static readonly EventLog s_eventLog = new EventLog("Application") { Source = "privacyIDEAProvider" };
 
         private void EventError(string message)
         {
             lock (s_eventLog)
             {
                 s_eventLog.WriteEntry(message, EventLogEntryType.Error, 9901, 0);
+            }
+        }
+
+        // Warning-level event-log writes for notable-but-non-fatal conditions, e.g. the one-time
+        // migration of a plaintext secret to encrypted-at-rest (and its failures). Same serialization
+        // as EventError; independent of the debug log so these are always visible.
+        private void EventWarn(string message)
+        {
+            lock (s_eventLog)
+            {
+                s_eventLog.WriteEntry(message, EventLogEntryType.Warning, 9902, 0);
             }
         }
 

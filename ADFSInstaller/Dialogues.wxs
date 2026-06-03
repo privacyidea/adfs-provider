@@ -28,12 +28,19 @@
                     <Condition Action="enable">TRIGGERCHALLENGES=1</Condition>
 					<Condition Action="enable">ENABLEENROLL=1</Condition>
                 </Control>
-                <Control Type="Edit" Id="in_servicepass" Width="78" Height="15" X="170" Y="178" Text="Password" Property="SERVICEPASS" Help="Service password" ToolTip="Password of the service account.">
+                <!-- ToolTip is kept short: it maps to the MSI Control.Help column, which is capped at 50
+                     chars (ICE03). The full explanation lives in the note_encryption text below. -->
+                <Control Type="Edit" Id="in_servicepass" Width="78" Height="15" X="170" Y="178" Password="yes" Text="Password" Property="SERVICEPASS" ToolTip="Stored encrypted (enc: prefix).">
                     <Condition Action="disable">TRIGGERCHALLENGES&lt;&gt;1</Condition>
                     <Condition Action="enable">TRIGGERCHALLENGES=1</Condition>
 					<Condition Action="enable">ENABLEENROLL=1</Condition>
                 </Control>
                 <!-- END TRIGGER CHALLENGE / SEND PASSWORD CONTROLS -->
+                <!-- Explain the secret-at-rest behaviour. Visible (not a tooltip) because the MSI Help
+                     column is length-limited; this is where the actionable detail lives. -->
+                <Control Type="Text" Id="note_encryption" Width="110" Height="86" X="250" Y="66" NoPrefix="yes">
+                    <Text>Note: the service account password is stored encrypted (an "enc:" prefix is added). To change it, enter a new cleartext value here, or write it into the registry without the prefix - it is encrypted on the next AD FS restart.</Text>
+                </Control>
                 <Control Type="CheckBox" Id="cbox_upn" Width="50" Height="17" X="38" Y="135" Text="Use UPN" CheckBoxValue="1" Property="USEUPN" />
                 <Control Type="CheckBox" Id="cbox_debuglog" Width="116" Height="17" X="38" Y="214" Text="Activate debug log" CheckBoxValue="1" Property="DEBUGLOG" />
                 <!-- END MAIN -->

@@ -1,3 +1,20 @@
+## 2026-06-03 v1.4.0
+
+Support for privacyIDEA 3.13 features:
+* push_code_to_phone
+* enroll_via_multichallenge_optional
+* enroll_via_multichallenge for smartphone containers
+
+Secret handling:
+* The `service_pass` is now encrypted at rest with Windows DPAPI. Existing plaintext values (and values typed directly into the registry) are migrated to encrypted storage automatically the first time the provider reads them, with a one-time warning written to the event log.
+* The installer hardens the ACL on the configuration registry key so the `service_pass` is no longer readable by non-admin users on the machine.
+
+Other changes:
+* Added more German-speaking LCIDs (de-AT, de-CH, de-LI, de-LU).
+* Updated the event log location this application writes to. It now writes to the general Windows **Application** log with the source "privacyIDEAProvider". The installer repairs the stray "AD FS/Admin" classic log key that earlier versions created, and removes the event source on uninstall.
+* The installer now checks for .NET Framework 4.8 and aborts with instructions if it is missing.
+* The installer can now be launched in "Modify" mode from the Windows installed-apps list to change the configuration, and the service password field is masked.
+
 ## 2025-06-02 v1.3.0
 
 **Use this version only with privacyIDEA 3.11 or higher**

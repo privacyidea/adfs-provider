@@ -26,6 +26,30 @@ namespace Tests.Fixtures
             ""result"": {""authentication"": ""CHALLENGE"", ""status"": true, ""value"": false}
         }";
 
+        /// push_code_to_phone challenge — type=push but client_mode=interactive: the smartphone shows a
+        /// short code after the user confirms, which the user types into the OTP input. It can never be
+        /// answered by polling, so the client must NOT offer the push-poll option for it.
+        public const string CodeToPhoneChallenge = @"{
+            ""detail"": {
+                ""attributes"": {""hideResponseInput"": false},
+                ""client_mode"": ""interactive"",
+                ""message"": ""Please enter the code displayed on your smartphone."",
+                ""multi_challenge"": [{
+                    ""attributes"": {""hideResponseInput"": false},
+                    ""client_mode"": ""interactive"",
+                    ""message"": ""Please enter the code displayed on your smartphone."",
+                    ""serial"": ""PIPU0001F75E"",
+                    ""transaction_id"": ""00110530786071310297"",
+                    ""type"": ""push""
+                }],
+                ""preferred_client_mode"": ""interactive"",
+                ""serial"": ""PIPU0001F75E"",
+                ""transaction_id"": ""00110530786071310297"",
+                ""type"": ""push""
+            },
+            ""result"": {""authentication"": ""CHALLENGE"", ""status"": true, ""value"": false}
+        }";
+
         /// /validate/polltransaction response while the user has not yet confirmed.
         public const string PollPending = @"{
             ""detail"": {""challenge_status"": ""pending""},

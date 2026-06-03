@@ -26,4 +26,16 @@ Unregister-AdfsAuthenticationProvider -Name "privacyIDEAADFSProvider" -Confirm:$
 $publish = New-Object System.EnterpriseServices.Internal.Publish
 $publish.GacRemove($myDllFullName)
 
+# Remove the event log source registered by Install.ps1.
+if ([System.Diagnostics.EventLog]::SourceExists("privacyIDEAProvider"))
+{
+    [System.Diagnostics.EventLog]::DeleteEventSource("privacyIDEAProvider")
+}
+# Clean up the stray classic "AD FS/Admin" log key if an older (buggy) install left one. This only
+# exists on affected machines; on a healthy server "AD FS/Admin" is a channel, not a classic log.
+if ([System.Diagnostics.EventLog]::Exists("AD FS/Admin"))
+{
+    try { Remove-EventLog -LogName "AD FS/Admin" } catch { Write-Host "Could not remove stray 'AD FS/Admin' event log: $_" }
+}
+
 Restart-Service adfssrv

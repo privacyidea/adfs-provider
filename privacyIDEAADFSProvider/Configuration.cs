@@ -36,14 +36,14 @@ namespace PrivacyIDEAADFSProvider
                 ["tls13"] = (SecurityProtocolType.Tls13, "1.3"),
             };
 
-        public Configuration(LogFunction logFunction)
+        public Configuration(LogFunction logFunction, LogFunction eventLogFunction = null)
         {
-            ReadConfigFromRegistry(logFunction);
+            ReadConfigFromRegistry(logFunction, eventLogFunction);
         }
 
-        private void ReadConfigFromRegistry(LogFunction logFunction)
+        private void ReadConfigFromRegistry(LogFunction logFunction, LogFunction eventLogFunction)
         {
-            var registryReader = new RegistryReader(logFunction);
+            var registryReader = new RegistryReader(logFunction, eventLogFunction);
 
             string Get(string key, string defaultValue = "")
             {
@@ -58,7 +58,9 @@ namespace PrivacyIDEAADFSProvider
             Realm = Get("realm");
 
             ServiceUser = Get("service_user");
-            ServicePass = Get("service_pass");
+            // service_pass is a secret: ReadSecret decrypts it (and migrates any legacy plaintext to
+            // encrypted-at-rest). Returns "" when unset, same as Get.
+            ServicePass = registryReader.ReadSecret("service_pass");
             ServiceRealm = Get("service_realm");
 
             OtpHint = Get("otp_hint", "One-Time-Password");

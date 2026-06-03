@@ -40,12 +40,15 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             return Challenges.Select(challenge => challenge.Type).Distinct().ToList();
         }
 
-        // Returns "" (not null) when no push challenge is present, matching the rest of PIResponse's string defaults.
+        // Returns "" (not null) when no pollable push challenge is present, matching the rest of PIResponse's
+        // string defaults. Only poll-mode push counts: a code_to_phone push is type=push but client_mode=interactive
+        // (the user types the code shown on the phone) and can never be answered by polling, so it must not surface
+        // the "Push" poll option.
         public string PushMessage()
         {
             foreach (PIChallenge c in Challenges)
             {
-                if (c.Type == PITokenType.Push)
+                if (c.Type == PITokenType.Push && c.ClientMode == PIClientMode.Poll)
                 {
                     return c.Message;
                 }
