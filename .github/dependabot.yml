@@ -1,0 +1,23 @@
+version: 2
+updates:
+  # NuGet dependencies — the provider's packages.config (Newtonsoft.Json) and
+  # the test project's PackageReferences (WireMock.Net, MSTest, etc.).
+  - package-ecosystem: nuget
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      test-dependencies:
+        patterns:
+          - "MSTest*"
+          - "Microsoft.NET.Test.Sdk"
+          - "coverlet*"
+          - "WireMock.Net"
+
+  # Keep the GitHub Actions used by the CI and CodeQL workflows up to date.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5

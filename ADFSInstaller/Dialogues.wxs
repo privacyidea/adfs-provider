@@ -29,18 +29,19 @@
 					<Condition Action="enable">ENABLEENROLL=1</Condition>
                 </Control>
                 <!-- ToolTip is kept short: it maps to the MSI Control.Help column, which is capped at 50
-                     chars (ICE03). The full explanation lives in the note_encryption text below. -->
+                     chars (ICE03). The full explanation is behind the "?" info button (btn_pass_info). -->
                 <Control Type="Edit" Id="in_servicepass" Width="78" Height="15" X="170" Y="178" Password="yes" Text="Password" Property="SERVICEPASS" ToolTip="Stored encrypted (enc: prefix).">
                     <Condition Action="disable">TRIGGERCHALLENGES&lt;&gt;1</Condition>
                     <Condition Action="enable">TRIGGERCHALLENGES=1</Condition>
 					<Condition Action="enable">ENABLEENROLL=1</Condition>
                 </Control>
-                <!-- END TRIGGER CHALLENGE / SEND PASSWORD CONTROLS -->
-                <!-- Explain the secret-at-rest behaviour. Visible (not a tooltip) because the MSI Help
-                     column is length-limited; this is where the actionable detail lives. -->
-                <Control Type="Text" Id="note_encryption" Width="110" Height="86" X="250" Y="66" NoPrefix="yes">
-                    <Text>Note: the service account password is stored encrypted (an "enc:" prefix is added). To change it, enter a new cleartext value here, or write it into the registry without the prefix - it is encrypted on the next AD FS restart.</Text>
+                <!-- Small info button next to the password field. MSI cannot show a long hover tooltip
+                     (the Help column is ~50 chars), so clicking it opens PasswordEncryptionInfoDlg with the
+                     full explanation. This frees the dialog space the old inline note consumed. -->
+                <Control Type="PushButton" Id="btn_pass_info" Width="16" Height="16" X="250" Y="177" Text="?" ToolTip="Password storage info (click)">
+                    <Publish Event="SpawnDialog" Value="PasswordEncryptionInfoDlg">1</Publish>
                 </Control>
+                <!-- END TRIGGER CHALLENGE / SEND PASSWORD CONTROLS -->
                 <Control Type="CheckBox" Id="cbox_upn" Width="50" Height="17" X="38" Y="135" Text="Use UPN" CheckBoxValue="1" Property="USEUPN" />
                 <Control Type="CheckBox" Id="cbox_debuglog" Width="116" Height="17" X="38" Y="214" Text="Activate debug log" CheckBoxValue="1" Property="DEBUGLOG" />
                 <!-- END MAIN -->
@@ -50,7 +51,10 @@
                 </Control>
                 <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="&amp;Next">
                     <Publish Event="NewDialog" Value="VerifyReadyDlg">URL</Publish>
-                    <Publish Event="SpawnDialog" Value="NoServerURLMessageDlg">URL="Server URL"</Publish>
+                    <!-- URL is mandatory: if the property is empty, show the hint dialog instead of
+                         silently doing nothing. (The previous condition compared against a literal
+                         "Server URL" that the field never contained, so neither publish fired.) -->
+                    <Publish Event="SpawnDialog" Value="NoServerURLMessageDlg">NOT URL</Publish>
                 </Control>
                 <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel">
                     <Publish Event="SpawnDialog" Value="CancelDlg">1</Publish>
@@ -76,6 +80,15 @@
                     <Text>
             The Server URL is mandatory!
           </Text>
+                </Control>
+            </Dialog>
+            <!-- Full explanation behind the "?" info button on the password field. -->
+            <Dialog Id="PasswordEncryptionInfoDlg" Width="280" Height="150" Title="[ProductName] Setup" NoMinimize="yes">
+                <Control Id="InfoText" Type="Text" X="15" Y="15" Width="250" Height="95" TabSkip="no" NoPrefix="yes">
+                    <Text>The service account password is stored encrypted (an "enc:" prefix is added to the registry value). To change it later, enter a new cleartext value here, or write it into the registry without the prefix - the provider encrypts it on the next AD FS restart.</Text>
+                </Control>
+                <Control Id="OK" Type="PushButton" X="112" Y="120" Width="56" Height="17" Default="yes" Cancel="yes" Text="&amp;OK">
+                    <Publish Event="EndDialog" Value="Return">1</Publish>
                 </Control>
             </Dialog>
         </UI>
