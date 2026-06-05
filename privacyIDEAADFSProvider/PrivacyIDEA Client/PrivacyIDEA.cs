@@ -744,8 +744,13 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         }
 
         /// <summary>
-        /// Builds the parameter list for the request log, masking the service account password.
+        /// Builds the parameter list for the request log, masking secrets. "password" is the service
+        /// account password; "pass" is the user's credential on /validate/check and in privacyIDEA carries
+        /// the static PIN prefix in front of the OTP — neither must reach the (possibly long-lived) debug log.
         /// </summary>
+        private static readonly HashSet<string> _maskedLogParameters =
+            new HashSet<string>(StringComparer.Ordinal) { "password", "pass" };
+
         private static string ParametersForLog(Dictionary<string, string> parameters)
         {
             var sb = new StringBuilder();
@@ -755,7 +760,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                 if (!first) sb.Append(" , ");
                 first = false;
                 sb.Append('[').Append(kv.Key).Append(", ");
-                sb.Append(kv.Key == "password" ? "***" : kv.Value);
+                sb.Append(_maskedLogParameters.Contains(kv.Key) ? "***" : kv.Value);
                 sb.Append(']');
             }
             return sb.ToString();

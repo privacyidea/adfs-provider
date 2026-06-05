@@ -52,6 +52,19 @@ and `HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft.NETFramework\v4.0.30319` 
 ## Event Log
 Errors will be written to the Windows **Application** event log under the `privacyIDEAProvider` source. To get a more detailed log, activate the `debug_log` setting as explained in the next section.
 
+## Logging and personal data
+The detailed debug log (`debug_log`, written to `C:\PrivacyIDEA-ADFS log.txt`) is **off by default** and should only be enabled while troubleshooting. When enabled, it contains personal data and should be treated accordingly:
+
+- **Usernames, UPNs and domains** are recorded so that an authentication can be traced end to end. This is required for the log to be useful for diagnostics and for security auditing.
+- **Full server responses** from privacyIDEA are recorded as well; these may include token serials and any user attributes the server returns.
+- **Secrets are masked.** The service account password (`password`), the user credential (`pass`, which in privacyIDEA carries the static PIN in front of the OTP) and the `Authorization` header (JWT) are redacted before anything is written. One-time values such as transaction IDs are not secrets and are logged in clear text.
+
+This log lives on your own AD FS server and is under your control as the data controller. To meet your obligations (GDPR / ISO 27001):
+
+- Keep `debug_log` disabled in normal operation and re-disable it once a problem is resolved.
+- Restrict read access to the log file to administrators, and define a retention period after which it is deleted.
+- Treat the file as in scope for your access-control, retention and audit-logging controls.
+
 ## Debugging
 Errors in the provider can be found by looking at the Windows Event Log or activating the `debug_log` setting.
 If the installer fails to install/uninstall the Provider, a logfile for that process can be created using the `cmd`:
