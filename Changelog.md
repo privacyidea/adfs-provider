@@ -14,6 +14,7 @@ Other changes:
 * Updated the event log location this application writes to. It now writes to the general Windows **Application** log with the source "privacyIDEAProvider" (if an earlier version registered the source under a different log, it is moved to Application automatically). The event source is removed on uninstall.
 * The installer now checks for .NET Framework 4.8 and aborts with instructions if it is missing.
 * The service password field in the installer is masked.
+* The debug log location is now configurable via the `log_path` registry setting (defaults to the previous `C:\PrivacyIDEA-ADFS log.txt`).
 
 ## 2025-06-02 v1.3.0
 

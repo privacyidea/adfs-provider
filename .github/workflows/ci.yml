@@ -19,6 +19,8 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -59,3 +61,36 @@ jobs:
           name: test-results
           path: TestResults/*.trx
           if-no-files-found: ignore
+
+  # Generates a CycloneDX Software Bill of Materials for the third-party components
+  # (driven by the provider's packages.config — currently Newtonsoft.Json). The SBOM is
+  # uploaded as a build artifact on every run, and attached to the GitHub Release when one
+  # is published, so each shipped version has a matching, machine-readable component list.
+  sbom:
+    runs-on: windows-latest
+    permissions:
+      contents: write  # needed to attach the SBOM asset to a release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate SBOM (CycloneDX)
+        shell: pwsh
+        run: |
+          # Pin the tool version for reproducible, supply-chain-stable SBOM generation.
+          dotnet tool install --global CycloneDX --version 6.2.0
+          dotnet CycloneDX privacyIDEAADFSProvider\packages.config --output sbom --json --filename bom.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom/bom.json
+          if-no-files-found: error
+
+      - name: Attach SBOM to release
+        if: github.event_name == 'release'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" sbom/bom.json --clobber

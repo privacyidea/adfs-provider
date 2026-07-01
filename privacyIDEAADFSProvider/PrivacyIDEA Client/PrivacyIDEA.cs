@@ -28,13 +28,6 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         public bool LogServerResponse { get; set; } = true;
         public IPILog? Logger { get; set; }
 
-        // The webauthn parameters should not be url encoded because they already have the correct format.
-        // Matched case-insensitively, so the casing of these entries doesn't matter.
-        private static readonly HashSet<string> _excludeFromURIEscape = new HashSet<string>(
-           new[] { "credentialid", "credential_id", "clientdata", "clientdatajson", "signaturedata", "signature", "authenticatordata",
-               "userhandle", "raw_id", "rawid", "assertionclientextensions", "authenticatorattachment", "attestationobject" },
-           StringComparer.OrdinalIgnoreCase);
-
         private static readonly List<string> _logExcludedEndpoints = new List<string>(new string[]
            { "/auth", "/validate/polltransaction" });
 
@@ -767,9 +760,12 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         }
 
         /// <summary>
-        /// URL-encodes a dictionary as an application/x-www-form-urlencoded body string.
-        /// Keys in _excludeFromURIEscape are passed through unescaped (WebAuthn/FIDO2 fields
-        /// already have the correct on-wire format).
+        /// URL-encodes a dictionary as an application/x-www-form-urlencoded body string. EVERY value is
+        /// percent-encoded, including WebAuthn/FIDO2 fields: they are base64url (the browser side converts
+        /// +/ to -_), which Uri.EscapeDataString leaves untouched, so the on-wire bytes are unchanged for
+        /// padding-less values and only '=' padding becomes %3D — which privacyIDEA decodes back to '=',
+        /// matching its canonical request format. Escaping is also what prevents a value that contains '&'
+        /// or '=' (e.g. a crafted userHandle) from injecting extra parameters into the request body.
         /// </summary>
         internal string BuildFormBody(Dictionary<string, string> dict)
         {
@@ -777,7 +773,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             foreach (var element in dict)
             {
                 sb.Append(element.Key).Append("=");
-                sb.Append(_excludeFromURIEscape.Contains(element.Key) ? element.Value : Uri.EscapeDataString(element.Value));
+                sb.Append(Uri.EscapeDataString(element.Value));
                 sb.Append("&");
             }
             if (sb.Length > 0)

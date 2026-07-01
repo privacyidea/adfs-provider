@@ -13,6 +13,10 @@ namespace PrivacyIDEAADFSProvider
         public List<string> ForwardHeaders { get; set; } = new List<string>();
         public bool ForwardClientIP { get; set; } = false;
         public bool ForwardClientUserAgent { get; set; } = false;
+        // IPs/CIDRs of reverse proxies allowed to set X-Forwarded-For. When non-empty, XFF is only honored
+        // if the direct TCP peer is in this list (so a client talking to AD FS directly can't spoof its
+        // source IP and bypass IP-based privacyIDEA policies). Empty preserves the legacy trust-XFF behavior.
+        public List<string> TrustedProxies { get; set; } = new List<string>();
         public bool DebugLog { get; set; } = false;
         public string OtpHint { get; set; } = "One-Time-Password";
         public bool UseUPN { get; set; } = false;
@@ -32,10 +36,14 @@ namespace PrivacyIDEAADFSProvider
         private static readonly Dictionary<string, (SecurityProtocolType Protocol, string Label)> _tlsVersions =
             new Dictionary<string, (SecurityProtocolType, string)>
             {
-                ["tls11"] = (SecurityProtocolType.Tls11, "1.1"),
                 ["tls12"] = (SecurityProtocolType.Tls12, "1.2"),
                 ["tls13"] = (SecurityProtocolType.Tls13, "1.3"),
             };
+
+        // Protocols we refuse to pin: TLS 1.1 and older are deprecated and insecure. A request for one is
+        // ignored with a warning, leaving the system-default negotiation (TLS 1.2/1.3) in place rather than
+        // forcing a downgrade. Order/length irrelevant; matched as substrings like the supported versions.
+        private static readonly string[] _deprecatedTlsVersions = { "ssl3", "tls10", "tls11" };
 
         public Configuration(LogFunction logFunction, LogFunction eventLogFunction = null)
         {
@@ -56,6 +64,16 @@ namespace PrivacyIDEAADFSProvider
             DebugLog = GetBool("debug_log");
             Url = Get("url");
             DisableSSL = GetBool("disable_ssl");
+            if (DisableSSL)
+            {
+                // Security-relevant weakening that is otherwise invisible at runtime: surface it in the
+                // EVENT LOG (always available, unlike the debug file) on every provider load so it can be
+                // alerted on and audited. Without this, an estate could run with TLS verification off and
+                // leave no trace — which defeats any "transport security is enforced" control.
+                eventLogFunction?.Invoke("SSL/TLS certificate validation is DISABLED (disable_ssl=1). The connection " +
+                    "to the privacyIDEA server is NOT authenticated and is vulnerable to interception. This must not " +
+                    "be used in production — remove the disable_ssl setting to restore certificate verification.");
+            }
             Realm = Get("realm");
 
             ServiceUser = Get("service_user");
@@ -79,30 +97,42 @@ namespace PrivacyIDEAADFSProvider
             string tlsVersion = Get("tls_version");
             if (!string.IsNullOrEmpty(tlsVersion))
             {
-                var match = _tlsVersions.FirstOrDefault(kv => tlsVersion.Contains(kv.Key));
-                if (match.Key != null)
+                if (_deprecatedTlsVersions.Any(v => tlsVersion.Contains(v)))
                 {
-                    try
-                    {
-                        ServicePointManager.SecurityProtocol = match.Value.Protocol;
-                        logFunction("Setting TLS version to " + match.Value.Label);
-                    }
-                    catch (Exception ex)
-                    {
-                        // The framework/OS may not support the requested protocol (e.g. tls13 on a Windows
-                        // build without TLS 1.3 in SChannel). A TLS preference must not take down provider
-                        // load, so fall back to the system default — which negotiates the best protocol the
-                        // OS supports (TLS 1.2/1.3 on a modern server), a superset of the intent rather than
-                        // a downgrade. Surface it in the EVENT LOG (not just the debug file) so an admin who
-                        // pinned a version for compliance reasons can see it was not applied.
-                        eventLogFunction?.Invoke($"Requested TLS version '{match.Value.Label}' could not be applied " +
-                            $"({ex.Message}). Falling back to the system default TLS negotiation. If TLS {match.Value.Label} " +
-                            "is required, ensure the operating system supports it.");
-                    }
+                    // Don't honor a request to pin a deprecated protocol. Warn in the event log (an admin may
+                    // have set it for "compliance" and needs to know it was rejected) and leave the system
+                    // default in place, which negotiates TLS 1.2/1.3 on a modern server.
+                    eventLogFunction?.Invoke($"Configured tls_version '{tlsVersion}' selects a deprecated, insecure " +
+                        "protocol (TLS 1.1 or older). Ignoring it and using the system-default TLS negotiation " +
+                        "(TLS 1.2/1.3). Set tls_version to 'tls12' or 'tls13'.");
                 }
                 else
                 {
-                    logFunction($"Given TLS version ({tlsVersion}) has wrong format! Using default version from system.");
+                    var match = _tlsVersions.FirstOrDefault(kv => tlsVersion.Contains(kv.Key));
+                    if (match.Key != null)
+                    {
+                        try
+                        {
+                            ServicePointManager.SecurityProtocol = match.Value.Protocol;
+                            logFunction("Setting TLS version to " + match.Value.Label);
+                        }
+                        catch (Exception ex)
+                        {
+                            // The framework/OS may not support the requested protocol (e.g. tls13 on a Windows
+                            // build without TLS 1.3 in SChannel). A TLS preference must not take down provider
+                            // load, so fall back to the system default — which negotiates the best protocol the
+                            // OS supports (TLS 1.2/1.3 on a modern server), a superset of the intent rather than
+                            // a downgrade. Surface it in the EVENT LOG (not just the debug file) so an admin who
+                            // pinned a version for compliance reasons can see it was not applied.
+                            eventLogFunction?.Invoke($"Requested TLS version '{match.Value.Label}' could not be applied " +
+                                $"({ex.Message}). Falling back to the system default TLS negotiation. If TLS {match.Value.Label} " +
+                                "is required, ensure the operating system supports it.");
+                        }
+                    }
+                    else
+                    {
+                        logFunction($"Given TLS version ({tlsVersion}) has wrong format! Using default version from system.");
+                    }
                 }
             }
 
@@ -122,6 +152,13 @@ namespace PrivacyIDEAADFSProvider
             DisablePasskey = GetBool("disable_passkey");
             ForwardClientIP = GetBool("forward_client_ip");
             ForwardClientUserAgent = GetBool("forward_client_user_agent");
+
+            string trustedProxies = Get("trusted_proxies");
+            if (!string.IsNullOrEmpty(trustedProxies))
+            {
+                TrustedProxies = trustedProxies.Replace(" ", "").Split(',')
+                    .Where(s => !string.IsNullOrEmpty(s)).ToList();
+            }
 
             string configuredLogPath = Get("log_path");
             if (!string.IsNullOrEmpty(configuredLogPath))

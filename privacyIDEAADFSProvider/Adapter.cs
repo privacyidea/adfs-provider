@@ -438,13 +438,91 @@ namespace privacyIDEAADFSProvider
 
         private string GetClientIPAddress(HttpListenerRequest request)
         {
-            // X-Forwarded-For wins so requests via a reverse proxy report the real client IP.
-            string clientIP = request.Headers["X-Forwarded-For"];
-            if (string.IsNullOrEmpty(clientIP))
+            string peer = request.RemoteEndPoint?.Address?.ToString();
+            string forwardedFor = request.Headers["X-Forwarded-For"];
+            if (string.IsNullOrEmpty(forwardedFor))
             {
-                clientIP = request.RemoteEndPoint?.Address?.ToString();
+                return peer ?? "unknown";
             }
-            return clientIP ?? "unknown";
+
+            // X-Forwarded-For is set by the client and therefore spoofable. privacyIDEA can use the
+            // forwarded IP for policy decisions (geo-fencing, IP allow/deny), so a request reaching AD FS
+            // directly could forge this header to bypass those policies. Only honor it when the direct TCP
+            // peer is a configured trusted proxy. With no trusted_proxies configured we keep the legacy
+            // behavior of trusting XFF (documented as insecure) so existing deployments don't silently break.
+            // TODO(next major): make secure-by-default — ignore XFF unless a trusted proxy is configured.
+            if (_config.TrustedProxies.Count == 0 || IsTrustedProxy(peer))
+            {
+                // "client, proxy1, proxy2" — the left-most entry is the originating client.
+                string forwardedClient = forwardedFor.Split(',')[0].Trim();
+                if (!string.IsNullOrEmpty(forwardedClient))
+                {
+                    return forwardedClient;
+                }
+            }
+            return peer ?? "unknown";
+        }
+
+        /// <summary>True if the given IP matches any configured trusted-proxy entry (exact IP or CIDR).</summary>
+        private bool IsTrustedProxy(string peerIp)
+        {
+            if (string.IsNullOrEmpty(peerIp) || !IPAddress.TryParse(peerIp, out IPAddress peer))
+            {
+                return false;
+            }
+            foreach (string entry in _config.TrustedProxies)
+            {
+                if (IpMatches(peer, entry))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Matches an address against a trusted-proxy entry that is either a bare IP ("10.0.0.5") or a
+        /// CIDR range ("10.0.0.0/24"). Works for both IPv4 and IPv6; a v4/v6 family mismatch never matches.
+        /// </summary>
+        private static bool IpMatches(IPAddress address, string entry)
+        {
+            string[] parts = entry.Split('/');
+            if (!IPAddress.TryParse(parts[0], out IPAddress network))
+            {
+                return false;
+            }
+            byte[] addrBytes = address.GetAddressBytes();
+            byte[] netBytes = network.GetAddressBytes();
+            if (addrBytes.Length != netBytes.Length)
+            {
+                return false; // different address families (IPv4 vs IPv6)
+            }
+            if (parts.Length == 1)
+            {
+                return addrBytes.SequenceEqual(netBytes);
+            }
+            if (!int.TryParse(parts[1], out int prefix) || prefix < 0 || prefix > addrBytes.Length * 8)
+            {
+                return false;
+            }
+            int fullBytes = prefix / 8;
+            for (int i = 0; i < fullBytes; i++)
+            {
+                if (addrBytes[i] != netBytes[i])
+                {
+                    return false;
+                }
+            }
+            int remainingBits = prefix % 8;
+            if (remainingBits > 0)
+            {
+                int mask = 0xFF << (8 - remainingBits) & 0xFF;
+                if ((addrBytes[fullBytes] & mask) != (netBytes[fullBytes] & mask))
+                {
+                    return false;
+                }
+            }
+            return true;
         }
 
         public void OnAuthenticationPipelineLoad(IAuthenticationMethodConfigData configData)
@@ -685,6 +763,32 @@ namespace privacyIDEAADFSProvider
                 }
                 catch (Exception e)
                 {
+                    // A missing parent directory is the common first-write case for a custom log_path.
+                    // Only attempt to create it on the failure path so the happy path stays a plain append
+                    // (no per-line directory check). Guard null/empty: GetDirectoryName returns "" for a
+                    // bare filename and null for a drive root, and CreateDirectory("") throws.
+                    try
+                    {
+                        string dir = Path.GetDirectoryName(_config.LogPath);
+                        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                        {
+                            Directory.CreateDirectory(dir);
+                            using (var stream = new FileStream(_config.LogPath, FileMode.Append, FileAccess.Write,
+                                       FileShare.ReadWrite | FileShare.Delete))
+                            using (var writer = new StreamWriter(stream))
+                            {
+                                writer.WriteLine(msg);
+                            }
+                            _logWriteFailed = false;
+                            return;
+                        }
+                    }
+                    catch
+                    {
+                        // Fall through to the error reporting below — the path is genuinely unwritable
+                        // (permissions, bad drive, etc.), not merely missing its parent directory.
+                    }
+
                     // Report only the first failure of a streak — otherwise a bad log_path emits one error
                     // event per log line across every worker thread.
                     if (!_logWriteFailed)
