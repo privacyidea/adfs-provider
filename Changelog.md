@@ -1,4 +1,4 @@
-## 2026-06-03 v1.4.0
+## 2026-07-02 v1.4.0
 
 Support for privacyIDEA 3.13 features:
 * push_code_to_phone
