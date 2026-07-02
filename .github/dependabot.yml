@@ -14,6 +14,21 @@ updates:
           - "Microsoft.NET.Test.Sdk"
           - "coverlet*"
           - "WireMock.Net"
+    # Hold back major-version bumps of the test stack: MSTest 4 / Test.Sdk 18 /
+    # coverlet 10 pivot to Microsoft.Testing.Platform and .NET 10 tooling, which
+    # breaks our net8.0 + vstest.console setup. Minor/patch updates still flow.
+    # Revisit as a deliberate migration, not an automated bump.
+    ignore:
+      - dependency-name: "MSTest.TestAdapter"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "MSTest.TestFramework"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.NET.Test.Sdk"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "coverlet.collector"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "WireMock.Net"
+        update-types: ["version-update:semver-major"]
 
   # Keep the GitHub Actions used by the CI and CodeQL workflows up to date.
   - package-ecosystem: github-actions
