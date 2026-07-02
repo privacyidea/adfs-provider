@@ -9,6 +9,11 @@ Secret handling:
 * The `service_pass` is now encrypted at rest with Windows DPAPI. Existing plaintext values (and values typed directly into the registry) are migrated to encrypted storage automatically the first time the provider reads them, with a one-time warning written to the event log.
 * The installer hardens the ACL on the configuration registry key so the `service_pass` is no longer readable by non-admin users on the machine.
 
+Security hardening:
+* New `forward_client_ip` and `forward_client_user_agent` settings forward the client IP (as the `client` parameter) and the client `User-Agent` header (as the `client_user_agent` parameter) to privacyIDEA for server-side policy decisions. When forwarding the client IP, set the new `trusted_proxies` setting to the IP(s)/CIDR(s) of your reverse proxy so a spoofed `X-Forwarded-For` from a client reaching AD FS directly cannot bypass IP-based policies.
+* When SSL/TLS certificate validation is disabled (`disable_ssl=1`), the provider now writes a warning to the Windows Application event log on every service start, so this insecure state can be audited.
+* Deprecated TLS versions requested via `tls_version` (`tls11` and older) are now rejected: the provider logs a warning and falls back to the system-default negotiation (TLS 1.2/1.3) instead of downgrading.
+
 Other changes:
 * Added more German-speaking LCIDs (de-AT, de-CH, de-LI, de-LU).
 * Updated the event log location this application writes to. It now writes to the general Windows **Application** log with the source "privacyIDEAProvider" (if an earlier version registered the source under a different log, it is moved to Application automatically). The event source is removed on uninstall.
