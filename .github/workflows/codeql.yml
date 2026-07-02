@@ -31,15 +31,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
+        uses: actions/checkout@v4
 
       - name: Add MSBuild to PATH
-        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
+        uses: microsoft/setup-msbuild@v2
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
+        uses: github/codeql-action/init@v3
         with:
           languages: csharp
           build-mode: manual
@@ -51,6 +49,6 @@ jobs:
           msbuild privacyIDEAADFSProvider\privacyIDEAADFSProvider.csproj /p:Configuration=Release /p:SignAssembly=false /v:minimal /nologo
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
+        uses: github/codeql-action/analyze@v3
         with:
           category: "/language:csharp"
