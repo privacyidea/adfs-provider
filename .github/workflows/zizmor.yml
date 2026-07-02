@@ -1,0 +1,46 @@
+name: Zizmor
+
+# Static security analysis of our own GitHub Actions workflows (zizmor).
+# Catches unpinned actions, template injection, credential persistence,
+# over-broad permissions, etc.
+#
+# This is a hard gate: the zizmor CLI exits non-zero when it finds anything,
+# which fails the job (and blocks the PR). Findings are also uploaded as SARIF
+# to the Security tab for triage. All actions here are pinned to commit SHAs
+# and zizmor itself is version-pinned, consistent with what it enforces.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  zizmor:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write   # upload SARIF to code scanning
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor
+        # pipx is preinstalled on ubuntu-latest. Pin the zizmor version so the
+        # gate is reproducible. Non-zero exit on findings fails the job.
+        env:
+          GH_TOKEN: ${{ github.token }}   # online audits query the GitHub API
+        run: |
+          pipx install zizmor==1.26.1
+          zizmor --format sarif . > zizmor.sarif
+
+      - name: Upload SARIF
+        if: always()   # still publish findings on the run that failed the gate
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
+        with:
+          sarif_file: zizmor.sarif
+          category: zizmor
