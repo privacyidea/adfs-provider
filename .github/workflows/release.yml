@@ -1,0 +1,85 @@
+name: Release
+
+# Creates a GitHub release when a version tag (e.g. v1.4.0) is pushed.
+#
+# This does NOT build the MSI. The installer is Authenticode code-signed with a
+# certificate that is deliberately kept off GitHub (putting a release-signing
+# cert in Actions secrets would weaken the very signature that proves package
+# integrity to the enterprise estate consuming this provider). So the release is
+# created as a PRE-RELEASE with the title and notes already filled in from the
+# changelog; the maintainer then attaches the locally built + signed .msi and
+# flips it to "latest".
+#
+# The release body is the changelog section whose header matches the tag — i.e.
+# a "## <date> vX.Y.Z" heading containing the tag (with or without a leading v).
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build the release for (e.g. v1.4.0)'
+        required: true
+
+permissions:
+  contents: write   # required to create a release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract changelog section for this tag
+        id: changelog
+        env:
+          RAW_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          VER="${RAW_TAG#v}"      # strip a leading v: v1.4.0 -> 1.4.0
+          VTAG="v${VER}"          # normalized form with v
+          echo "Resolving changelog section for tag '$RAW_TAG' (matching '$VER' or '$VTAG')"
+
+          # Print everything under the first "## ..." heading whose whitespace-
+          # delimited tokens include the version, up to the next "## " heading.
+          awk -v ver="$VER" -v vtag="$VTAG" '
+            /^## / {
+              if (found) exit
+              for (i = 1; i <= NF; i++) if ($i == ver || $i == vtag) { found = 1; break }
+              if (found) next
+            }
+            found { print }
+          ' Changelog.md > section.md
+
+          # Trim leading and trailing blank lines.
+          sed -i -e '/./,$!d' section.md
+          tac section.md | sed -e '/./,$!d' | tac > notes.md
+
+          if [ ! -s notes.md ]; then
+            echo "::error::No changelog section found for tag '$RAW_TAG'. Add a '## <date> ${VTAG}' entry to Changelog.md."
+            exit 1
+          fi
+
+          echo "----- release notes -----"
+          cat notes.md
+          echo "--------------------------"
+
+      - name: Create pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RAW_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RAW_TAG" >/dev/null 2>&1; then
+            echo "::error::A release for '$RAW_TAG' already exists. Delete it first if you want to recreate it."
+            exit 1
+          fi
+          gh release create "$RAW_TAG" \
+            --title "$RAW_TAG" \
+            --notes-file notes.md \
+            --prerelease \
+            --verify-tag
+          echo "Created pre-release '$RAW_TAG'. Attach the signed .msi and flip it to latest when ready."

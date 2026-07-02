@@ -1,13 +1,11 @@
-﻿using Newtonsoft.Json;
+﻿#nullable enable annotations
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Security.Cryptography;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
 {
@@ -17,46 +15,18 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         public string Realm { get; set; } = "";
         public Dictionary<string, string> RealmMap { get; set; } = new Dictionary<string, string>();
 
-        private bool _sslVerify = true;
-        public bool SSLVerify
-        {
-            get
-            {
-                return _sslVerify;
-            }
-            set
-            {
-                if (SSLVerify != _sslVerify)
-                {
-                    _httpClientHandler = new HttpClientHandler();
-                    if (!SSLVerify)
-                    {
-                        _httpClientHandler.ClientCertificateOptions = ClientCertificateOption.Manual;
-                        _httpClientHandler.ServerCertificateCustomValidationCallback =
-                            HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
-                    }
-                    _httpClient = new HttpClient(_httpClientHandler);
-                    _httpClient.DefaultRequestHeaders.Add("User-Agent", _userAgent);
-                    _sslVerify = SSLVerify;
-                }
-            }
-        }
-
-        private HttpClientHandler _httpClientHandler;
-        private HttpClient _httpClient;
-        private bool _disposedValue;
-        private string _serviceUser;
-        private string _servicePass;
-        private string _serviceRealm;
+        private readonly bool _sslVerify;
         private readonly string _userAgent;
-        private readonly bool _logServerResponse = true;
-        public IPILog Logger { get; set; } = null;
-
-        // The webauthn parameters should not be url encoded because they already have the correct format.
-        // Comparison is done in lower case, so add them there in lower case
-        private static readonly List<string> _excludeFromURIEscape = new List<string>(new string[]
-           { "credentialid", "credential_id", "clientdata", "clientdatajson", "signaturedata", "signature", "authenticatordata",
-               "userhandle", "raw_id", "rawid", "assertionclientextensions", "authenticatorattachment", "attestationobject" });
+        private string? _authToken;
+        private string? _serviceUser;
+        private string? _servicePass;
+        private string? _serviceRealm;
+        private readonly object _jwtLock = new object();
+        private DateTime _jwtExpiry = DateTime.MinValue;
+        // When false, suppresses the pretty-printed response log line (which costs a full JToken.Parse + ToString).
+        // Adapter ties this to its debug_log registry flag.
+        public bool LogServerResponse { get; set; } = true;
+        public IPILog? Logger { get; set; }
 
         private static readonly List<string> _logExcludedEndpoints = new List<string>(new string[]
            { "/auth", "/validate/polltransaction" });
@@ -64,29 +34,23 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         public PrivacyIDEA(string url, string useragent, bool sslVerify = true)
         {
             this.Url = url;
-            this._userAgent = useragent;
+            _userAgent = useragent;
+            _sslVerify = sslVerify;
 
-            _httpClientHandler = new HttpClientHandler();
-            if (!sslVerify)
+            // HttpWebRequest defaults to 2 connections per host, which would serialize concurrent
+            // ADFS worker threads during login storms. Bump it; honor any higher value set elsewhere.
+            if (ServicePointManager.DefaultConnectionLimit < 50)
             {
-                _httpClientHandler.ClientCertificateOptions = ClientCertificateOption.Manual;
-                _httpClientHandler.ServerCertificateCustomValidationCallback =
-                    HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+                ServicePointManager.DefaultConnectionLimit = 50;
             }
-            _httpClient = new HttpClient(_httpClientHandler);
-            _httpClient.DefaultRequestHeaders.Add("User-Agent", useragent);
+            // Skip the Expect: 100-continue handshake — adds a round-trip per POST and PI doesn't require it.
+            ServicePointManager.Expect100Continue = false;
         }
 
         /// <summary>
         /// Trigger challenges for the given user using a service account.
         /// </summary>
-        /// <param name="username">username to trigger challenges for</param>
-        /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
-        /// <param name="headers">optional headers which can be forwarded to the privacyIDEA server</param>
-        /// <param name="customParameters">Dictionary of custom parameters to add</param>
-        /// <returns>PIResponse object or null on error</returns>
-        public PIResponse TriggerChallenges(string username, string domain = null,
-            List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
+        public PIResponse TriggerChallenges(string username, PIRequestContext context = null)
         {
             if (!GetJWT())
             {
@@ -94,71 +58,61 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                 return null;
             }
 
-            var parameters = BuildParameters(new Dictionary<string, string> { { "user", username } }, domain, customParameters);
-            string response = SendRequest("/validate/triggerchallenge", parameters, headers);
-            PIResponse ret = PIResponse.FromJSON(response, this);
-
-            return ret;
+            var parameters = BuildParameters(new Dictionary<string, string> { { "user", username } }, context);
+            string response = SendRequest("/validate/triggerchallenge", parameters, context?.Headers);
+            return PIResponse.FromJSON(response, this);
         }
 
         /// <summary>
         /// Requests a challenge for the given token type. Currently only supports type="passkey".
         /// </summary>
-        /// <param name="type"></param>
-        /// <param name="headers"></param>
-        /// <param name="customParameters">Dictionary of custom parameters to add</param>
-        /// <returns>PIResponse object or null on error</returns>
-        public PIResponse ValidateInitialize(string type, List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
+        public PIResponse ValidateInitialize(string type, PIRequestContext context = null)
         {
-            var parameters = BuildParameters(new Dictionary<string, string> { { "type", type } }, "", customParameters);
-            string response = SendRequest("/validate/initialize", parameters, headers, "GET");
+            // Realm-agnostic by design: a usernameless passkey discovery must not be scoped to a realm
+            // (matches the pre-refactor request shape). Custom parameters are still forwarded.
+            var parameters = BuildParameters(new Dictionary<string, string> { { "type", type } },
+                new PIRequestContext { CustomParameters = context?.CustomParameters });
+            string response = SendRequest("/validate/initialize", parameters, context?.Headers, "GET");
             return PIResponse.FromJSON(response, this);
         }
 
         /// <summary>
-        /// Check if the challenge for the given transaction id has been answered yet. 
-        /// This is done using the /validate/polltransaction endpoint.
+        /// Check if the challenge for the given transaction id has been answered yet via /validate/polltransaction.
         /// </summary>
-        /// <param name="transactionid"></param>
-        /// <param name="customParameters">Dictionary of custom parameters to add</param>
-        /// <returns>true if challenge was answered. false if not or error</returns>
-        public bool PollTransaction(string transactionid, Dictionary<string, string> customParameters = null)
+        public bool PollTransaction(string transactionid, PIRequestContext context = null)
         {
-            if (!string.IsNullOrEmpty(transactionid))
+            if (string.IsNullOrEmpty(transactionid))
             {
-                var parameters = BuildParameters(new Dictionary<string, string> { { "transaction_id", transactionid } }, "", customParameters);
-                string response = SendRequest("/validate/polltransaction", parameters, new List<KeyValuePair<string, string>>(), "GET");
-
-                if (string.IsNullOrEmpty(response))
-                {
-                    Error("/validate/polltransaction did not respond!");
-                    return false;
-                }
-                bool ret = false;
-                try
-                {
-                    dynamic root = JsonConvert.DeserializeObject(response);
-                    ret = (bool)root.result.value;
-                }
-                catch (Exception)
-                {
-                    Error("/validate/polltransaction response has wrong format or does not contain 'value'.\n" + response);
-                }
-
-                return ret;
+                Error("PollTransaction called with empty transaction id!");
+                return false;
             }
-            Error("PollTransaction called with empty transaction id!");
-            return false;
+
+            // Poll is keyed by transaction_id alone; do not scope it to a realm (matches the pre-refactor shape).
+            var parameters = BuildParameters(new Dictionary<string, string> { { "transaction_id", transactionid } },
+                new PIRequestContext { CustomParameters = context?.CustomParameters });
+            string response = SendRequest("/validate/polltransaction", parameters, null, "GET");
+
+            if (string.IsNullOrEmpty(response))
+            {
+                Error("/validate/polltransaction did not respond!");
+                return false;
+            }
+            try
+            {
+                return (bool)JObject.Parse(response)["result"]["value"];
+            }
+            catch (Exception)
+            {
+                Error("/validate/polltransaction response has wrong format or does not contain 'value'.\n" + response);
+                return false;
+            }
         }
 
         /// <summary>
-        /// Checks if user has existing token
+        /// Checks if user has existing token. /token/ is an admin endpoint; headers from the context
+        /// are not forwarded here (preserves prior behavior where the call was made without ADFS headers).
         /// </summary>
-        /// <param name="user">username</param>
-        /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
-        /// <param name="customParameters">Dictionary of custom parameters to add</param>
-        /// <returns>true if token exists. false if not or error</returns>
-        public bool UserHasToken(string user, string domain = null, Dictionary<string, string> customParameters = null)
+        public bool UserHasToken(string user, PIRequestContext context = null)
         {
             if (!GetJWT())
             {
@@ -166,61 +120,48 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                 return false;
             }
 
-            var parameters = BuildParameters(new Dictionary<string, string> { { "user", user } }, domain, customParameters);
-            string response = SendRequest("/token/", parameters, new List<KeyValuePair<string, string>>(), "GET");
+            var parameters = BuildParameters(new Dictionary<string, string> { { "user", user } }, context);
+            string response = SendRequest("/token/", parameters, null, "GET");
 
             if (string.IsNullOrEmpty(response))
             {
                 Error("/token/ did not respond!");
                 return false;
             }
-            bool ret = false;
             try
             {
-                dynamic root = JsonConvert.DeserializeObject(response);
-                ret = root.result.value.count != 0;
+                return (int)JObject.Parse(response)["result"]["value"]["count"] != 0;
             }
             catch (Exception)
             {
                 Error("/token/ response has wrong format or does not contain 'result.value.count'.\n" + response);
+                return false;
             }
-            return ret;
         }
 
         /// <summary>
-        /// Enroll TOTP Token for specified user if user does not already have token
+        /// Enroll TOTP Token for the given user. Like UserHasToken, this is an admin-style call;
+        /// headers from the context are not forwarded.
         /// </summary>
-        /// <param name="user">username</param>
-        /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
-        /// <param name="customParameters">Dictionary of custom parameters to add</param>
-        /// <returns>PIEnrollResponse object or null on error</returns>
-        public PIEnrollResponse TokenInit(string user, string domain = null, Dictionary<string, string> customParameters = null)
+        public PIEnrollResponse TokenInit(string user, PIRequestContext context = null)
         {
             var map = new Dictionary<string, string>
             {
                 { "user", user },
-                { "type", "totp" },
+                { "type", PITokenType.Totp },
                 { "genkey", "1" }
             };
-            var parameters = BuildParameters(map, domain, customParameters);
-            string response = SendRequest("/token/init", parameters, new List<KeyValuePair<string, string>>());
+            var parameters = BuildParameters(map, context);
+            string response = SendRequest("/token/init", parameters, null);
             return PIEnrollResponse.FromJSON(response, this);
         }
 
 
         /// <summary>
-        /// Authenticate using the /validate/check endpoint with the username and OTP value. 
+        /// Authenticate using the /validate/check endpoint with the username and OTP value.
         /// Optionally, a transaction id can be provided if authentication is done using challenge-response.
         /// </summary>
-        /// <param name="user">username</param>
-        /// <param name="otp">OTP</param>
-        /// <param name="transactionid">optional transaction id to refer to a challenge</param>
-        /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
-        /// <param name="headers">optional headers which can be forwarded to the privacyIDEA server</param>
-        /// <param name="customParameters">Dictionary of custom parameters to add</param>
-        /// <returns>PIResponse object or null on error</returns>
-        public PIResponse ValidateCheck(string user, string otp, string transactionid = null, string domain = null,
-            List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
+        public PIResponse ValidateCheck(string user, string otp, string transactionid = null, PIRequestContext context = null)
         {
             var map = new Dictionary<string, string>
             {
@@ -232,26 +173,41 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             {
                 map.Add("transaction_id", transactionid);
             }
-            
-            var parameters = BuildParameters(map, domain, customParameters);
-            string response = SendRequest("/validate/check", parameters, headers);
+
+            var parameters = BuildParameters(map, context);
+            string response = SendRequest("/validate/check", parameters, context?.Headers);
             return PIResponse.FromJSON(response, this);
         }
 
         /// <summary>
-        /// Authenticate at the /validate/check endpoint using a WebAuthn token instead of the usual OTP value.
-        /// This requires the WebAuthnSignResponse and the Origin from the browser.
+        /// Cancel an optional enroll-via-multichallenge enrollment for the given transaction id.
+        /// The server only honors this when the challenge was emitted with enroll_via_multichallenge_optional=true.
+        /// Domain on the context is ignored — cancel must hit whichever realm issued the transaction.
         /// </summary>
-        /// <param name="user">username</param>
-        /// <param name="transactionid">transaction id of the webauthn challenge</param>
-        /// <param name="webAuthnSignResponse">the WebAuthnSignResponse string in json format as returned from the browser</param>
-        /// <param name="origin">origin also returned by the browser</param>
-        /// <param name="domain">optional domain which can be mapped to a privacyIDEA realm</param>
-        /// <param name="headers">optional headers which can be forwarded to the privacyIDEA server</param>
-        /// <param name="customParameters">Dictionary of custom parameters to add</param>
-        /// <returns>PIResponse object or null on error</returns>
+        public PIResponse CancelEnrollment(string transactionid, PIRequestContext context = null)
+        {
+            if (string.IsNullOrEmpty(transactionid))
+            {
+                Error("CancelEnrollment called with empty transaction id!");
+                return null;
+            }
+
+            var map = new Dictionary<string, string>
+            {
+                { "transaction_id", transactionid },
+                { "cancel_enrollment", "True" }
+            };
+            // Pass a context with Domain cleared so BuildParameters does not add a realm.
+            var parameters = BuildParameters(map, new PIRequestContext { CustomParameters = context?.CustomParameters });
+            string response = SendRequest("/validate/check", parameters, context?.Headers);
+            return PIResponse.FromJSON(response, this);
+        }
+
+        /// <summary>
+        /// Authenticate at /validate/check using a WebAuthn assertion.
+        /// </summary>
         public PIResponse ValidateCheckWebAuthn(string user, string transactionid, string webAuthnSignResponse, string origin,
-            string domain = null, List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
+            PIRequestContext context = null)
         {
             if (string.IsNullOrEmpty(user) || string.IsNullOrEmpty(transactionid) || string.IsNullOrEmpty(webAuthnSignResponse)
                 || string.IsNullOrEmpty(origin))
@@ -266,23 +222,13 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                 { "user", user },
                 { "pass", "" }
             };
-            AddCustomParameters(customParameters, parameters);
-
-            return FIDO2AuthenticationRequest(parameters, transactionid, webAuthnSignResponse, origin, domain, headers);
+            return FIDO2AuthenticationRequest(parameters, transactionid, webAuthnSignResponse, origin, context);
         }
 
         /// <summary>
-        /// Authenticate at the /validate/check endpoint using a Passkey. Requires prior triggering of a challenge using ValidateInitialize.
+        /// Authenticate at /validate/check using a Passkey. Requires prior triggering of a challenge via ValidateInitialize.
         /// </summary>
-        /// <param name="transactionid">Transaction id of the challenge</param>
-        /// <param name="assertionResponse">As returned from the authenticator, in json format.</param>
-        /// <param name="origin">Origin as returned by the browser. Will be added as Origin Header.</param>
-        /// <param name="domain">Optional domain of the user</param>
-        /// <param name="headers">Optional headers to add to the request</param>
-        /// <param name="customParameters">Dictionary of custom parameters to add</param>
-        /// <returns></returns>
-        public PIResponse ValidateCheckPasskey(string transactionid, string assertionResponse, string origin, string domain = null,
-            List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
+        public PIResponse ValidateCheckPasskey(string transactionid, string assertionResponse, string origin, PIRequestContext context = null)
         {
             if (string.IsNullOrEmpty(transactionid) || string.IsNullOrEmpty(assertionResponse) || string.IsNullOrEmpty(origin))
             {
@@ -290,27 +236,14 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                     + ", assertionResponse=" + assertionResponse + ", origin=" + origin);
                 return null;
             }
-            var parameters = new Dictionary<string, string>();
-            AddCustomParameters(customParameters, parameters);
-
-            return FIDO2AuthenticationRequest(parameters, transactionid, assertionResponse, origin, domain, headers);
+            return FIDO2AuthenticationRequest(new Dictionary<string, string>(), transactionid, assertionResponse, origin, context);
         }
 
         /// <summary>
         /// Completes the passkey registration at the /validate/check endpoint.
         /// </summary>
-        /// <param name="transactionid"></param>
-        /// <param name="serial"></param>
-        /// <param name="username"></param>
-        /// <param name="attestationResponse"></param>
-        /// <param name="origin"></param>
-        /// <param name="domain"></param>
-        /// <param name="headers"></param>
-        /// <param name="customParameters">Dictionary of custom parameters to add</param>
-        /// <returns></returns>
         public PIResponse ValidateCheckCompletePasskeyRegistration(string transactionid, string serial, string username,
-            string attestationResponse, string origin, string domain = null, List<KeyValuePair<string, string>> headers = null,
-            Dictionary<string, string> customParameters = null)
+            string attestationResponse, string origin, PIRequestContext context = null)
         {
             if (string.IsNullOrEmpty(transactionid) || string.IsNullOrEmpty(serial) || string.IsNullOrEmpty(username)
                 || string.IsNullOrEmpty(attestationResponse) || string.IsNullOrEmpty(origin))
@@ -323,7 +256,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
 
             var map = new Dictionary<string, string>
             {
-                { "type", "passkey" },
+                { "type", PITokenType.Passkey },
                 { "serial", serial },
                 { "user", username },
                 { "transaction_id", transactionid }
@@ -338,219 +271,215 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                 }
             }
 
-            var parameters = BuildParameters(map, domain, customParameters);
-
-            var h = new List<KeyValuePair<string, string>>()
-            {
-                new KeyValuePair<string, string>("Origin", origin)
-            };
-
-            if (headers is { })
-            {
-                h.AddRange(headers);
-            }
-            string response = SendRequest("/validate/check", parameters, h);
+            var parameters = BuildParameters(map, context);
+            string response = SendRequest("/validate/check", parameters, HeadersWithOrigin(origin, context));
             return PIResponse.FromJSON(response, this);
         }
 
         /// <summary>
-        /// Initiates the FIDO2 authentication request.
+        /// Builds the /validate/check call shared by ValidateCheckWebAuthn and ValidateCheckPasskey:
+        /// merges the parsed assertion fields into the request body, sets the transaction id, applies the
+        /// context's realm and custom parameters, and attaches the Origin header (required by FIDO2).
         /// </summary>
-        /// <param name="parameters"></param>
-        /// <param name="transactionid"></param>
-        /// <param name="assertionResponse"></param>
-        /// <param name="origin"></param>
-        /// <param name="domain"></param>
-        /// <param name="headers"></param>
-        /// <param name="customParameters"></param>
-        /// <returns></returns>
-        private PIResponse FIDO2AuthenticationRequest(Dictionary<string, string> parameters, string transactionid, string assertionResponse,
-            string origin, string domain = null, List<KeyValuePair<string, string>> headers = null, Dictionary<string, string> customParameters = null)
+        private PIResponse FIDO2AuthenticationRequest(Dictionary<string, string> parameters, string transactionid,
+            string assertionResponse, string origin, PIRequestContext context)
         {
-            foreach (var entry in ParseFIDO2AssertionResponse(assertionResponse))
+            var parsed = ParseFIDO2AssertionResponse(assertionResponse);
+            if (parsed == null)
+            {
+                return null;
+            }
+            foreach (var entry in parsed)
             {
                 parameters.Add(entry.Key, entry.Value);
             }
             parameters.Add("transaction_id", transactionid);
 
-            var h = new List<KeyValuePair<string, string>>()
-            {
-                new KeyValuePair<string, string>("Origin", origin)
-            };
+            AddRealmForDomain(context?.Domain, parameters);
+            AddCustomParameters(context?.CustomParameters, parameters);
 
-            if (headers is { })
-            {
-                h.AddRange(headers);
-            }
-
-            AddRealmForDomain(domain, parameters);
-            AddCustomParameters(customParameters, parameters);
-
-            // The origin has to be set in the header for FIDO2 authentication
-            headers.Add(new KeyValuePair<string, string>("Origin", origin));
-
-            string response = SendRequest("/validate/check", parameters, headers);
+            string response = SendRequest("/validate/check", parameters, HeadersWithOrigin(origin, context));
             return PIResponse.FromJSON(response, this);
         }
 
-        /// <summary>
-        /// Parses the FIDO2 assertion response from the browser and extracts the required parameters.
-        /// </summary>
-        /// <param name="assertionResponse"></param>
-        /// <returns></returns>
-        private Dictionary<string, string> ParseFIDO2AssertionResponse(string assertionResponse)
+        private static List<KeyValuePair<string, string>> HeadersWithOrigin(string origin, PIRequestContext context)
         {
-            var parameters = new Dictionary<string, string>();
-            // Parse the WebAuthnSignResponse and add mandatory parameters
+            var h = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("Origin", origin)
+            };
+            if (context?.Headers != null)
+            {
+                h.AddRange(context.Headers);
+            }
+            return h;
+        }
+
+        // FIDO2 assertion (WebAuthn / passkey login): each output key accepts a camelCase or lowercase
+        // input alias, so the browser-side naming differences resolve to one canonical request field.
+        private static readonly (string outKey, string[] inKeys)[] _fido2AssertionFields =
+        {
+            ("credential_id", new[] { "credential_id", "credentialid" }),
+            ("clientDataJSON", new[] { "clientDataJSON", "clientdata" }),
+            ("signature", new[] { "signature", "signaturedata" }),
+            ("authenticatorData", new[] { "authenticatorData", "authenticatordata" }),
+            ("userHandle", new[] { "userHandle", "userhandle" }),
+            // TODO clientassertionextensions are currently not supported
+        };
+
+        // FIDO2 attestation (passkey registration): only the canonical key is accepted for each field.
+        private static readonly (string outKey, string[] inKeys)[] _fido2AttestationFields =
+        {
+            ("credential_id", new[] { "credential_id" }),
+            ("clientDataJSON", new[] { "clientDataJSON" }),
+            ("attestationObject", new[] { "attestationObject" }),
+            ("rawId", new[] { "rawId" }),
+            ("authenticatorAttachment", new[] { "authenticatorAttachment" }),
+        };
+
+        private Dictionary<string, string> ParseFIDO2AssertionResponse(string assertionResponse) =>
+            ParseFIDO2Response(assertionResponse, "AssertionResponse", _fido2AssertionFields);
+
+        private Dictionary<string, string> ParseFIDO2AttestationResponse(string attestationResponse) =>
+            ParseFIDO2Response(attestationResponse, "AttestationResponse", _fido2AttestationFields);
+
+        /// <summary>
+        /// Parses a FIDO2 response (assertion or attestation) from the browser and extracts the required
+        /// parameters according to the given field map. Returns null if the input is not valid JSON.
+        /// </summary>
+        private Dictionary<string, string> ParseFIDO2Response(string json, string label,
+            (string outKey, string[] inKeys)[] fields)
+        {
             JToken root;
             try
             {
-                root = JToken.Parse(assertionResponse);
+                root = JToken.Parse(json);
             }
             catch (JsonReaderException jex)
             {
-                Error("AssertionResponse does not have the required format (json)! " + jex.Message);
+                Error(label + " does not have the required format (json)! " + jex.Message);
                 return null;
             }
 
-            if (GetJTokenFirstOf(root, new List<string>() { "credential_id", "credentialid" }) is JToken credential_id)
+            var parameters = new Dictionary<string, string>();
+            foreach (var (outKey, inKeys) in fields)
             {
-                parameters.Add("credential_id", (string)credential_id);
+                if (GetJTokenFirstOf(root, inKeys) is JToken token)
+                {
+                    parameters.Add(outKey, (string)token);
+                }
             }
-            if (GetJTokenFirstOf(root, new List<string>() { "clientDataJSON", "clientdata" }) is JToken clientDataJSON)
-            {
-                parameters.Add("clientDataJSON", (string)clientDataJSON);
-            }
-            if (GetJTokenFirstOf(root, new List<string>() { "signature", "signaturedata" }) is JToken signature)
-            {
-                parameters.Add("signature", (string)signature);
-            }
-            if (GetJTokenFirstOf(root, new List<string>() { "authenticatorData", "authenticatordata" }) is JToken authenticatorData)
-            {
-                parameters.Add("authenticatorData", (string)authenticatorData);
-            }
-            if (GetJTokenFirstOf(root, new List<string>() { "userHandle", "userhandle" }) is JToken userHandle)
-            {
-                parameters.Add("userHandle", (string)userHandle);
-            }
-            // TODO clientassertionextensions are currently not supported
-
             return parameters;
         }
 
         /// <summary>
         /// Gets the first JToken found for the given list of keys.
         /// </summary>
-        /// <param name="root"></param>
-        /// <param name="keys"></param>
-        /// <returns></returns>
-        private JToken GetJTokenFirstOf(JToken root, List<string> keys)
+        private JToken GetJTokenFirstOf(JToken root, string[] keys)
         {
-            JToken ret = null;
             foreach (var key in keys)
             {
                 if (root[key] is JToken token)
                 {
-                    ret = token;
-                    break;
+                    return token;
                 }
             }
-            return ret;
+            return null;
         }
 
         /// <summary>
-        /// Parses the FIDO2 attestation response from the browser and extracts the required parameters.
+        /// Fetches an auth token from the privacyIDEA server using the service account and caches
+        /// it as the Authorization header value for subsequent calls until the JWT's exp claim
+        /// (minus a 30-second safety margin) is reached.
         /// </summary>
-        /// <param name="attestationResponse"></param>
-        /// <returns></returns>
-        private Dictionary<string, string> ParseFIDO2AttestationResponse(string attestationResponse)
+        private bool GetJWT()
         {
-            var parameters = new Dictionary<string, string>();
-            JToken root;
-            try
+            // Fast path: cached token still valid.
+            if (DateTime.UtcNow < _jwtExpiry && !string.IsNullOrEmpty(_authToken))
             {
-                root = JToken.Parse(attestationResponse);
-            }
-            catch (JsonReaderException jex)
-            {
-                Error("AttestationResponse does not have the required format (json)! " + jex.Message);
-                return null;
-            }
-            if (root["credential_id"] is JToken credential_id)
-            {
-                parameters.Add("credential_id", (string)credential_id);
-            }
-            if (root["clientDataJSON"] is JToken clientDataJSON)
-            {
-                parameters.Add("clientDataJSON", (string)clientDataJSON);
-            }
-            if (root["attestationObject"] is JToken attestationObject)
-            {
-                parameters.Add("attestationObject", (string)attestationObject);
-            }
-            if (root["rawId"] is JToken rawId)
-            {
-                parameters.Add("rawId", (string)rawId);
-            }
-            if (root["authenticatorAttachment"] is JToken authenticatorAttachment)
-            {
-                parameters.Add("authenticatorAttachment", (string)authenticatorAttachment);
+                return true;
             }
 
-            return parameters;
-        }
-
-        /// <summary>
-        /// Gets an auth token from the privacyIDEA server using the service account.
-        /// Afterward, the token is set as the default authentication header for the HttpClient.
-        /// </summary>
-        /// <param name="customParameters">Dictionary of custom parameters to add</param>
-        /// <returns>true if success, false otherwise</returns>
-        private bool GetJWT(Dictionary<string, string> customParameters = null)
-        {
             if (!ServiceAccountAvailable())
             {
                 Error("Unable to fetch auth token without service account!");
                 return false;
             }
 
-            var map = new Dictionary<string, string>
+            lock (_jwtLock)
             {
-                { "username", _serviceUser },
-                { "password", _servicePass }
-            };
+                // Another thread may have refreshed while we were waiting on the lock
+                if (DateTime.UtcNow < _jwtExpiry && !string.IsNullOrEmpty(_authToken))
+                {
+                    return true;
+                }
 
-            if (!string.IsNullOrEmpty(_serviceRealm))
-            {
-                map.Add("realm", _serviceRealm);
-            }
-            var parameters = BuildParameters(map, "", customParameters);
+                var map = new Dictionary<string, string>
+                {
+                    { "username", _serviceUser },
+                    { "password", _servicePass }
+                };
 
-            string response = SendRequest("/auth", parameters);
+                if (!string.IsNullOrEmpty(_serviceRealm))
+                {
+                    map.Add("realm", _serviceRealm);
+                }
+                var parameters = BuildParameters(map, null);
 
-            if (string.IsNullOrEmpty(response))
-            {
-                Error("/auth did not respond!");
+                string response = SendRequest("/auth", parameters);
+
+                if (string.IsNullOrEmpty(response))
+                {
+                    Error("/auth did not respond!");
+                    return false;
+                }
+
+                string token = "";
+                try
+                {
+                    token = (string)JObject.Parse(response)["result"]["value"]["token"];
+                }
+                catch (Exception)
+                {
+                    Error("/auth response did not have the correct format or did not contain a token.\n" + response);
+                }
+
+                if (!string.IsNullOrEmpty(token))
+                {
+                    // PI expects the JWT as the bare Authorization header value (no "Bearer" prefix),
+                    // matching how the previous HttpClient code stored it via AuthenticationHeaderValue(token).
+                    _authToken = token;
+                    _jwtExpiry = ExtractJWTExpiry(token).AddSeconds(-30);
+                    return true;
+                }
                 return false;
             }
+        }
 
-            string token = "";
+        /// <summary>
+        /// Decode the JWT payload and return its `exp` claim as UTC. Falls back to a 5-minute window if parsing fails.
+        /// </summary>
+        private DateTime ExtractJWTExpiry(string token)
+        {
             try
             {
-                dynamic root = JsonConvert.DeserializeObject(response);
-                token = root.result.value.token;
+                var parts = token.Split('.');
+                if (parts.Length >= 2)
+                {
+                    string payload = parts[1].Replace('-', '+').Replace('_', '/');
+                    payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
+                    string json = Encoding.UTF8.GetString(Convert.FromBase64String(payload));
+                    if (JObject.Parse(json)["exp"] is JToken exp && exp.Type == JTokenType.Integer)
+                    {
+                        return DateTimeOffset.FromUnixTimeSeconds((long)exp).UtcDateTime;
+                    }
+                }
             }
-            catch (Exception)
+            catch (Exception e)
             {
-                Error("/auth response did not have the correct format or did not contain a token.\n" + response);
+                Error("Failed to parse JWT exp claim: " + e.Message);
             }
-
-            if (!string.IsNullOrEmpty(token))
-            {
-                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(token);
-                return true;
-            }
-            return false;
+            return DateTime.UtcNow.AddMinutes(5);
         }
 
         /// <summary>
@@ -570,65 +499,168 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         }
 
         /// <summary>
-        /// Sends a request to the privacyIDEA server.
+        /// Sends a request to the privacyIDEA server. Synchronous on purpose: ADFS's IAuthenticationAdapter
+        /// contract is sync, and HttpWebRequest doesn't pin a continuation thread per call the way
+        /// HttpClient.SendAsync().GetAwaiter().GetResult() does.
         /// </summary>
-        /// <param name="endpoint"></param>
-        /// <param name="parameters"></param>
-        /// <param name="headers"></param>
-        /// <param name="method"></param>
-        /// <returns></returns>
         private string SendRequest(string endpoint, Dictionary<string, string> parameters, List<KeyValuePair<string, string>> headers = null, string method = "POST")
         {
-            Log("Sending [" + string.Join(" , ", parameters) + "] to [" + endpoint + "] with method [" + method + "]");
-
-            var stringContent = DictToEncodedStringContent(parameters);
-
-            HttpRequestMessage request = new HttpRequestMessage();
-            if (method == "POST")
+            // Guard the string-building: ParametersForLog allocates and iterates every parameter, and this
+            // runs on every request. LogServerResponse mirrors debug_log, so when debugging is off we skip
+            // the work entirely instead of composing a string the logger would discard.
+            if (LogServerResponse)
             {
-                request.Method = HttpMethod.Post;
-                request.RequestUri = new Uri(this.Url + endpoint);
-                request.Content = stringContent;
-            }
-            else
-            {
-                string s = stringContent.ReadAsStringAsync().GetAwaiter().GetResult();
-                request.Method = HttpMethod.Get;
-                request.RequestUri = new Uri(this.Url + endpoint + "?" + s);
+                Log("Sending [" + ParametersForLog(parameters) + "] to [" + endpoint + "] with method [" + method + "]");
             }
 
-            if (headers != null && headers.Count > 0)
+            string body = BuildFormBody(parameters);
+            string url = this.Url + endpoint + (method == "POST" ? "" : "?" + body);
+
+            HttpWebRequest request;
+            try
             {
-                foreach (var element in headers)
+                request = (HttpWebRequest)WebRequest.Create(url);
+            }
+            catch (Exception e)
+            {
+                Error("Failed to build request for " + endpoint + ": " + e.Message);
+                return "";
+            }
+
+            request.Method = method;
+            request.UserAgent = _userAgent;
+            if (!_sslVerify)
+            {
+                request.ServerCertificateValidationCallback = (s, c, ch, errs) => true;
+            }
+            if (!string.IsNullOrEmpty(_authToken))
+            {
+                request.Headers["Authorization"] = _authToken;
+            }
+            if (headers != null)
+            {
+                foreach (var h in headers)
                 {
-                    request.Headers.Add(element.Key, element.Value);
+                    try
+                    {
+                        SetForwardedHeader(request, h.Key, h.Value);
+                    }
+                    catch (Exception e)
+                    {
+                        // Restricted headers (Host, Connection, Date, Referer, Range, ...) throw when set on
+                        // HttpWebRequest. Skip the offending one rather than failing the whole authentication.
+                        Error("Could not forward header '" + h.Key + "': " + e.Message);
+                    }
                 }
             }
-            Log("Headers: " + request.Headers.ToString());
-            Task<HttpResponseMessage> responseTask = _httpClient.SendAsync(request);
 
-            var responseMessage = responseTask.GetAwaiter().GetResult();
-            if (responseMessage.StatusCode != HttpStatusCode.OK)
+            if (LogServerResponse)
             {
-                Error("The request to " + endpoint + " returned HttpStatusCode " + responseMessage.StatusCode);
+                Log("Headers: " + FormatHeadersForLog(request.Headers));
+            }
+
+            if (method == "POST")
+            {
+                byte[] bodyBytes = Encoding.UTF8.GetBytes(body);
+                request.ContentType = "application/x-www-form-urlencoded; charset=utf-8";
+                request.ContentLength = bodyBytes.Length;
+                try
+                {
+                    using (var stream = request.GetRequestStream())
+                    {
+                        stream.Write(bodyBytes, 0, bodyBytes.Length);
+                    }
+                }
+                catch (Exception e)
+                {
+                    Error("Failed to write request body for " + endpoint + ": " + e.Message);
+                    return "";
+                }
+            }
+
+            HttpWebResponse response;
+            try
+            {
+                response = (HttpWebResponse)request.GetResponse();
+            }
+            catch (WebException ex) when (ex.Response is HttpWebResponse errResp)
+            {
+                // Non-2xx — preserve the old behavior of logging the status and parsing whatever body came back.
+                Error("The request to " + endpoint + " returned HttpStatusCode " + errResp.StatusCode);
+                response = errResp;
+            }
+            catch (Exception e)
+            {
+                Error("Request to " + endpoint + " failed: " + e.Message);
+                return "";
             }
 
             string ret = "";
             try
             {
-                ret = responseMessage.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                using (response)
+                using (var stream = response.GetResponseStream())
+                using (var reader = new StreamReader(stream))
+                {
+                    ret = reader.ReadToEnd();
+                }
             }
             catch (Exception e)
             {
                 Error(e.Message);
             }
 
-            if (_logServerResponse && !string.IsNullOrEmpty(ret) && !_logExcludedEndpoints.Contains(endpoint))
+            if (LogServerResponse && !string.IsNullOrEmpty(ret) && !_logExcludedEndpoints.Contains(endpoint))
             {
-                Log(endpoint + " response:\n" + JToken.Parse(ret).ToString(Formatting.Indented));
+                try
+                {
+                    Log(endpoint + " response:\n" + JToken.Parse(ret).ToString(Formatting.Indented));
+                }
+                catch (JsonReaderException)
+                {
+                    // Non-JSON body (e.g. an HTML error page from a reverse proxy/WAF) — log it raw, don't crash.
+                    Log(endpoint + " response (non-JSON):\n" + ret);
+                }
             }
 
             return ret;
+        }
+
+        /// <summary>
+        /// Restricted headers on HttpWebRequest must go through specific properties rather than the Headers collection.
+        /// Only User-Agent and Accept are realistic candidates among the forward_headers config.
+        /// </summary>
+        private static void SetForwardedHeader(HttpWebRequest request, string name, string value)
+        {
+            if (name.Equals("User-Agent", StringComparison.OrdinalIgnoreCase))
+            {
+                request.UserAgent = value;
+            }
+            else if (name.Equals("Accept", StringComparison.OrdinalIgnoreCase))
+            {
+                request.Accept = value;
+            }
+            else
+            {
+                request.Headers[name] = value;
+            }
+        }
+
+        /// <summary>
+        /// Same shape as the old HttpRequestMessage.Headers.ToString(), but redacts Authorization so the JWT
+        /// doesn't end up in the debug log (HttpClient kept Authorization on DefaultRequestHeaders, which the
+        /// per-request log line did not cover — preserve that masking behavior).
+        /// </summary>
+        private static string FormatHeadersForLog(WebHeaderCollection headers)
+        {
+            var sb = new StringBuilder();
+            foreach (string key in headers)
+            {
+                sb.Append(key).Append(": ");
+                sb.Append(key.Equals("Authorization", StringComparison.OrdinalIgnoreCase) ? "***" : headers[key]);
+                sb.Append("\r\n");
+            }
+            return sb.ToString();
         }
 
         /// <summary>
@@ -642,10 +674,11 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             if (!string.IsNullOrEmpty(domain))
             {
                 string r = "";
-                string d = domain.ToUpper();
-                if (RealmMap.ContainsKey(d))
+                // RealmMap is built with an OrdinalIgnoreCase comparer (see RegistryReader.GetRealmMapping),
+                // so the lookup is case-insensitive without uppercasing the domain here.
+                if (RealmMap.TryGetValue(domain, out string mapped))
                 {
-                    r = RealmMap[d];
+                    r = mapped;
                     Log("Found realm in mapping: " + r);
                 }
 
@@ -660,7 +693,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                 }
                 else
                 {
-                    Log("No realm configured for domain " + d);
+                    Log("No realm configured for domain " + domain);
                 }
             }
             else
@@ -687,46 +720,67 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         }
 
         /// <summary>
-        /// Helper to build request parameters.
+        /// Helper to build the request body dictionary: starts from baseParams, merges in the realm
+        /// (derived from context.Domain) and any custom parameters the caller threaded through.
+        /// AddRealmForDomain is skipped when Domain is empty so callers that already populated "realm"
+        /// in baseParams (e.g. GetJWT with _serviceRealm) don't hit a duplicate-key add.
         /// </summary>
-        /// <param name="baseParams"></param>
-        /// <param name="domain"></param>
-        /// <param name="customParameters"></param>
-        /// <returns></returns>
-        private Dictionary<string, string> BuildParameters(Dictionary<string, string> baseParams, string domain, Dictionary<string, string> customParameters)
+        private Dictionary<string, string> BuildParameters(Dictionary<string, string> baseParams, PIRequestContext context)
         {
             var parameters = new Dictionary<string, string>(baseParams);
-            if (!string.IsNullOrEmpty(domain))
+            if (!string.IsNullOrEmpty(context?.Domain))
             {
-                AddRealmForDomain(domain, parameters);
+                AddRealmForDomain(context.Domain, parameters);
             }
-            AddCustomParameters(customParameters, parameters);
+            AddCustomParameters(context?.CustomParameters, parameters);
             return parameters;
         }
 
         /// <summary>
-        /// Converts a dictionary to a StringContent with url encoded values.
+        /// Builds the parameter list for the request log, masking secrets. "password" is the service
+        /// account password; "pass" is the user's credential on /validate/check and in privacyIDEA carries
+        /// the static PIN prefix in front of the OTP — neither must reach the (possibly long-lived) debug log.
         /// </summary>
-        /// <param name="dict"></param>
-        /// <returns></returns>
-        internal StringContent DictToEncodedStringContent(Dictionary<string, string> dict)
+        private static readonly HashSet<string> _maskedLogParameters =
+            new HashSet<string>(StringComparer.Ordinal) { "password", "pass" };
+
+        private static string ParametersForLog(Dictionary<string, string> parameters)
+        {
+            var sb = new StringBuilder();
+            bool first = true;
+            foreach (var kv in parameters)
+            {
+                if (!first) sb.Append(" , ");
+                first = false;
+                sb.Append('[').Append(kv.Key).Append(", ");
+                sb.Append(_maskedLogParameters.Contains(kv.Key) ? "***" : kv.Value);
+                sb.Append(']');
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// URL-encodes a dictionary as an application/x-www-form-urlencoded body string. EVERY value is
+        /// percent-encoded, including WebAuthn/FIDO2 fields: they are base64url (the browser side converts
+        /// +/ to -_), which Uri.EscapeDataString leaves untouched, so the on-wire bytes are unchanged for
+        /// padding-less values and only '=' padding becomes %3D — which privacyIDEA decodes back to '=',
+        /// matching its canonical request format. Escaping is also what prevents a value that contains '&'
+        /// or '=' (e.g. a crafted userHandle) from injecting extra parameters into the request body.
+        /// </summary>
+        internal string BuildFormBody(Dictionary<string, string> dict)
         {
             StringBuilder sb = new StringBuilder();
             foreach (var element in dict)
             {
                 sb.Append(element.Key).Append("=");
-                sb.Append((_excludeFromURIEscape.Contains(element.Key.ToLower())) ? element.Value : Uri.EscapeDataString(element.Value));
+                sb.Append(Uri.EscapeDataString(element.Value));
                 sb.Append("&");
             }
-
-            // Remove tailing &
             if (sb.Length > 0)
             {
                 sb.Remove(sb.Length - 1, 1);
             }
-
-            string ret = sb.ToString();
-            return new StringContent(ret, Encoding.UTF8, "application/x-www-form-urlencoded"); ;
+            return sb.ToString();
         }
 
         /// <summary>
@@ -753,25 +807,10 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             this.Logger?.Error(exception);
         }
 
-        protected virtual void Dispose(bool disposing)
-        {
-            if (!_disposedValue)
-            {
-                if (disposing)
-                {
-                    // Managed
-                    _httpClient.Dispose();
-                    _httpClientHandler.Dispose();
-                }
-                // Unmanaged
-                _disposedValue = true;
-            }
-        }
-
         public void Dispose()
         {
-            // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
-            Dispose(disposing: true);
+            // Nothing to release: HttpWebRequest is created per-call and TCP sockets are managed
+            // by ServicePointManager. IDisposable kept on the class for API compatibility.
             GC.SuppressFinalize(this);
         }
     }

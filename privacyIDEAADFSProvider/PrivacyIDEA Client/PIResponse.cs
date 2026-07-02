@@ -26,10 +26,12 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         public string EnrollmentLink { get; set; } = "";
         public string PasskeyRegistration { get; set; } = "";
 
-        public string WebAuthnTransactionID { get; set; } = "";
-        public string OTPTransactionID { get; set; } = "";
-        public string PushTransactionID { get; set; } = "";
+        // PI returns the same transaction_id across detail.transaction_id and every multi_challenge[i].transaction_id
+        // within one response, so TransactionID covers OTP/push/webauthn/passkey-registration alike.
+        // PasskeyTransactionID is the genuinely separate one: it comes from detail.passkey.transaction_id
+        // and only appears in the /validate/initialize response that starts a usernameless passkey login.
         public string PasskeyTransactionID { get; set; } = "";
+        public bool EnrollmentOptional { get; set; } = false;
 
         private PIResponse() { }
 
@@ -38,16 +40,20 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             return Challenges.Select(challenge => challenge.Type).Distinct().ToList();
         }
 
+        // Returns "" (not null) when no pollable push challenge is present, matching the rest of PIResponse's
+        // string defaults. Only poll-mode push counts: a code_to_phone push is type=push but client_mode=interactive
+        // (the user types the code shown on the phone) and can never be answered by polling, so it must not surface
+        // the "Push" poll option.
         public string PushMessage()
         {
             foreach (PIChallenge c in Challenges)
             {
-                if (c.Type == "push")
+                if (c.Type == PITokenType.Push && c.ClientMode == PIClientMode.Poll)
                 {
                     return c.Message;
                 }
             }
-            return null;
+            return "";
         }
 
         public bool isAuthenticationSuccessful()
@@ -76,34 +82,21 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             }
             else
             {
-                // Extract allowCredentials from every WebAuthn sign request and store in JArray list.
-                List<JArray> extracted = new List<JArray>();
-                foreach (string signRequest in webAuthnSignRequests)
+                // Take the first sign request as the template and replace its allowCredentials
+                // with the union of allowCredentials across every triggered WebAuthn device.
+                List<JObject> parsed = webAuthnSignRequests.Select(JObject.Parse).ToList();
+                JArray merged = new JArray();
+                foreach (JObject obj in parsed)
                 {
-                    JObject jobj = JObject.Parse(signRequest);
-                    JArray jarray = jobj["allowCredentials"] as JArray;
-
-                    extracted.Add(jarray);
-                }
-                // Get WebAuthn sign request as JSON object
-                JObject webAuthnSignRequest = JObject.Parse(webAuthnSignRequests[0]);
-
-                // Set extracted allowCredentials section from every triggered WebAuthn device into one JSON array.
-                JArray allowCredentials = new JArray();
-
-                foreach (var x in extracted)
-                {
-                    foreach (var item in x)
+                    if (obj["allowCredentials"] is JArray creds)
                     {
-                        allowCredentials.Add(item);
+                        foreach (JToken cred in creds) merged.Add(cred);
                     }
                 }
 
-                // Save extracted info in WebAuthn Sign Request
-                webAuthnSignRequest.Remove("allowCredentials");
-                webAuthnSignRequest.Add("allowCredentials", allowCredentials);
-
-                return webAuthnSignRequest.ToString();
+                JObject template = parsed[0];
+                template["allowCredentials"] = merged;
+                return template.ToString();
             }
         }
 
@@ -112,7 +105,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             List<string> ret = new List<string>();
             foreach (PIChallenge challenge in Challenges)
             {
-                if (challenge.Type == "webauthn")
+                if (challenge.Type == PITokenType.WebAuthn)
                 {
                     string temp = (challenge as PIWebAuthnSignRequest).WebAuthnSignRequest;
                     ret.Add(temp);
@@ -152,31 +145,31 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
 
                     if (result["authentication"] is JToken authentication)
                     {
-                        if (Enum.TryParse((string)authentication, out PIAuthenticationStatus authStatus))
+                        string authValue = (string)authentication;
+                        if (Enum.TryParse(authValue, ignoreCase: true, out PIAuthenticationStatus authStatus))
                         {
                             ret.AuthenticationStatus = authStatus;
                         }
                         else
                         {
-                            privacyIDEA?.Error($"Unknown authentication status: {authentication["status"]}");
+                            privacyIDEA?.Error($"Unknown authentication status: {authValue}");
                         }
                     }
 
-                    if (result.Contains("error"))
+                    if (result["error"] is JObject error)
                     {
-                        JToken error = result["error"];
-                        if (error.Contains("code"))
+                        if (error["code"] is JToken code)
                         {
-                            ret.ErrorCode = (int)error["code"];
+                            ret.ErrorCode = (int)code;
                         }
-                        if (error.Contains("message"))
+                        if (error["message"] is JToken message)
                         {
-                            ret.ErrorMessage = (string)error["message"];
+                            ret.ErrorMessage = (string)message;
                         }
                     }
                 }
 
-                if (jobj.ContainsKey("detail") && jobj["detail"] is JToken detail)
+                if (jobj["detail"] is JObject detail)
                 {
                     ret.TransactionID = (string)detail["transaction_id"];
                     ret.Message = (string)detail["message"];
@@ -188,17 +181,23 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                         ret.Username = (string)username;
                     }
 
-                    // Check if the response contains "preferred_client_mode" (PI >=3.8). If so, translate the values that use other names
+                    if (detail["enroll_via_multichallenge_optional"] is JToken evmcOptional
+                        && evmcOptional.Type == JTokenType.Boolean)
+                    {
+                        ret.EnrollmentOptional = (bool)evmcOptional;
+                    }
+
+                    // preferred_client_mode is PI >=3.8; translate aliased values to our internal mode strings.
                     if (detail["preferred_client_mode"] is JToken pcm)
                     {
                         string prefClientMode = (string)pcm;
-                        if (prefClientMode == "interactive")
+                        if (prefClientMode == PIClientMode.Interactive)
                         {
-                            ret.PreferredClientMode = "otp";
+                            ret.PreferredClientMode = PITokenType.Otp;
                         }
-                        else if (prefClientMode == "poll")
+                        else if (prefClientMode == PIClientMode.Poll)
                         {
-                            ret.PreferredClientMode = "push";
+                            ret.PreferredClientMode = PITokenType.Push;
                         }
                         else
                         {
@@ -240,9 +239,8 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                                 ret.EnrollmentLink = (string)link;
                             }
 
-                            if (type == "webauthn")
+                            if (type == PITokenType.WebAuthn)
                             {
-                                ret.WebAuthnTransactionID = transactionid;
                                 PIWebAuthnSignRequest tmp = new PIWebAuthnSignRequest
                                 {
                                     Message = message,
@@ -258,23 +256,13 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                                     if (attr["webAuthnSignRequest"] is JToken signRequest)
                                     {
                                         tmp.WebAuthnSignRequest = signRequest.ToString(Formatting.None);
-                                        tmp.WebAuthnSignRequest.Replace("\n", "");
                                     }
                                 }
                                 ret.Challenges.Add(tmp);
                             }
                             else
                             {
-                                if (type == "push")
-                                {
-                                    ret.PushTransactionID = transactionid;
-                                }
-                                else
-                                {
-                                    ret.OTPTransactionID = transactionid;
-                                }
-
-                                PIChallenge tmp = new PIChallenge
+                                ret.Challenges.Add(new PIChallenge
                                 {
                                     Message = message,
                                     Serial = serial,
@@ -282,8 +270,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                                     Type = type,
                                     ClientMode = clientMode,
                                     Image = image
-                                };
-                                ret.Challenges.Add(tmp);
+                                });
                             }
                         }
                     }

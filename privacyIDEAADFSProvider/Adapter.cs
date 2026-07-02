@@ -21,18 +21,11 @@ namespace privacyIDEAADFSProvider
 
         private PrivacyIDEA _privacyIDEA;
         private Configuration _config;
-        private bool _debugLog = true;
+        private bool _debugLog = false;
+        private AdapterMetadata _metadata;
 
-        public IAuthenticationAdapterMetadata Metadata
-        {
-            get
-            {
-                AdapterMetadata meta = new AdapterMetadata();
-                meta.AdapterMetadataInit();
-                meta.AdapterVersion = _version;
-                return meta;
-            }
-        }
+        public IAuthenticationAdapterMetadata Metadata =>
+            _metadata ??= new AdapterMetadata { AdapterVersion = _version };
 
         /// <summary>
         /// Initiates a new authentication process and returns our form to the AD FS system.
@@ -44,68 +37,39 @@ namespace privacyIDEAADFSProvider
         public IAdapterPresentation BeginAuthentication(Claim identityClaim, HttpListenerRequest request,
             IAuthenticationContext authContext)
         {
-            Dictionary<string, string> customParameters = CollectCustomParams(request);
-
-            string username = "", domain = "";
             Log("BeginAuthentication: identityClaim: " + identityClaim.Value);
 
-            // Separate the username from the domain
-            string[] tmp = identityClaim.Value.Split('\\');
-            string upn;
-            if (tmp.Length > 1)
-            {
-                username = tmp[1];
-                domain = tmp[0];
-                if (_config.UseUPN)
-                {
-                    // Get the UPN from the sAMAccountName
-                    Log("Getting UPN for user:" + username + " and domain: " + domain + "...");
-                    PrincipalContext ctx = new PrincipalContext(ContextType.Domain, domain);
-                    UserPrincipal user = UserPrincipal.FindByIdentity(ctx, username);
-                    upn = user.UserPrincipalName;
-                    Log("Found UPN: " + upn);
-
-                    // Set domain to UPN suffix instead of NetBIOS domain
-                    domain = upn.Contains("@") ? upn.Split('@')[1] : domain;
-                    Log("Domain for " + upn + ": " + domain);
-                }
-                else
-                {
-                    upn = "not used";
-                }
-            }
-            else
-            {
-                username = tmp[0];
-                upn = tmp[0];
-                domain = "";
-            }
+            var (username, domain, upn) = ResolveIdentity(identityClaim);
             Log("UPN value: " + upn + ", Domain value: " + domain);
             if (_config.UseUPN)
             {
                 username = upn;
             }
 
-            var form = new AdapterPresentationForm(Log)
+            var form = new AdapterPresentationForm()
             {
                 OtpHint = _config.OtpHint,
                 AutoSubmitLength = _config.AutoSubmitLength,
                 DisablePasskey = _config.DisablePasskey ? "1" : "0"
             };
 
-            List<KeyValuePair<string, string>> headers = GetHeadersToForward(request);
+            var context = new PIRequestContext
+            {
+                Domain = domain,
+                Headers = GetHeadersToForward(request),
+                CustomParameters = CollectCustomParams(request),
+            };
 
-            // Trigger challenges with service account or empty pass if configured
             PIResponse response = null;
             if (_privacyIDEA != null)
             {
                 if (_config.TriggerChallenge)
                 {
-                    response = _privacyIDEA.TriggerChallenges(username, domain, headers, customParameters);
+                    response = _privacyIDEA.TriggerChallenges(username, context);
                 }
                 else if (_config.SendEmptyPassword)
                 {
-                    response = _privacyIDEA.ValidateCheck(username, "", domain, headers: headers, customParameters: customParameters);
+                    response = _privacyIDEA.ValidateCheck(username, "", context: context);
                 }
             }
             else
@@ -113,7 +77,6 @@ namespace privacyIDEAADFSProvider
                 Error("privacyIDEA not initialized!");
             }
 
-            // Evaluate the response for triggered token and prepare the form accordingly
             if (response != null)
             {
                 if (response.Challenges.Count > 0)
@@ -122,7 +85,7 @@ namespace privacyIDEAADFSProvider
                 }
                 else if (response.isAuthenticationSuccessful())
                 {
-                    // Success in step 1, carry this over to the second step so that step will be skipped
+                    // Step 1 already passed (no challenges). Skip step 2.
                     authContext.Data.Add("authSuccess", "1");
                     form.AutoSubmit = "1";
                 }
@@ -138,38 +101,34 @@ namespace privacyIDEAADFSProvider
 
             if (string.IsNullOrEmpty(form.Mode))
             {
-                form.Mode = "otp";
+                form.Mode = PITokenType.Otp;
             }
             authContext.Data.Add("userid", username);
             authContext.Data.Add("domain", domain);
 
-            // Perform optional token enrollment
-            // If a challenge was triggered previously, checking if the user has a token is skipped
-            if (_config.EnrollmentEnabled &&
-                (response != null && string.IsNullOrEmpty(response.TransactionID) || (response == null)) &&
-                !_privacyIDEA.UserHasToken(username, domain, customParameters))
+            // Optional token enrollment: skip the UserHasToken probe when a challenge already fired,
+            // since a triggered challenge implies the user has a token already.
+            if (_privacyIDEA != null && _config.EnrollmentEnabled &&
+                (response == null || string.IsNullOrEmpty(response.TransactionID)) &&
+                !_privacyIDEA.UserHasToken(username, context))
             {
-                PIEnrollResponse res = _privacyIDEA.TokenInit(username, domain, customParameters);
-                form.EnrollmentUrl = res.TotpUrl;
-                form.EnrollmentImg = res.Base64TotpImage;
+                PIEnrollResponse res = _privacyIDEA.TokenInit(username, context);
+                // TokenInit returns null when /token/init is unreachable or returns an unparseable body.
+                if (res != null)
+                {
+                    form.EnrollmentUrl = res.TotpUrl;
+                    form.EnrollmentImg = res.Base64TotpImage;
+                }
             }
 
             return form;
         }
 
-        /// <summary>
-        /// Called when our form is submitted.
-        /// </summary>
-        /// <param name="authContext"></param>
-        /// <param name="proofData"></param>
-        /// <param name="request"></param>
-        /// <param name="outgoingClaims"></param>
-        /// <returns></returns>
+        /// <summary>Called when our form is submitted.</summary>
         public IAdapterPresentation TryEndAuthentication(IAuthenticationContext authContext, IProofData proofData,
             HttpListenerRequest request, out Claim[] outgoingClaims)
         {
             Log("TryEndAuthentication");
-            // Early exit if step 2 can be skipped
             if (authContext != null)
             {
                 if (GetString(authContext.Data, "authSuccess", "") == "1")
@@ -195,28 +154,19 @@ namespace privacyIDEAADFSProvider
             Log("ProofData: " + string.Join(", ", proofData.Properties));
             Log("AuthContext: " + string.Join(", ", authContext.Data));
 
-            // Get the form data and prepare the next form
-            var form = new AdapterPresentationForm(Log)
+            var form = new AdapterPresentationForm()
             {
                 OtpHint = _config.OtpHint,
                 AutoSubmitLength = _config.AutoSubmitLength,
                 DisablePasskey = _config.DisablePasskey ? "1" : "0"
             };
-            // Restore enrollment data if there was any
-            if (proofDict.TryGetValue("enrollmentImg", out object enrollmentImg))
-            {
-                form.EnrollmentImg = (string)enrollmentImg;
-            }
-            if (proofDict.TryGetValue("enrollmentLink", out object enrollmentLink))
-            {
-                form.EnrollmentLink = (string)enrollmentLink;
-            }
-            if (proofDict.TryGetValue("disableOTP", out object disableOtp))
-            {
-                form.DisableOTP = (string)disableOtp;
-            }
+            form.EnrollmentImg = GetString(proofDict, "enrollmentImg");
+            form.EnrollmentLink = GetString(proofDict, "enrollmentLink");
+            form.DisableOTP = GetString(proofDict, "disableOTP", "0");
+            // Carry the optional-enrollment flag across poll reloads, otherwise the "Not Now"
+            // skip button (gated on enrollmentOptional=="1" in the page JS) disappears after the first poll.
+            form.EnrollmentOptional = GetString(proofDict, "enrollmentOptional", "0");
 
-            // FormResult
             if (!proofDict.TryGetValue("formResult", out object formResult))
             {
                 form.ErrorMessage = "Internal error. Please try again.";
@@ -224,61 +174,83 @@ namespace privacyIDEAADFSProvider
             }
             FormResult fr = JsonConvert.DeserializeObject<FormResult>((string)formResult);
             bool modeChanged = fr.ModeChanged;
-            string mode = modeChanged ? fr.NewMode : GetString(proofDict, "mode", "otp");
+            string mode = modeChanged ? fr.NewMode : GetString(proofDict, "mode", PITokenType.Otp);
             string otp = GetString(proofDict, "otp");
             form.Message = GetString(proofDict, "message");
             form.Mode = mode;
             form.PushAvailable = GetString(proofDict, "pushAvailable");
 
-            if (proofDict.TryGetValue("webAuthnSignRequest", out object signRequest))
+            form.WebAuthnSignRequest = GetString(proofDict, "webAuthnSignRequest");
+            // authCounter is a client-submitted hidden field; parse defensively so a tampered/garbled
+            // value can't throw out of TryEndAuthentication (the JS side uses the same tolerant Number()||0).
+            if (proofDict.TryGetValue("authCounter", out object authCounter)
+                && int.TryParse(authCounter as string, out int counter))
             {
-                form.WebAuthnSignRequest = (string)signRequest;
-            }
-            if (proofDict.TryGetValue("authCounter", out object authCounter))
-            {
-                form.AuthCounter = (int.Parse((string)authCounter) + 1).ToString();
+                form.AuthCounter = (counter + 1).ToString();
             }
 
-            // Params from context
-            string transactionid = GetString(contextDict, "transactionid");
             string user = GetString(contextDict, "userid");
             string domain = GetString(contextDict, "domain");
-            string pushTransactionid = GetString(contextDict, "push_transaction_id");
-            string webauthnTransactionid = GetString(contextDict, "webauthn_transaction_id");
-            string passkeyTransactionid = GetString(contextDict, "passkey_transaction_id");
-            string otpTransactionid = GetString(contextDict, "otp_transaction_id");
 
-            // Restore the previous response to set the challenges again in case of error
+            // The prior response is the single source of truth for transaction IDs and the data
+            // needed to repopulate challenges on validation error. PI groups challenges by one
+            // transaction_id, so TransactionID covers OTP/push/webauthn/passkey-registration.
             PIResponse previousResponse = null;
             if (contextDict.TryGetValue("previousResponse", out object prevResponse))
             {
                 previousResponse = PIResponse.FromJSON((string)prevResponse, _privacyIDEA);
             }
+            string transactionid = previousResponse?.TransactionID ?? "";
+            // Passkey login's transaction id is kept under its own key: the /validate/initialize response
+            // that starts a passkey login must NOT overwrite previousResponse, or an OTP/push/webauthn
+            // challenge offered alongside the passkey button would lose its transaction id.
+            string passkeyTransactionid = GetString(contextDict, "passkeyTransactionId");
 
             if (modeChanged)
             {
                 return form;
             }
 
-            Dictionary<string, string> customParameters = CollectCustomParams(request);
-
-            // Collect headers to forward with next PI request
-            List<KeyValuePair<string, string>> headers = GetHeadersToForward(request);
+            var context = new PIRequestContext
+            {
+                Domain = domain,
+                Headers = GetHeadersToForward(request),
+                CustomParameters = CollectCustomParams(request),
+            };
             PIResponse response = null;
+
+            // Optional enroll-via-multichallenge: user clicked "Not Now"
+            if (fr.EnrollmentCancelled)
+            {
+                response = _privacyIDEA.CancelEnrollment(transactionid, context);
+                if (response != null && response.isAuthenticationSuccessful())
+                {
+                    outgoingClaims = Claims();
+                    return null;
+                }
+                form.ErrorMessage = response?.Message ?? "Failed to cancel enrollment.";
+                return form;
+            }
+
             // Passkey login requested
             if (fr.PasskeyLoginRequested)
             {
-                response = _privacyIDEA.ValidateInitialize("passkey", headers, customParameters);
+                response = _privacyIDEA.ValidateInitialize(PITokenType.Passkey, context);
                 if (response != null)
                 {
                     form.PasskeyChallenge = response.PasskeyChallenge;
-                    authContext.Data.Add("passkey_transaction_id", response.PasskeyTransactionID);
+                    // Persist only the passkey transaction id (not the whole response), so the original
+                    // challenge's previousResponse — and its OTP/push/webauthn options — survives.
+                    authContext.Data["passkeyTransactionId"] = response.PasskeyTransactionID;
                     return form;
                 }
+                // ValidateInitialize failed (e.g. the server was unreachable). Surface it instead of
+                // falling through to the final else, which would fire an empty-pass /validate/check.
+                Error("Failed to initialize Passkey authentication: no response from the server.");
+                form.ErrorMessage = "Could not start Passkey authentication. Try again or use another token type.";
+                return form;
             }
 
-            // Do the authentication according to the mode or data present
-            // Passkey Authentication
             if (!string.IsNullOrEmpty(fr.PasskeySignResponse))
             {
                 if (string.IsNullOrEmpty(fr.Origin))
@@ -288,43 +260,42 @@ namespace privacyIDEAADFSProvider
                 }
                 else
                 {
-                    response = _privacyIDEA.ValidateCheckPasskey(passkeyTransactionid, fr.PasskeySignResponse, fr.Origin,
-                        domain, headers, customParameters);
+                    response = _privacyIDEA.ValidateCheckPasskey(passkeyTransactionid, fr.PasskeySignResponse, fr.Origin, context);
                 }
             }
             // Passkey Registration (enroll_via_multichallenge)
             else if (!string.IsNullOrEmpty(fr.PasskeyRegistrationResponse))
             {
-                var serial = GetString(contextDict, "passkey_registration_serial");
-                var transactionId = GetString(contextDict, "transactionid");
-                if (string.IsNullOrEmpty(serial) || string.IsNullOrEmpty(transactionId) || string.IsNullOrEmpty(fr.Origin))
+                string serial = previousResponse?.Serial ?? "";
+                if (string.IsNullOrEmpty(serial) || string.IsNullOrEmpty(transactionid) || string.IsNullOrEmpty(fr.Origin))
                 {
-                    Error($"Incomplete data for Passkey registration: Serial {serial}, transactionid {transactionId} " +
+                    Error($"Incomplete data for Passkey registration: Serial {serial}, transactionid {transactionid} " +
                         $"or origin {fr.Origin} missing!");
                     form.ErrorMessage = "Could not complete Passkey registration. Try again or use another token type.";
                 }
                 else
                 {
-                    response = _privacyIDEA.ValidateCheckCompletePasskeyRegistration(transactionId, serial, user,
-                        fr.PasskeyRegistrationResponse, fr.Origin, headers: null, customParameters:customParameters);
+                    response = _privacyIDEA.ValidateCheckCompletePasskeyRegistration(transactionid, serial, user,
+                        fr.PasskeyRegistrationResponse, fr.Origin, context);
                 }
             }
-            // Push
-            else if (mode == "push")
+            else if (mode == PITokenType.Push)
             {
-                if (_privacyIDEA.PollTransaction(pushTransactionid, customParameters))
+                if (_privacyIDEA.PollTransaction(transactionid, context))
                 {
-                    // Push confirmed, finish the authentication via /validate/check using an empty otp
+                    // Outofband-mode finalize: empty otp + the pushed transaction id.
                     // https://privacyidea.readthedocs.io/en/latest/tokens/authentication_modes.html#outofband-mode
-                    response = _privacyIDEA.ValidateCheck(user, "", pushTransactionid, domain, headers, customParameters);
+                    response = _privacyIDEA.ValidateCheck(user, "", transactionid, context);
                 }
                 else
                 {
-                    // Else push not confirmed yet
-                    form.ErrorMessage = "Authenication not confirmed yet!";
+                    // enroll_via_multichallenge poll (smartphone/push token enrollment) carries a QR image;
+                    // a plain push-token login does not. Word the "still waiting" message accordingly.
+                    form.ErrorMessage = !string.IsNullOrEmpty(form.EnrollmentImg)
+                        ? "Registration not completed yet!"
+                        : "Authentication not confirmed yet!";
                 }
             }
-            // WebAuthn
             else if (!string.IsNullOrEmpty(fr.WebAuthnSignResponse))
             {
                 if (string.IsNullOrEmpty(fr.Origin))
@@ -334,17 +305,14 @@ namespace privacyIDEAADFSProvider
                 }
                 else
                 {
-                    response = _privacyIDEA.ValidateCheckWebAuthn(user, webauthnTransactionid, fr.WebAuthnSignResponse, fr.Origin,
-                        domain, headers, customParameters);
+                    response = _privacyIDEA.ValidateCheckWebAuthn(user, transactionid, fr.WebAuthnSignResponse, fr.Origin, context);
                 }
             }
             else
             {
-                // Mode == OTP
-                response = _privacyIDEA.ValidateCheck(user, otp, otpTransactionid, domain, headers, customParameters);
+                response = _privacyIDEA.ValidateCheck(user, otp, transactionid, context);
             }
 
-            // Evaluate the response
             bool newChallenge = false;
             if (response != null)
             {
@@ -352,7 +320,6 @@ namespace privacyIDEAADFSProvider
                 {
                     newChallenge = true;
                     form = ExtractChallengeDataToForm(response, form, authContext);
-                    authContext.Data.Add("previousResponse", response.Raw);
                 }
                 else if (response.isAuthenticationSuccessful())
                 {
@@ -397,76 +364,175 @@ namespace privacyIDEAADFSProvider
                 }
             }
 
-            // Set a generic error if none was set yet and no new challenge was triggered
             if (string.IsNullOrEmpty(form.ErrorMessage) && !newChallenge)
             {
-                form.ErrorMessage = "An error occured.";
+                form.ErrorMessage = "An error occurred.";
             }
-            // Return form with error or new challenge
             return form;
         }
 
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="identityClaim"></param>
-        /// <param name="authContext"></param>
-        /// <returns></returns>
         public bool IsAvailableForUser(Claim identityClaim, IAuthenticationContext authContext)
         {
-            // Available for all users
             return true;
         }
 
         /// <summary>
-        /// Collect custom parameters to forward to privacyIDEA based on configuration.
+        /// Splits the identity claim into username/domain and, when UseUPN is enabled, resolves the UPN
+        /// from the sAMAccountName via an LDAP lookup (which also rewrites the domain to the UPN suffix).
         /// </summary>
-        /// <param name="request"></param>
-        /// <returns></returns>
+        private (string username, string domain, string upn) ResolveIdentity(Claim identityClaim)
+        {
+            string[] tmp = identityClaim.Value.Split('\\');
+            if (tmp.Length <= 1)
+            {
+                return (tmp[0], "", tmp[0]);
+            }
+
+            string username = tmp[1];
+            string domain = tmp[0];
+            if (!_config.UseUPN)
+            {
+                return (username, domain, "not used");
+            }
+
+            // Get the UPN from the sAMAccountName
+            Log("Getting UPN for user:" + username + " and domain: " + domain + "...");
+            using PrincipalContext ctx = new PrincipalContext(ContextType.Domain, domain);
+            using UserPrincipal user = UserPrincipal.FindByIdentity(ctx, username);
+            if (user == null)
+            {
+                Error("Could not find user '" + username + "' in domain '" + domain + "'.");
+                return (username, domain, username);
+            }
+
+            string upn = user.UserPrincipalName;
+            if (string.IsNullOrEmpty(upn))
+            {
+                // userPrincipalName is optional in AD (only sAMAccountName is mandatory); fall back to the username.
+                Error("User '" + username + "' in domain '" + domain + "' has no UPN set. Falling back to username.");
+                return (username, domain, username);
+            }
+            Log("Found UPN: " + upn);
+            // Set domain to UPN suffix instead of NetBIOS domain
+            domain = upn.Contains("@") ? upn.Split('@')[1] : domain;
+            Log("Domain for " + upn + ": " + domain);
+            return (username, domain, upn);
+        }
+
+        /// <summary>Collect custom parameters to forward to privacyIDEA based on configuration.</summary>
         private Dictionary<string, string> CollectCustomParams(HttpListenerRequest request)
         {
             Dictionary<string, string> customParameters = new Dictionary<string, string>();
             if (_config.ForwardClientIP)
             {
                 customParameters.Add("client", GetClientIPAddress(request));
-                //Log("Client IP address: " + customParameters["client"]);
             }
             if (_config.ForwardClientUserAgent)
             {
                 string userAgent = request.Headers?["User-Agent"];
                 customParameters.Add("client_user_agent", userAgent ?? string.Empty);
-                //Log("Client User-Agent: " + customParameters["client_user_agent"]);
             }
 
             return customParameters;
         }
 
-        /// <summary>
-        /// Get the client IP address from the request, considering possible proxy headers.
-        /// </summary>
-        /// <param name="request"></param>
-        /// <returns></returns>
         private string GetClientIPAddress(HttpListenerRequest request)
         {
-            // Check X-Forwarded-For header first (for clients behind proxy)
-            string clientIP = request.Headers["X-Forwarded-For"];
-            if (string.IsNullOrEmpty(clientIP))
+            string peer = request.RemoteEndPoint?.Address?.ToString();
+            string forwardedFor = request.Headers["X-Forwarded-For"];
+            if (string.IsNullOrEmpty(forwardedFor))
             {
-                // If no X-Forwarded-For, use RemoteEndPoint
-                clientIP = request.RemoteEndPoint?.Address?.ToString();
+                return peer ?? "unknown";
             }
-            return clientIP ?? "unknown";
+
+            // X-Forwarded-For is set by the client and therefore spoofable. privacyIDEA can use the
+            // forwarded IP for policy decisions (geo-fencing, IP allow/deny), so a request reaching AD FS
+            // directly could forge this header to bypass those policies. Only honor it when the direct TCP
+            // peer is a configured trusted proxy. With no trusted_proxies configured we keep the legacy
+            // behavior of trusting XFF (documented as insecure) so existing deployments don't silently break.
+            // TODO(next major): make secure-by-default — ignore XFF unless a trusted proxy is configured.
+            if (_config.TrustedProxies.Count == 0 || IsTrustedProxy(peer))
+            {
+                // "client, proxy1, proxy2" — the left-most entry is the originating client.
+                string forwardedClient = forwardedFor.Split(',')[0].Trim();
+                if (!string.IsNullOrEmpty(forwardedClient))
+                {
+                    return forwardedClient;
+                }
+            }
+            return peer ?? "unknown";
+        }
+
+        /// <summary>True if the given IP matches any configured trusted-proxy entry (exact IP or CIDR).</summary>
+        private bool IsTrustedProxy(string peerIp)
+        {
+            if (string.IsNullOrEmpty(peerIp) || !IPAddress.TryParse(peerIp, out IPAddress peer))
+            {
+                return false;
+            }
+            foreach (string entry in _config.TrustedProxies)
+            {
+                if (IpMatches(peer, entry))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /// <summary>
-        /// Called when the provider is loaded by the AD FS service. The config will be loaded in this function.
+        /// Matches an address against a trusted-proxy entry that is either a bare IP ("10.0.0.5") or a
+        /// CIDR range ("10.0.0.0/24"). Works for both IPv4 and IPv6; a v4/v6 family mismatch never matches.
         /// </summary>
-        /// <param name="configData"></param>
+        private static bool IpMatches(IPAddress address, string entry)
+        {
+            string[] parts = entry.Split('/');
+            if (!IPAddress.TryParse(parts[0], out IPAddress network))
+            {
+                return false;
+            }
+            byte[] addrBytes = address.GetAddressBytes();
+            byte[] netBytes = network.GetAddressBytes();
+            if (addrBytes.Length != netBytes.Length)
+            {
+                return false; // different address families (IPv4 vs IPv6)
+            }
+            if (parts.Length == 1)
+            {
+                return addrBytes.SequenceEqual(netBytes);
+            }
+            if (!int.TryParse(parts[1], out int prefix) || prefix < 0 || prefix > addrBytes.Length * 8)
+            {
+                return false;
+            }
+            int fullBytes = prefix / 8;
+            for (int i = 0; i < fullBytes; i++)
+            {
+                if (addrBytes[i] != netBytes[i])
+                {
+                    return false;
+                }
+            }
+            int remainingBits = prefix % 8;
+            if (remainingBits > 0)
+            {
+                int mask = 0xFF << (8 - remainingBits) & 0xFF;
+                if ((addrBytes[fullBytes] & mask) != (netBytes[fullBytes] & mask))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         public void OnAuthenticationPipelineLoad(IAuthenticationMethodConfigData configData)
         {
+            // EventWarn (not Log) for the secret-at-rest sink: Log writes to the debug file, which is not
+            // open yet at this point and only exists when debug_log=1. The event log is always available.
+            _config = new Configuration(Log, EventWarn);
+            _debugLog = _config.DebugLog;
             Log("PrivacyIDEA AD FS Plugin " + _version + " - OnAuthenticationPipelineLoad");
 
-            _config = new Configuration(Log);
             if (string.IsNullOrEmpty(_config.Url))
             {
                 Error("No server URL configured. Can not initialize privacyIDEA without a server URL.");
@@ -475,7 +541,8 @@ namespace privacyIDEAADFSProvider
 
             _privacyIDEA = new PrivacyIDEA(_config.Url, "PrivacyIDEA-ADFS/" + _version, !_config.DisableSSL)
             {
-                Logger = this
+                Logger = this,
+                LogServerResponse = _config.DebugLog
             };
 
             if (!string.IsNullOrEmpty(_config.Realm))
@@ -494,24 +561,15 @@ namespace privacyIDEAADFSProvider
             }
         }
 
-        /// <summary>
-        /// cleanup function
-        /// </summary>
         public void OnAuthenticationPipelineUnload()
         {
-            _privacyIDEA.Dispose();
+            _privacyIDEA?.Dispose();
         }
 
-        /// <summary> 
-        /// Called on error and represents the authform with a error message
-        /// </summary>
-        /// <param name="request">the http request object</param>
-        /// <param name="ex">exception message</param>
-        /// <returns>new instance of IAdapterPresentationForm derived class</returns>
         public IAdapterPresentation OnError(HttpListenerRequest request, ExternalAuthenticationException ex)
         {
             Log("OnError, ExternalAuthenticationException: " + ex.Message);
-            var form = new AdapterPresentationForm(Log)
+            var form = new AdapterPresentationForm()
             {
                 ErrorMessage = ex.Message
             };
@@ -527,18 +585,17 @@ namespace privacyIDEAADFSProvider
                 return form;
             }
 
-            // Reset values
             form.WebAuthnSignRequest = "";
-            form.Mode = "otp";
+            form.Mode = PITokenType.Otp;
             form.PushAvailable = "0";
             form.EnrollmentImg = "";
             form.EnrollmentLink = "";
             form.DisableOTP = "0";
 
-            // New values
             form.Message = response.Message;
 
-            if (response.PushMessage() is string pushMessage)
+            string pushMessage = response.PushMessage();
+            if (!string.IsNullOrEmpty(pushMessage))
             {
                 form.PushAvailable = "1";
                 form.PushMessage = pushMessage;
@@ -554,57 +611,45 @@ namespace privacyIDEAADFSProvider
                 form.Mode = response.PreferredClientMode;
             }
 
-            if (form.Mode == "webauthn" && (form.WebAuthnSignRequest == null || string.IsNullOrEmpty(form.WebAuthnSignRequest)))
+            if (form.Mode == PITokenType.WebAuthn && string.IsNullOrEmpty(form.WebAuthnSignRequest))
             {
-                form.Mode = "otp";
+                form.Mode = PITokenType.Otp;
             }
 
-            // Check for an image, which indicates enroll_via_multichallenge
+            // An image on a challenge indicates enroll_via_multichallenge.
             var challengeWithImage = response.Challenges.FirstOrDefault(challenge => !string.IsNullOrEmpty(challenge.Image));
             if (challengeWithImage != null)
             {
                 form.EnrollmentImg = challengeWithImage.Image;
                 form.EnrollmentLink = response.EnrollmentLink;
-                form.Mode = challengeWithImage.Type;
-                if (form.Mode == "push")
+                // client_mode=poll (push enrollment, smartphone container enrollment) has no
+                // OTP input — the client polls until the phone finishes registration. Route
+                // those into the existing push polling path; otherwise key off challenge type.
+                if (challengeWithImage.ClientMode == PIClientMode.Poll)
                 {
-                    form.DisableOTP = "1"; // Disable OTP input if it is push
+                    form.Mode = PITokenType.Push;
+                    form.DisableOTP = "1";
+                }
+                else
+                {
+                    form.Mode = challengeWithImage.Type;
                 }
             }
+
+            form.EnrollmentOptional = response.EnrollmentOptional ? "1" : "0";
 
             if (!string.IsNullOrEmpty(response.PasskeyRegistration))
             {
                 form.PasskeyRegistration = response.PasskeyRegistration;
                 form.PasskeyChallenge = "";
-                authContext.Data["passkey_registration_serial"] = response.Serial;
-            }
-            // Transaction IDs
-            authContext.Data["transactionid"] = response.TransactionID;
-            if (!string.IsNullOrEmpty(response.OTPTransactionID))
-            {
-                authContext.Data["otp_transaction_id"] = response.OTPTransactionID;
-            }
-            if (!string.IsNullOrEmpty(response.PasskeyTransactionID))
-            {
-                authContext.Data["passkey_transaction_id"] = response.PasskeyTransactionID;
-            }
-            if (!string.IsNullOrEmpty(response.PushTransactionID))
-            {
-                authContext.Data["push_transaction_id"] = response.PushTransactionID;
-            }
-            if (!string.IsNullOrEmpty(response.WebAuthnTransactionID))
-            {
-                authContext.Data["webauthn_transaction_id"] = response.WebAuthnTransactionID;
             }
 
+            // Single source of truth across requests: TryEndAuthentication re-parses this to derive
+            // transaction IDs, the passkey-registration serial, and to repopulate the form on errors.
+            authContext.Data["previousResponse"] = response.Raw;
             return form;
         }
 
-        /// <summary>
-        /// Check if wanted header exists in requestHeaders collection.
-        /// </summary>
-        /// <param name="request">the http request object</param>
-        /// <returns>KeyValuePair list of headers and their values or empty KeyValuePair list </string></returns>
         private List<KeyValuePair<string, string>> GetHeadersToForward(HttpListenerRequest request)
         {
             NameValueCollection requestHeaders = request.Headers;
@@ -627,10 +672,6 @@ namespace privacyIDEAADFSProvider
             return headersToForward;
         }
 
-        /// <summary>
-        /// Return the required authentication method claim, indicating the particular authentication method used.
-        /// </summary>
-        /// <returns>Claims for this authentication method</returns>
         private Claim[] Claims()
         {
             return new[] {
@@ -642,56 +683,119 @@ namespace privacyIDEAADFSProvider
 
         private string GetString(Dictionary<string, object> dict, string key, string defaultValue = "")
         {
-            if (dict.ContainsKey(key))
-            {
-                return (string)dict[key];
-            }
-            Log("Key '" + key + "' could not be found in dict, returning default value '" + defaultValue + "'.");
-            return defaultValue;
+            return dict.TryGetValue(key, out object value) ? (string)value : defaultValue;
         }
 
-        public void Log(string message)
-        {
-            string formatted = "[" + DateTime.Now.ToString("yyyy-MM-ddTHH\\:mm\\:ss") + "] " + message;
-            LogImpl(formatted);
-        }
+        private static string Stamp(string message) =>
+            "[" + DateTime.Now.ToString("yyyy-MM-ddTHH\\:mm\\:ss") + "] " + message;
+
+        public void Log(string message) => LogImpl(Stamp(message));
 
         public void Error(string message)
         {
-            string formatted = "[" + DateTime.Now.ToString("yyyy-MM-ddTHH\\:mm\\:ss") + "] " + message;
-            // write error to both
+            string formatted = Stamp(message);
             EventError(formatted);
             LogImpl(formatted);
         }
 
-        public void Error(Exception exception)
+        public void Error(Exception exception) =>
+            Error(exception.Message + ":\n" + exception);
+
+        // Cached so each error doesn't reopen the event log. Writes are serialized:
+        // EventLog instance members are not guaranteed thread-safe and ADFS calls in from many threads.
+        // We log to the standard Windows "Application" log, NOT "AD FS/Admin": the latter is an ETW
+        // channel, and addressing it through the classic EventLog API makes Windows create a bogus
+        // HKLM\SYSTEM\CurrentControlSet\Services\EventLog\AD FS/Admin key that shadows the channel and
+        // breaks AD FS event logging (and Windows Update). The "privacyIDEAProvider" source is
+        // registered in the Application log by Install.ps1.
+        private static readonly EventLog s_eventLog = new EventLog("Application") { Source = "privacyIDEAProvider" };
+
+        private void EventError(string message) => WriteEvent(message, EventLogEntryType.Error, 9901);
+
+        // Warning-level event-log writes for notable-but-non-fatal conditions, e.g. the one-time
+        // migration of a plaintext secret to encrypted-at-rest (and its failures). Independent of the
+        // debug log so these are always visible.
+        private void EventWarn(string message) => WriteEvent(message, EventLogEntryType.Warning, 9902);
+
+        // Writes are serialized (EventLog instance members are not guaranteed thread-safe and ADFS calls
+        // in from many threads) and never throw: logging must not be able to abort provider load or an
+        // authentication. WriteEntry can throw (e.g. the source is registered under a different log on a
+        // machine the installer hasn't reconciled yet), so swallow it.
+        private static void WriteEvent(string message, EventLogEntryType type, int eventId)
         {
-            string message = exception.Message + ":\n" + exception.ToString();
-            string formatted = "[" + DateTime.Now.ToString("yyyy-MM-ddTHH\\:mm\\:ss") + "] " + message;
-            // Write error to both
-            EventError(formatted);
-            LogImpl(formatted);
+            try
+            {
+                lock (s_eventLog)
+                {
+                    s_eventLog.WriteEntry(message, type, eventId, 0);
+                }
+            }
+            catch
+            {
+                // Nothing safe to do here — the event log is our last-resort sink.
+            }
         }
 
-        private void EventError(string message)
-        {
-            using EventLog eventLog = new EventLog("AD FS/Admin");
-            eventLog.Source = "privacyIDEAProvider";
-            eventLog.WriteEntry(message, EventLogEntryType.Error, 9901, 0);
-        }
+        // Serializes writes across concurrent ADFS worker threads; static so all Adapter instances share it.
+        private static readonly object _logLock = new object();
+        // Tracks whether the last log write failed, so a persistently unwritable log_path produces ONE
+        // event-log entry per failure streak instead of one per debug line (which floods the event log).
+        // Reset on the first successful write, so logging still self-heals if the path becomes writable.
+        private static bool _logWriteFailed;
 
-        public async void LogImpl(string msg)
+        public void LogImpl(string msg)
         {
-            if (_debugLog)
+            if (!_debugLog) return;
+            lock (_logLock)
             {
                 try
                 {
-                    using StreamWriter streamWriter = new StreamWriter("C:\\PrivacyIDEA-ADFS log.txt", append: true);
-                    await streamWriter.WriteLineAsync(msg);
+                    // Open per write: the file is not held exclusively while AD FS runs (admins can read,
+                    // tail, or delete it), and a transient open failure self-heals on the next call.
+                    // FileShare allows concurrent readers + deletion; _logLock serializes our own writes.
+                    using (var stream = new FileStream(_config.LogPath, FileMode.Append, FileAccess.Write,
+                               FileShare.ReadWrite | FileShare.Delete))
+                    using (var writer = new StreamWriter(stream))
+                    {
+                        writer.WriteLine(msg);
+                    }
+                    _logWriteFailed = false;
                 }
                 catch (Exception e)
                 {
-                    EventError("Error while trying to write to logfile: " + e.Message);
+                    // A missing parent directory is the common first-write case for a custom log_path.
+                    // Only attempt to create it on the failure path so the happy path stays a plain append
+                    // (no per-line directory check). Guard null/empty: GetDirectoryName returns "" for a
+                    // bare filename and null for a drive root, and CreateDirectory("") throws.
+                    try
+                    {
+                        string dir = Path.GetDirectoryName(_config.LogPath);
+                        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                        {
+                            Directory.CreateDirectory(dir);
+                            using (var stream = new FileStream(_config.LogPath, FileMode.Append, FileAccess.Write,
+                                       FileShare.ReadWrite | FileShare.Delete))
+                            using (var writer = new StreamWriter(stream))
+                            {
+                                writer.WriteLine(msg);
+                            }
+                            _logWriteFailed = false;
+                            return;
+                        }
+                    }
+                    catch
+                    {
+                        // Fall through to the error reporting below — the path is genuinely unwritable
+                        // (permissions, bad drive, etc.), not merely missing its parent directory.
+                    }
+
+                    // Report only the first failure of a streak — otherwise a bad log_path emits one error
+                    // event per log line across every worker thread.
+                    if (!_logWriteFailed)
+                    {
+                        _logWriteFailed = true;
+                        EventError("Error while writing to logfile (suppressing further log-write errors until it recovers): " + e.Message);
+                    }
                 }
             }
         }

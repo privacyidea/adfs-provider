@@ -32,6 +32,15 @@
 
 		<Property Id="ARPURLINFOABOUT" Value="$(var.AppURLInfoAbout)"/>
 		<Property Id="ARPNOREPAIR" Value="yes" Secure="yes" />
+		<!-- Modify is hidden. The maintenance "Change" flow is NOT safe with the current custom-action
+		     conditions: RunPowerShellUninstall fires on `Installed` (true during a Change) while
+		     RunPowerShellInstall is gated on `NOT Installed` (skipped during a Change), so a Change would
+		     run Uninstall.ps1 (unregister + GAC remove) without re-registering — tearing the provider out
+		     of AD FS. Fixing that needs the uninstall CAs gated on REMOVE="ALL" (with attention to when
+		     REMOVE is populated relative to CostFinalize) AND making the config values actually re-write on
+		     a Change, all verified against the install/change/repair/upgrade/uninstall matrix. Until then,
+		     do not expose Modify. Change the service password via the registry (the provider re-encrypts it
+		     on the next read) or a full reinstall. -->
 		<Property Id="ARPNOMODIFY" Value="yes" Secure="yes" />
 
 		<Condition Message="You need to be an administrator to install this product.">Privileged</Condition>

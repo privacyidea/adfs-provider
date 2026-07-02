@@ -62,12 +62,18 @@
   <PropertyGroup>
     <PostBuildEvent />
   </PropertyGroup>
-  <!--
-	To modify your build process, add your task inside one of the targets below and uncomment it.
-	Other similar extension points exist, see Wix.targets.
-	<Target Name="BeforeBuild">
-	</Target>
-	<Target Name="AfterBuild">
-	</Target>
-	-->
+  <!-- Append the provider's assembly version to the built MSI filename, e.g.
+       PrivacyIDEA-ADFS-Provider-v1.4.0.0.msi. The version is read from the freshly built provider DLL —
+       the same source as the MSI's bound ProductVersion (Include.wxi) — so it tracks AssemblyInfo.cs
+       automatically with no manual step. The provider is AnyCPU, so it always builds to bin\$(Configuration). -->
+  <Target Name="AppendVersionToMsiName" AfterTargets="Build" Condition="Exists('$(TargetPath)')">
+    <GetAssemblyIdentity AssemblyFiles="..\privacyIDEAADFSProvider\bin\$(Configuration)\privacyIDEA-ADFSProvider.dll">
+      <Output TaskParameter="Assemblies" ItemName="_ProviderAssembly" />
+    </GetAssemblyIdentity>
+    <PropertyGroup>
+      <_VersionedMsiPath>$(TargetDir)$(OutputName)-v%(_ProviderAssembly.Version).msi</_VersionedMsiPath>
+    </PropertyGroup>
+    <Move SourceFiles="$(TargetPath)" DestinationFiles="$(_VersionedMsiPath)" />
+    <Message Importance="high" Text="Installer output renamed to $([System.IO.Path]::GetFileName('$(_VersionedMsiPath)'))" />
+  </Target>
 </Project>

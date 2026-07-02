@@ -1,0 +1,54 @@
+name: CodeQL
+
+# Static analysis (SAST) of the provider with GitHub CodeQL.
+#
+# Uses manual build mode: CodeQL analyzes the *compiled* provider assembly, so
+# dataflow/taint analysis runs at full precision (worth it for auth code that
+# touches credentials, DPAPI, registry ACLs and WebAuthn payloads). We build the
+# provider project on its own — not the test project — so results cover shipped
+# code only, not test fixtures.
+#
+# The build mirrors the CI gate's trick: /p:SignAssembly=false so the gitignored
+# adfskeyfile.pfx isn't needed. Findings appear in the repo's Security tab and as
+# PR annotations. Note: this is a PUBLIC repo, so those findings are public too.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '0 6 * * 1'   # weekly, Monday 06:00 UTC — catches new CodeQL rules
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    name: Analyze (csharp)
+    runs-on: windows-latest
+    permissions:
+      security-events: write   # upload SARIF to the Security tab
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: csharp
+          build-mode: manual
+          queries: security-extended
+
+      - name: Build provider (unsigned)
+        run: |
+          msbuild privacyIDEAADFSProvider\privacyIDEAADFSProvider.csproj /t:Restore /p:RestorePackagesConfig=true /p:SolutionDir=${{ github.workspace }}\ /v:minimal /nologo
+          msbuild privacyIDEAADFSProvider\privacyIDEAADFSProvider.csproj /p:Configuration=Release /p:SignAssembly=false /v:minimal /nologo
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:csharp"

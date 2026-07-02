@@ -1,0 +1,96 @@
+name: CI
+
+# PR test gate. Builds the test project (which transitively builds the .NET
+# Framework 4.8 provider DLL) and runs the test suite on a Windows runner.
+#
+# Notes / constraints (see also the README + project notes):
+#   * The provider targets .NET Framework 4.8 and strong-name signs with
+#     adfskeyfile.pfx, which is intentionally NOT in the repo. CI therefore
+#     builds with /p:SignAssembly=false so no key is needed; signing only
+#     matters for shipped artifacts, not for running tests.
+#   * Must use full MSBuild (from VS) — `dotnet build`/`dotnet test` reject the
+#     PFX-signing csproj, and the provider is a classic (non-SDK) project.
+#   * The test project is net8.0 and references the net48 provider DLL, so the
+#     job runs on windows-latest and uses vstest.console on the built assembly,
+#     mirroring the known-good local flow.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore (PackageReference + packages.config)
+        # SolutionDir is required for RestorePackagesConfig (it restores the
+        # provider's packages.config). We restore via the test project rather
+        # than the .sln to avoid evaluating the WiX installer project, whose
+        # targets aren't installed on the runner.
+        run: msbuild Tests\Tests.csproj /t:Restore /p:RestorePackagesConfig=true /p:SolutionDir=${{ github.workspace }}\ /v:minimal /nologo
+
+      - name: Build tests (unsigned)
+        run: msbuild Tests\Tests.csproj /p:Configuration=Debug /p:SignAssembly=false /v:minimal /nologo
+
+      - name: Run tests
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vstest = & $vswhere -latest -find "**\vstest.console.exe" | Select-Object -First 1
+          if (-not $vstest) { throw "vstest.console.exe not found" }
+          & $vstest "Tests\bin\Debug\net8.0\Tests.dll" --logger:"trx;LogFileName=test-results.trx" --ResultsDirectory:TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/*.trx
+          if-no-files-found: ignore
+
+  # Generates a CycloneDX Software Bill of Materials for the third-party components
+  # (driven by the provider's packages.config — currently Newtonsoft.Json). The SBOM is
+  # uploaded as a build artifact on every run, and attached to the GitHub Release when one
+  # is published, so each shipped version has a matching, machine-readable component list.
+  sbom:
+    runs-on: windows-latest
+    permissions:
+      contents: write  # needed to attach the SBOM asset to a release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate SBOM (CycloneDX)
+        shell: pwsh
+        run: |
+          # Pin the tool version for reproducible, supply-chain-stable SBOM generation.
+          dotnet tool install --global CycloneDX --version 6.2.0
+          dotnet CycloneDX privacyIDEAADFSProvider\packages.config --output sbom --json --filename bom.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom/bom.json
+          if-no-files-found: error
+
+      - name: Attach SBOM to release
+        if: github.event_name == 'release'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" sbom/bom.json --clobber
