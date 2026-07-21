@@ -1,3 +1,8 @@
+## 2026-07-21 v1.4.1
+
+### Fixes
+* Fixed a `NullReferenceException` in `TryEndAuthentication` that surfaced as "An error occurred during a passive federation request." when the login form was posted without the page JavaScript having populated the hidden `formResult` field (observed with the device-registration/OAuth relying party `urn:ms-drs`). An empty, whitespace, `"null"`, or non-string `formResult`, and a null authentication context, now degrade to a retryable error form instead of crashing (#78).
+
 ## 2026-07-02 v1.4.0
 
 Support for privacyIDEA 3.13 features:
