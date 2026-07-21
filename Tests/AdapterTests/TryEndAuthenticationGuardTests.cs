@@ -141,24 +141,30 @@ namespace Tests.AdapterTests
         }
 
         [TestMethod]
-        [ExpectedException(typeof(ExternalAuthenticationException))]
-        public void NullAuthContext_ThrowsExternalAuthenticationException_NotNullReference()
+        public void NullAuthContext_ReturnsRetryForm_NoNullReference()
         {
+            // A null context must not NRE (nor throw ExternalAuthenticationException, whose constructor
+            // rejects a null context); it degrades to the retryable error form.
             var adapter = NewAdapter();
             var proof = new FakeProofData(new Dictionary<string, object> { ["formResult"] = "{}" });
 
-            adapter.TryEndAuthentication(null, proof, null, out _);
+            IAdapterPresentation result = adapter.TryEndAuthentication(null, proof, null, out Claim[] claims);
+
+            Assert.IsNotNull(result, "Expected a presentation form, not null (which would signal success).");
+            Assert.AreEqual(0, claims.Length);
         }
 
         [TestMethod]
-        [ExpectedException(typeof(ExternalAuthenticationException))]
-        public void NullAuthContextData_ThrowsExternalAuthenticationException_NotNullReference()
+        public void NullAuthContextData_ReturnsRetryForm_NoNullReference()
         {
             var adapter = NewAdapter();
             var proof = new FakeProofData(new Dictionary<string, object> { ["formResult"] = "{}" });
             var ctx = new FakeAuthContext(null);
 
-            adapter.TryEndAuthentication(ctx, proof, null, out _);
+            IAdapterPresentation result = adapter.TryEndAuthentication(ctx, proof, null, out Claim[] claims);
+
+            Assert.IsNotNull(result);
+            Assert.AreEqual(0, claims.Length);
         }
     }
 }

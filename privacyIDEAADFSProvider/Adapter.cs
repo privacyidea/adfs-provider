@@ -141,12 +141,13 @@ namespace privacyIDEAADFSProvider
 
             // authContext.Data is dereferenced unconditionally below (and again for previousResponse/userid).
             // The device-registration/OAuth (urn:ms-drs) passive flow has been seen to reach TryEndAuthentication
-            // with a null context; guard it so that degrades to the ADFS error page via OnError instead of an
-            // unhandled NullReferenceException out of the handler.
+            // with a null context; return the retryable error form instead of an unhandled NullReferenceException.
+            // We can't wrap this in an ExternalAuthenticationException: its constructor rejects a null context
+            // (ArgumentNullException), and we have none to hand here.
             if (authContext == null || authContext.Data == null)
             {
-                Error("AuthContext is null or empty!");
-                throw new ExternalAuthenticationException("Error - AuthContext is empty", authContext);
+                Error("AuthContext is null or its Data is empty!");
+                return new AdapterPresentationForm { ErrorMessage = "Internal error. Please try again." };
             }
 
             if (proofData == null || proofData.Properties == null)
