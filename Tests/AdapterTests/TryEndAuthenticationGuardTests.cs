@@ -141,6 +141,21 @@ namespace Tests.AdapterTests
         }
 
         [TestMethod]
+        public void FormResultMalformedJson_ReturnsRetryForm_NoJsonException()
+        {
+            // A non-empty formResult that isn't valid JSON must not let a JsonException escape as a 500;
+            // it degrades to the retryable error form like the null/empty cases.
+            var adapter = NewAdapter();
+            var proof = new FakeProofData(new Dictionary<string, object> { ["formResult"] = "not json {" });
+            var ctx = new FakeAuthContext(MinimalContext());
+
+            IAdapterPresentation result = adapter.TryEndAuthentication(ctx, proof, null, out Claim[] claims);
+
+            Assert.IsNotNull(result);
+            Assert.AreEqual(0, claims.Length);
+        }
+
+        [TestMethod]
         public void NullAuthContext_ReturnsRetryForm_NoNullReference()
         {
             // A null context must not NRE (nor throw ExternalAuthenticationException, whose constructor

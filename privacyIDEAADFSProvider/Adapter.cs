@@ -191,7 +191,21 @@ namespace privacyIDEAADFSProvider
                 form.ErrorMessage = "Internal error. Please try again.";
                 return form;
             }
-            FormResult fr = JsonConvert.DeserializeObject<FormResult>((string)formResult);
+            // A non-empty formResult still isn't guaranteed to be valid JSON: the same client that bypasses
+            // the page JS can post arbitrary content. DeserializeObject returns null for "null"/"" but throws
+            // JsonException on malformed input, so handle both the null result and the exception here rather
+            // than let a JsonException escape as an unhandled 500.
+            FormResult fr;
+            try
+            {
+                fr = JsonConvert.DeserializeObject<FormResult>((string)formResult);
+            }
+            catch (JsonException e)
+            {
+                Error("formResult is not valid JSON: " + (string)formResult + " (" + e.Message + ")");
+                form.ErrorMessage = "Internal error. Please try again.";
+                return form;
+            }
             if (fr == null)
             {
                 Error("formResult could not be parsed into a FormResult: " + (string)formResult);
