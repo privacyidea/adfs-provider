@@ -16,7 +16,10 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      # Real release tags only: vMAJOR.MINOR.PATCH. Pre-release/dev tags such as
+      # v1.4.1dev0 deliberately do NOT trigger this job — they have no signed MSI
+      # and no dedicated changelog section, so the release flow is skipped for them.
+      - 'v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
     inputs:
       tag:
