@@ -203,9 +203,10 @@ namespace privacyIDEAADFSProvider
             }
             catch (JsonException e)
             {
-                // Log the exception and the payload length only — formResult can carry large, user-controlled
-                // WebAuthn/passkey blobs, which we don't want dumped verbatim into the Windows event log.
-                Error($"formResult is not valid JSON (length {((string)formResult).Length}): {e.Message}");
+                // Log the exception type and the payload length only — formResult can carry large, user-controlled
+                // WebAuthn/passkey blobs, and Newtonsoft's e.Message echoes the offending character, so neither the
+                // payload nor the message is safe to dump verbatim into the Windows event log.
+                Error($"formResult is not valid JSON (length {((string)formResult).Length}, {e.GetType().Name}).");
                 form.ErrorMessage = "Internal error. Please try again.";
                 return form;
             }
@@ -725,7 +726,11 @@ namespace privacyIDEAADFSProvider
 
         private string GetString(Dictionary<string, object> dict, string key, string defaultValue = "")
         {
-            return dict.TryGetValue(key, out object value) ? (string)value : defaultValue;
+            // Match the value as a string rather than hard-casting: posted form fields are normally strings,
+            // but a client that bypasses the page JS can post a non-string (the same threat model that motivated
+            // the formResult guard). Fall back to the default instead of throwing an InvalidCastException out of
+            // TryEndAuthentication — that would surface as exactly the 500 the guards set out to eliminate.
+            return dict.TryGetValue(key, out object value) && value is string s ? s : defaultValue;
         }
 
         private static string Stamp(string message) =>
