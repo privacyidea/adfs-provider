@@ -129,7 +129,7 @@ namespace privacyIDEAADFSProvider
             HttpListenerRequest request, out Claim[] outgoingClaims)
         {
             Log("TryEndAuthentication");
-            if (authContext != null)
+            if (authContext != null && authContext.Data != null)
             {
                 if (GetString(authContext.Data, "authSuccess", "") == "1")
                 {
@@ -138,6 +138,18 @@ namespace privacyIDEAADFSProvider
                 }
             }
             outgoingClaims = new Claim[0];
+
+            // authContext.Data is dereferenced unconditionally below (and again for previousResponse/userid).
+            // The device-registration/OAuth (urn:ms-drs) passive flow has been seen to reach TryEndAuthentication
+            // with a null context; return the retryable error form instead of an unhandled NullReferenceException.
+            // We return a plain form rather than an ExternalAuthenticationException because that path has to
+            // cover the null-context case too, where there is no context to hand to the exception's constructor
+            // (it rejects a null context with an ArgumentNullException).
+            if (authContext == null || authContext.Data == null)
+            {
+                Error("AuthContext is null or its Data is null!");
+                return new AdapterPresentationForm { ErrorMessage = "Internal error. Please try again." };
+            }
 
             if (proofData == null || proofData.Properties == null)
             {
@@ -167,12 +179,43 @@ namespace privacyIDEAADFSProvider
             // skip button (gated on enrollmentOptional=="1" in the page JS) disappears after the first poll.
             form.EnrollmentOptional = GetString(proofDict, "enrollmentOptional", "0");
 
-            if (!proofDict.TryGetValue("formResult", out object formResult))
+            // The formResult hidden field ships empty and is only populated by the page JS on submit
+            // (AuthPage.html). A client that posts the form without that JS having run — observed with the
+            // device-registration/OAuth (urn:ms-drs) flow — sends the field present but empty, and
+            // JsonConvert.DeserializeObject returns null for an empty/whitespace/"null" body. Guard both the
+            // empty field (which also covers a non-string value, via `as string`) and a null deserialization
+            // result so this degrades to a retryable error instead of a NullReferenceException.
+            if (!proofDict.TryGetValue("formResult", out object formResult)
+                || string.IsNullOrWhiteSpace(formResult as string))
             {
+                Error("formResult is missing or empty. The form was likely submitted without the page JavaScript running.");
                 form.ErrorMessage = "Internal error. Please try again.";
                 return form;
             }
-            FormResult fr = JsonConvert.DeserializeObject<FormResult>((string)formResult);
+            // A non-empty formResult still isn't guaranteed to be valid JSON: the same client that bypasses
+            // the page JS can post arbitrary content. DeserializeObject returns null for "null"/"" but throws
+            // JsonException on malformed input, so handle both the null result and the exception here rather
+            // than let a JsonException escape as an unhandled 500.
+            FormResult fr;
+            try
+            {
+                fr = JsonConvert.DeserializeObject<FormResult>((string)formResult);
+            }
+            catch (JsonException e)
+            {
+                // Log the exception type and the payload length only — formResult can carry large, user-controlled
+                // WebAuthn/passkey blobs, and Newtonsoft's e.Message echoes the offending character, so neither the
+                // payload nor the message is safe to dump verbatim into the Windows event log.
+                Error($"formResult is not valid JSON (length {((string)formResult).Length}, {e.GetType().Name}).");
+                form.ErrorMessage = "Internal error. Please try again.";
+                return form;
+            }
+            if (fr == null)
+            {
+                Error($"formResult could not be parsed into a FormResult (length {((string)formResult).Length}).");
+                form.ErrorMessage = "Internal error. Please try again.";
+                return form;
+            }
             bool modeChanged = fr.ModeChanged;
             string mode = modeChanged ? fr.NewMode : GetString(proofDict, "mode", PITokenType.Otp);
             string otp = GetString(proofDict, "otp");
@@ -683,7 +726,11 @@ namespace privacyIDEAADFSProvider
 
         private string GetString(Dictionary<string, object> dict, string key, string defaultValue = "")
         {
-            return dict.TryGetValue(key, out object value) ? (string)value : defaultValue;
+            // Match the value as a string rather than hard-casting: posted form fields are normally strings,
+            // but a client that bypasses the page JS can post a non-string (the same threat model that motivated
+            // the formResult guard). Fall back to the default instead of throwing an InvalidCastException out of
+            // TryEndAuthentication — that would surface as exactly the 500 the guards set out to eliminate.
+            return dict.TryGetValue(key, out object value) && value is string s ? s : defaultValue;
         }
 
         private static string Stamp(string message) =>
