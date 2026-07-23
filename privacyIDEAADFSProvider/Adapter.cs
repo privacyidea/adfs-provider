@@ -142,11 +142,12 @@ namespace privacyIDEAADFSProvider
             // authContext.Data is dereferenced unconditionally below (and again for previousResponse/userid).
             // The device-registration/OAuth (urn:ms-drs) passive flow has been seen to reach TryEndAuthentication
             // with a null context; return the retryable error form instead of an unhandled NullReferenceException.
-            // We can't wrap this in an ExternalAuthenticationException: its constructor rejects a null context
-            // (ArgumentNullException), and we have none to hand here.
+            // We return a plain form rather than an ExternalAuthenticationException because that path has to
+            // cover the null-context case too, where there is no context to hand to the exception's constructor
+            // (it rejects a null context with an ArgumentNullException).
             if (authContext == null || authContext.Data == null)
             {
-                Error("AuthContext is null or its Data is empty!");
+                Error("AuthContext is null or its Data is null!");
                 return new AdapterPresentationForm { ErrorMessage = "Internal error. Please try again." };
             }
 
@@ -202,13 +203,15 @@ namespace privacyIDEAADFSProvider
             }
             catch (JsonException e)
             {
-                Error("formResult is not valid JSON: " + (string)formResult + " (" + e.Message + ")");
+                // Log the exception and the payload length only — formResult can carry large, user-controlled
+                // WebAuthn/passkey blobs, which we don't want dumped verbatim into the Windows event log.
+                Error($"formResult is not valid JSON (length {((string)formResult).Length}): {e.Message}");
                 form.ErrorMessage = "Internal error. Please try again.";
                 return form;
             }
             if (fr == null)
             {
-                Error("formResult could not be parsed into a FormResult: " + (string)formResult);
+                Error($"formResult could not be parsed into a FormResult (length {((string)formResult).Length}).");
                 form.ErrorMessage = "Internal error. Please try again.";
                 return form;
             }
