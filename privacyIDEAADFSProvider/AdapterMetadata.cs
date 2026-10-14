@@ -24,7 +24,14 @@ namespace privacyIDEAADFSProvider
             6153,   // en-IE
             5129,   // en-NZ
             7177,   // en-ZA
-            16393   // en-IN
+            16393,   // en-IN
+            // French
+            1036,   // fr-FR
+            2060,   // fr-BE
+            3084,   // fr-CA
+            4108,   // fr-CH
+            5132,   // fr-LU
+            6156    // fr-MC
         };
 
         private static readonly string[] s_authenticationMethods =
