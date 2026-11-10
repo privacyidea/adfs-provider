@@ -149,6 +149,62 @@ namespace Tests.AdapterTests
         }
 
         [TestMethod]
+        public void PushMode_NoFormResult_PollConfirmed_Succeeds()
+        {
+            // No-JS push: the user selects the manual "I confirmed on my device" button, which re-posts the
+            // form with mode=push and an empty formResult. The adapter polls the transaction once; once the
+            // phone has confirmed, the poll accepts and the finalize /validate/check authenticates.
+            _server.Given(Request.Create().WithPath("/validate/polltransaction").UsingGet())
+                .RespondWith(Response.Create().WithStatusCode(200).WithBody(PushFixtures.PollAccepted));
+            _server.Given(Request.Create().WithPath("/validate/check").UsingPost())
+                .RespondWith(Response.Create().WithStatusCode(200).WithBody(PushFixtures.PushFinalAccept));
+            var adapter = NewAdapter();
+            var proof = new FakeProofData(new Dictionary<string, object>
+            {
+                ["formResult"] = "",
+                ["mode"] = "push",
+            });
+            var ctx = new FakeAuthContext(new Dictionary<string, object>
+            {
+                ["userid"] = "alice",
+                ["domain"] = "example.com",
+                ["previousResponse"] = PushFixtures.PushChallenge,
+            });
+
+            IAdapterPresentation result = adapter.TryEndAuthentication(ctx, proof, null, out Claim[] claims);
+
+            Assert.IsNull(result);
+            Assert.AreEqual(1, claims.Length);
+            Assert.AreEqual(OtpAuthMethod, claims[0].Value);
+        }
+
+        [TestMethod]
+        public void PushMode_NoFormResult_PollPending_ReturnsWaitingForm()
+        {
+            // The phone has not confirmed yet: the poll is pending, so the adapter re-presents a form with a
+            // "not confirmed yet" message (the no-JS user selects the button again to poll once more).
+            _server.Given(Request.Create().WithPath("/validate/polltransaction").UsingGet())
+                .RespondWith(Response.Create().WithStatusCode(200).WithBody(PushFixtures.PollPending));
+            var adapter = NewAdapter();
+            var proof = new FakeProofData(new Dictionary<string, object>
+            {
+                ["formResult"] = "",
+                ["mode"] = "push",
+            });
+            var ctx = new FakeAuthContext(new Dictionary<string, object>
+            {
+                ["userid"] = "alice",
+                ["domain"] = "example.com",
+                ["previousResponse"] = PushFixtures.PushChallenge,
+            });
+
+            IAdapterPresentation result = adapter.TryEndAuthentication(ctx, proof, null, out Claim[] claims);
+
+            Assert.IsNotNull(result, "A pending push must re-present a form, not authenticate.");
+            Assert.AreEqual(0, claims.Length);
+        }
+
+        [TestMethod]
         public void EmptyFormResult_WrongOtp_ReturnsErrorFormNotSuccess()
         {
             // A no-JS submit with a wrong OTP must re-present a form (not authenticate, not crash).

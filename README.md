@@ -55,14 +55,14 @@ The login page uses JavaScript for the modern token types and for convenience fe
 
 Works without JavaScript:
 * One-time-password entry. The user types the OTP and selects Submit. This covers HOTP, TOTP, and any challenge-response token whose answer is an OTP (email, SMS).
+* Push login, through a manual "I confirmed on my device" button. With JavaScript the page polls automatically; without it, each button press polls the transaction once. This needs the server to place the client in push mode (set `preferred_client_mode=poll` on the privacyIDEA server), because switching token type on the page needs JavaScript.
 * The enrollment QR code shown by `enroll_via_multichallenge`. The user scans it, then enters the resulting OTP.
 
 Needs JavaScript (hidden when it is disabled):
 * WebAuthn and passkey (they also require a browser that supports the WebAuthn API and a secure `https` context).
-* Push polling (the page polls the server on a timer).
 * The token-type switch buttons (WebAuthn / Passkey / Push / OTP) and the "copy to clipboard" button.
 
-This matters for clients that do not run page JavaScript, such as a legacy embedded WebView (for example Outlook's) or a passive federation flow like device registration and Windows Hello for Business provisioning. Those clients can still complete OTP login.
+This matters for clients that do not run page JavaScript, such as a legacy embedded WebView (for example Outlook's) or a passive federation flow like device registration and Windows Hello for Business provisioning. Those clients can still complete OTP login, and push login if the server sets push as the preferred client mode.
 
 ## Signing and verifying the installer
 The dll that is created by this solution requires to be strong-name signed to be deployed. Change the key file to your own in the project settings of the provider.

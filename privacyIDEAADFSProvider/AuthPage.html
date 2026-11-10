@@ -16,20 +16,25 @@
         background-color: rgb(120, 120, 120);
     }
 </style>
-<div id="loginArea">
+<div id="loginArea" data-mode="#mode#">
     <!-- No-JavaScript fallback. The <noscript> content is applied ONLY when scripting is disabled, so it
          never affects the normal JS path. One-time-password entry works without JavaScript: the server
          treats an empty formResult as a plain OTP submit. These rules hide the controls that only work with
-         JavaScript (WebAuthn, Passkey, Push polling, mode switch, copy-to-clipboard) and reveal the
-         enrollment block that the page JS would otherwise un-hide. -->
+         JavaScript (WebAuthn, Passkey, mode switch, copy-to-clipboard) and reveal the enrollment block that
+         the page JS would otherwise un-hide. Push has no auto-poll without JavaScript, so in push mode the
+         OTP input is hidden and a manual "I confirmed on my device" button is shown: each click re-posts the
+         form, which polls the transaction once. -->
     <noscript>
         <style>
             .pi-js-only { display: none !important; }
             #enrollmentBlock[data-enrollment-mode="image"] .enrollment-image,
             #enrollmentBlock[data-enrollment-mode="legacy"] .enrollment-legacy { display: block !important; }
+            #loginArea[data-mode="push"] #otp,
+            #loginArea[data-mode="push"] #submitButton { display: none !important; }
+            #loginArea[data-mode="push"] #pushConfirmButtonNoJs { display: inline-block !important; }
         </style>
-        <p>JavaScript is disabled. Enter your one-time password and select Submit. Security key, passkey, and
-           push options need JavaScript and are hidden.</p>
+        <p>JavaScript is disabled. Enter your one-time password and select Submit, or for push confirm on your
+           device and select the button. Security key and passkey options need JavaScript and are hidden.</p>
     </noscript>
     <!-- Enrollment Message -->
     <div id="enrollmentBlock" data-enrollment-mode="#enrollmentMode#">
@@ -73,6 +78,10 @@
         <label for="otp" class="block" aria-label="#MESSAGE#">#MESSAGE#</label>
         <input id="otp" name="otp" type="password" value="" class="text" placeholder="#OTPTEXT#" size="35" autocomplete="new-password" autofocus />
         <input id="submitButton" type="submit" name="Submit" value="#SUBMIT#" onclick="submitForm()" />
+        <!-- No-JavaScript push: a manual poll button. Hidden by default (with JavaScript the page auto-polls);
+             the noscript rules reveal it only in push mode. It is placed after the normal submit button so
+             that stays the implicit submitter. type=submit re-posts the form, which polls the transaction once. -->
+        <input id="pushConfirmButtonNoJs" type="submit" name="Submit" value="I confirmed on my device" class="pi-button" style="display:none" />
 
         <input id="autoSubmit" type="hidden" name="autoSubmit" value="#autoSubmit#" />
         <input id="mode" type="hidden" name="mode" value="#mode#" />
