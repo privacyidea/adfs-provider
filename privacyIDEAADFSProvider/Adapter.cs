@@ -179,42 +179,48 @@ namespace privacyIDEAADFSProvider
             // skip button (gated on enrollmentOptional=="1" in the page JS) disappears after the first poll.
             form.EnrollmentOptional = GetString(proofDict, "enrollmentOptional", "0");
 
-            // The formResult hidden field ships empty and is only populated by the page JS on submit
-            // (AuthPage.html). A client that posts the form without that JS having run — observed with the
-            // device-registration/OAuth (urn:ms-drs) flow — sends the field present but empty, and
-            // JsonConvert.DeserializeObject returns null for an empty/whitespace/"null" body. Guard both the
-            // empty field (which also covers a non-string value, via `as string`) and a null deserialization
-            // result so this degrades to a retryable error instead of a NullReferenceException.
-            if (!proofDict.TryGetValue("formResult", out object formResult)
-                || string.IsNullOrWhiteSpace(formResult as string))
-            {
-                Error("formResult is missing or empty. The form was likely submitted without the page JavaScript running.");
-                form.ErrorMessage = "Internal error. Please try again.";
-                return form;
-            }
-            // A non-empty formResult still isn't guaranteed to be valid JSON: the same client that bypasses
-            // the page JS can post arbitrary content. DeserializeObject returns null for "null"/"" but throws
-            // JsonException on malformed input, so handle both the null result and the exception here rather
-            // than let a JsonException escape as an unhandled 500.
+            // The formResult hidden field is populated by the page JavaScript on submit (AuthPage.html).
+            // A client without JavaScript posts it empty: a legacy embedded WebView (issue #90), or the
+            // device-registration/OAuth (urn:ms-drs) passive flow (issue #77). For a plain one-time-password
+            // submit the JS-built formResult carries nothing the server needs — origin is used only by
+            // WebAuthn and Passkey, and every other field defaults to false/empty — so an empty, missing, or
+            // non-string field (via `as string`) degrades to an all-default FormResult. The user can then
+            // type an OTP and submit without JavaScript, and the posted otp/mode are validated below. This
+            // also removes the NullReferenceException that an empty field caused before this path existed
+            // (fr was null, and fr.ModeChanged threw).
             FormResult fr;
-            try
+            bool formResultPresent = proofDict.TryGetValue("formResult", out object formResult)
+                && !string.IsNullOrWhiteSpace(formResult as string);
+            if (!formResultPresent)
             {
-                fr = JsonConvert.DeserializeObject<FormResult>((string)formResult);
+                Log("formResult is empty or missing. Using the no-JavaScript path (OTP only).");
+                fr = new FormResult();
             }
-            catch (JsonException e)
+            else
             {
-                // Log the exception type and the payload length only — formResult can carry large, user-controlled
-                // WebAuthn/passkey blobs, and Newtonsoft's e.Message echoes the offending character, so neither the
-                // payload nor the message is safe to dump verbatim into the Windows event log.
-                Error($"formResult is not valid JSON (length {((string)formResult).Length}, {e.GetType().Name}).");
-                form.ErrorMessage = "Internal error. Please try again.";
-                return form;
-            }
-            if (fr == null)
-            {
-                Error($"formResult could not be parsed into a FormResult (length {((string)formResult).Length}).");
-                form.ErrorMessage = "Internal error. Please try again.";
-                return form;
+                // A non-empty formResult still isn't guaranteed to be valid JSON: a client that bypasses the
+                // page JS can post arbitrary content. DeserializeObject returns null for "null"/"" but throws
+                // JsonException on malformed input, so handle both the null result and the exception here
+                // rather than let a JsonException escape as an unhandled 500.
+                try
+                {
+                    fr = JsonConvert.DeserializeObject<FormResult>((string)formResult);
+                }
+                catch (JsonException e)
+                {
+                    // Log the exception type and the payload length only — formResult can carry large,
+                    // user-controlled WebAuthn/passkey blobs, and Newtonsoft's e.Message echoes the offending
+                    // character, so neither the payload nor the message is safe to dump into the event log.
+                    Error($"formResult is not valid JSON (length {((string)formResult).Length}, {e.GetType().Name}).");
+                    form.ErrorMessage = "Internal error. Please try again.";
+                    return form;
+                }
+                if (fr == null)
+                {
+                    Error($"formResult could not be parsed into a FormResult (length {((string)formResult).Length}).");
+                    form.ErrorMessage = "Internal error. Please try again.";
+                    return form;
+                }
             }
             bool modeChanged = fr.ModeChanged;
             string mode = modeChanged ? fr.NewMode : GetString(proofDict, "mode", PITokenType.Otp);
@@ -466,6 +472,12 @@ namespace privacyIDEAADFSProvider
         private Dictionary<string, string> CollectCustomParams(HttpListenerRequest request)
         {
             Dictionary<string, string> customParameters = new Dictionary<string, string>();
+            // request is never null in the AD FS pipeline, but defend against it so a caller without one
+            // (nothing to collect then) cannot turn into a NullReferenceException out of TryEndAuthentication.
+            if (request == null)
+            {
+                return customParameters;
+            }
             if (_config.ForwardClientIP)
             {
                 customParameters.Add("client", GetClientIPAddress(request));
@@ -695,6 +707,12 @@ namespace privacyIDEAADFSProvider
 
         private List<KeyValuePair<string, string>> GetHeadersToForward(HttpListenerRequest request)
         {
+            // request is never null in the AD FS pipeline, but defend against it (nothing to forward then)
+            // so the no-JavaScript/passive paths cannot NullReference on request.Headers.
+            if (request == null)
+            {
+                return new List<KeyValuePair<string, string>>();
+            }
             NameValueCollection requestHeaders = request.Headers;
             List<KeyValuePair<string, string>> headersToForward = new List<KeyValuePair<string, string>>();
 

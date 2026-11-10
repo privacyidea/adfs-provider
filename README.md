@@ -50,6 +50,20 @@ It is possible to map different Windows domains to different privacyIDEA realms.
 
 If `trusted_proxies` is left empty, the provider keeps the previous behavior of trusting `X-Forwarded-For` unconditionally — this is kept for backward compatibility but is **not recommended** when IP-based policies are in use.
 
+## Client JavaScript requirements
+The login page uses JavaScript for the modern token types and for convenience features. One-time-password login does not need it.
+
+Works without JavaScript:
+* One-time-password entry. The user types the OTP and selects Submit. This covers HOTP, TOTP, and any challenge-response token whose answer is an OTP (email, SMS).
+* The enrollment QR code shown by `enroll_via_multichallenge`. The user scans it, then enters the resulting OTP.
+
+Needs JavaScript (hidden when it is disabled):
+* WebAuthn and passkey (they also require a browser that supports the WebAuthn API and a secure `https` context).
+* Push polling (the page polls the server on a timer).
+* The token-type switch buttons (WebAuthn / Passkey / Push / OTP) and the "copy to clipboard" button.
+
+This matters for clients that do not run page JavaScript, such as a legacy embedded WebView (for example Outlook's) or a passive federation flow like device registration and Windows Hello for Business provisioning. Those clients can still complete OTP login.
+
 ## Signing and verifying the installer
 The dll that is created by this solution requires to be strong-name signed to be deployed. Change the key file to your own in the project settings of the provider.
 
