@@ -11,8 +11,9 @@
                 <Control Type="Text"     Id="label_url"  X="22" Y="65" Width="52" Height="10" Text="Server URL" />
                 <Control Type="Edit"     Id="in_url"     X="78" Y="63" Width="165" Height="15" Property="URL" Help="Server URL including scheme and path." />
                 <Control Type="CheckBox" Id="cbox_ssl"   X="252" Y="64" Width="100" Height="15" Text="Disable SSL verification" CheckBoxValue="1" Property="DISABLESSL" />
-                <Control Type="Text"     Id="label_realm" X="22" Y="85" Width="55" Height="18" Text="Realm (optional)" />
+                <Control Type="Text"     Id="label_realm" X="22" Y="87" Width="52" Height="10" Text="Realm" />
                 <Control Type="Edit"     Id="in_realm"   X="78" Y="85" Width="90" Height="15" Property="REALM" />
+                <Control Type="Text"     Id="label_realm_opt" X="172" Y="87" Width="42" Height="10" Text="(optional)" />
                 <Control Type="CheckBox" Id="cbox_upn"   X="252" Y="85" Width="80" Height="15" Text="Use UPN" CheckBoxValue="1" Property="USEUPN" />
 
                 <!-- ===== Service account (challenge-response) ===== -->
