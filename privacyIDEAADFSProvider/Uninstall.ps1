@@ -43,15 +43,57 @@ $myPath = Get-Location
 $myDll = 'privacyIDEA-ADFSProvider.dll'
 $myDllFullName = (get-item $myDll).FullName
 
-Unregister-AdfsAuthenticationProvider -Name "privacyIDEAADFSProvider" -Confirm:$false -ErrorAction Stop
-[System.Reflection.Assembly]::LoadWithPartialName("System.EnterpriseServices")
-$publish = New-Object System.EnterpriseServices.Internal.Publish
-$publish.GacRemove($myDllFullName)
+# Best-effort cleanup: each step is wrapped so one failure (for example Unregister reporting the provider
+# is still in use because the detach above failed) does not abort the rest and leave the machine
+# half-uninstalled.
+try
+{
+    Unregister-AdfsAuthenticationProvider -Name "privacyIDEAADFSProvider" -Confirm:$false -ErrorAction Stop
+}
+catch
+{
+    Write-Warning "Could not unregister the provider (it may still be in use): $_. Continuing with cleanup."
+}
+
+try
+{
+    [System.Reflection.Assembly]::LoadWithPartialName("System.EnterpriseServices") | Out-Null
+    $publish = New-Object System.EnterpriseServices.Internal.Publish
+    $publish.GacRemove($myDllFullName)
+}
+catch
+{
+    Write-Warning "Could not remove the assembly from the GAC: $_"
+}
+
+# Wipe the secrets from the configuration key. The MSI removes the values it authored, but a manual run of
+# this script (the README's manual-uninstall path) otherwise leaves service_pass and api_key behind. On a
+# major upgrade this runs for the old version and the new install re-writes the values from its prefilled
+# properties, so the secrets are preserved across an upgrade while a real uninstall clears them.
+try
+{
+    $configKey = 'HKLM:\SOFTWARE\Netknights GmbH\PrivacyIDEA-ADFS'
+    foreach ($secret in 'service_pass', 'api_key')
+    {
+        Remove-ItemProperty -Path $configKey -Name $secret -ErrorAction SilentlyContinue
+    }
+}
+catch
+{
+    Write-Warning "Could not remove the secret registry values: $_"
+}
 
 # Remove the event log source registered by Install.ps1.
-if ([System.Diagnostics.EventLog]::SourceExists("privacyIDEAProvider"))
+try
 {
-    [System.Diagnostics.EventLog]::DeleteEventSource("privacyIDEAProvider")
+    if ([System.Diagnostics.EventLog]::SourceExists("privacyIDEAProvider"))
+    {
+        [System.Diagnostics.EventLog]::DeleteEventSource("privacyIDEAProvider")
+    }
+}
+catch
+{
+    Write-Warning "Could not remove the event log source: $_"
 }
 
 Restart-Service adfssrv
