@@ -44,6 +44,11 @@
                 <!-- END TRIGGER CHALLENGE / SEND PASSWORD CONTROLS -->
                 <Control Type="CheckBox" Id="cbox_upn" Width="50" Height="17" X="38" Y="135" Text="Use UPN" CheckBoxValue="1" Property="USEUPN" />
                 <Control Type="CheckBox" Id="cbox_debuglog" Width="116" Height="17" X="38" Y="214" Text="Activate debug log" CheckBoxValue="1" Property="DEBUGLOG" />
+                <!-- Remember this device: the plugin-side switch. It also needs the API key below and a
+                     server-side remember_device policy to take effect. -->
+                <Control Type="CheckBox" Id="cbox_remember" Width="150" Height="17" X="95" Y="135" Text="Remember this device" CheckBoxValue="1" Property="ENABLEREMEMBERDEVICE" />
+                <Control Type="Text" Id="label_apikey" Width="40" Height="10" X="160" Y="216" Text="API key:" />
+                <Control Type="Edit" Id="in_apikey" Width="103" Height="15" X="202" Y="214" Password="yes" Property="APIKEY" ToolTip="Stored encrypted (enc: prefix)." />
                 <!-- END MAIN -->
                 <!-- Bottom Controls -->
                 <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="&amp;Back">

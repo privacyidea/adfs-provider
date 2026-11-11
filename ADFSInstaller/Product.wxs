@@ -121,6 +121,14 @@
 			<RegistrySearch Id="SearchAutoSubmitOTPLength" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
 							Name="auto_submit_otp_length" Win64="yes" Type="raw"/>
 		</Property>
+		<Property Id="ENABLEREMEMBERDEVICE">
+			<RegistrySearch Id="SearchEnableRememberDevice" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+							Name="enable_remember_device" Win64="yes" Type="raw"/>
+		</Property>
+		<Property Id="APIKEY">
+			<RegistrySearch Id="SearchApiKey" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+							Name="api_key" Win64="yes" Type="raw"/>
+		</Property>
 		<!-- END LOOKUP -->
 
 		<!-- INSTALL EXECUTE SEQUENCE -->
@@ -187,6 +195,8 @@
 					<RegistryValue Name='tls_version'				Type='string' Value=''/>
 					<RegistryValue Name='forward_headers'			Type='string' Value=''/>
 					<RegistryValue Name='auto_submit_otp_length'    Type='string' Value='[AUTO_SUBMIT_OTP_LENGTH]'/>
+					<RegistryValue Name='enable_remember_device'	Type='string' Value='[ENABLEREMEMBERDEVICE]'/>
+					<RegistryValue Name='api_key'					Type='string' Value='[APIKEY]'/>
 				</RegistryKey>
 			</Component>
 
