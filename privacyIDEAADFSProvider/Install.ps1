@@ -81,7 +81,7 @@ if (!([System.Diagnostics.EventLog]::SourceExists($source)))
 # Administrators get full control, and the AD FS service account gets read (it is what actually needs
 # the value at runtime). This is defense-in-depth + compliance, NOT a hard boundary: anyone already
 # running as SYSTEM/admin or the AD FS identity on this Tier-0 box owns the token-signing key anyway.
-$configKeyPath = 'HKLM:\SOFTWARE\NetKnights GmbH\PrivacyIDEA-ADFS'
+$configKeyPath = 'HKLM:\SOFTWARE\Netknights GmbH\PrivacyIDEA-ADFS'
 if (Test-Path $configKeyPath)
 {
     try

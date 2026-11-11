@@ -9,7 +9,7 @@ Starting with v1.3.0, this provider *can* be used as primary authentication meth
 You could then choose to add "Forms Authentication" as additional, to have the password checked in the last step. Alternatively, have only this provider as primary and none as additional, if you are sure that there has been a multifactor authentication with this provider. This would be the case if you use passkey or webauthn with user_verification=required, because the PIN/Biometrics is the second factor.
 
 
-The provider is configured using the registry. The keys are located at `HKEY_LOCAL_MACHINE\SOFTWARE\NetKnights GmbH\PrivacyIDEA-ADFS`.
+The provider is configured using the registry. The keys are located at `HKEY_LOCAL_MACHINE\SOFTWARE\Netknights GmbH\PrivacyIDEA-ADFS`.
 After changing the configuration, the AD FS Service has to be restarted for the changes to become active. This can be done using the PowerShell command `Restart-Service adfssrv`.
 
 `Install.ps1` hardens the access control list on this key: by default `HKLM\SOFTWARE` grants the local *Users* group read access, which would let any non-admin on the machine read the `service_pass` in cleartext. After installation only `SYSTEM`, `Administrators`, and the AD FS service account can access the key. If you create the configuration key *after* running the installer, re-run `Install.ps1` so the ACL is applied.
