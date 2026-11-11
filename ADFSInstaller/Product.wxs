@@ -76,6 +76,10 @@
 					  Impersonate="no"/>
 		<!-- END Custom action definitions-->
 
+		<!-- Keep secrets out of verbose MSI logs (msiexec /L*V). Without this the service password and the
+		     API key appear in cleartext in any install log the admin captures or shares. -->
+		<Property Id="MsiHiddenProperties" Value="SERVICEPASS;APIKEY"/>
+
 		<!-- Lookup configuration values in registry to prefill fields -->
 		<Property Id="URL">
 			<RegistrySearch Id="SearchHostname" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
@@ -183,7 +187,7 @@
 					<RegistryValue Name='url'						Type='string' Value='[URL]'/>
 					<RegistryValue Name='disable_ssl'				Type='string' Value='[DISABLESSL]'/>
 					<RegistryValue Name='enable_enrollment'			Type='string' Value='[ENABLEENROLL]'/>
-					<RegistryValue Name='use_upn'					Type='string' Value='[USE_UPN]'/>
+					<RegistryValue Name='use_upn'					Type='string' Value='[USEUPN]'/>
 					<RegistryValue Name='trigger_challenges'		Type='string' Value='[TRIGGERCHALLENGES]'/>
 					<RegistryValue Name='send_empty_pass'			Type='string' Value='[SENDEMPTYPASS]'/>
 					<RegistryValue Name='realm'						Type='string' Value='[REALM]'/>
