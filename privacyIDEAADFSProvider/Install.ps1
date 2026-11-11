@@ -17,7 +17,9 @@ if (-not $netRelease -or $netRelease -lt 528040)
     exit 1
 }
 
-Set-Location -Path "C:\Program Files\PrivacyIDEA AD FS"
+# Work from the folder this script was installed into, rather than a hardcoded path, so a non-default
+# install location (for example msiexec INSTALLFOLDER=...) still works.
+Set-Location -Path $PSScriptRoot
 
 $myPath = Get-Location
 $myDll = 'privacyIDEA-ADFSProvider.dll'
@@ -164,6 +166,16 @@ $appFullName = ([system.reflection.assembly]::loadfile($myDllFullName)).FullName
 
 $typeName = "privacyIDEAADFSProvider.Adapter, "+$appFullName
 
-Register-AdfsAuthenticationProvider -TypeName $typeName -Name "privacyIDEAADFSProvider"
-
-Restart-Service adfssrv
+# Register only if it is not already registered. Register-AdfsAuthenticationProvider throws on a name that
+# already exists, which would make a re-run abort - and the README tells admins to re-run this script to
+# apply the ACL after creating the config key. Re-running now applies the ACL above and exits cleanly; a
+# restart is only needed when the provider is newly registered (an ACL change does not need one).
+if (Get-AdfsAuthenticationProvider -Name "privacyIDEAADFSProvider" -ErrorAction SilentlyContinue)
+{
+    Write-Host "The provider 'privacyIDEAADFSProvider' is already registered. Skipping registration."
+}
+else
+{
+    Register-AdfsAuthenticationProvider -TypeName $typeName -Name "privacyIDEAADFSProvider"
+    Restart-Service adfssrv
+}

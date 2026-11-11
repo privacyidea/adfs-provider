@@ -38,7 +38,9 @@ catch
 }
 
 # Unregister the provider and restart the AD FS service
-Set-Location -Path "C:\Program Files\PrivacyIDEA AD FS"
+# Work from the folder this script was installed into, rather than a hardcoded path, so a non-default
+# install location still works.
+Set-Location -Path $PSScriptRoot
 $myPath = Get-Location
 $myDll = 'privacyIDEA-ADFSProvider.dll'
 $myDllFullName = (get-item $myDll).FullName
