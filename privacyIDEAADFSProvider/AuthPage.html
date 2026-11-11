@@ -16,7 +16,7 @@
         background-color: rgb(120, 120, 120);
     }
 </style>
-<div id="loginArea" data-mode="#mode#">
+<div id="loginArea" data-mode="#mode#" data-push-available="#pushAvailable#" data-disable-otp="#disableOTP#">
     <!-- No-JavaScript fallback. The <noscript> content is applied ONLY when scripting is disabled, so it
          never affects the normal JS path. One-time-password entry works without JavaScript: the server
          treats an empty formResult as a plain OTP submit. These rules hide the controls that only work with
@@ -32,9 +32,14 @@
             #loginArea[data-mode="push"] #otp,
             #loginArea[data-mode="push"] #submitButton { display: none !important; }
             #loginArea[data-mode="push"] #pushConfirmButtonNoJs { display: inline-block !important; }
+            /* Token-type switch without JavaScript: offer OTP while in push mode (unless OTP is disabled),
+               and offer push while in OTP mode when a push token is available. */
+            #loginArea[data-mode="push"]:not([data-disable-otp="1"]) #noJsSwitchToOtp { display: inline-block !important; }
+            #loginArea[data-mode="otp"][data-push-available="1"] #noJsSwitchToPush { display: inline-block !important; }
         </style>
         <p>JavaScript is disabled. Enter your one-time password and select Submit, or for push confirm on your
-           device and select the button. Security key and passkey options need JavaScript and are hidden.</p>
+           device and select the button. Use the token-type buttons to switch between one-time password and
+           push. Security key and passkey options need JavaScript and are hidden.</p>
     </noscript>
     <!-- Enrollment Message -->
     <div id="enrollmentBlock" data-enrollment-mode="#enrollmentMode#">
@@ -81,7 +86,16 @@
         <!-- No-JavaScript push: a manual poll button. Hidden by default (with JavaScript the page auto-polls);
              the noscript rules reveal it only in push mode. It is placed after the normal submit button so
              that stays the implicit submitter. type=submit re-posts the form, which polls the transaction once. -->
-        <input id="pushConfirmButtonNoJs" type="submit" name="Submit" value="I confirmed on my device" class="pi-button" style="display:none" />
+        <input id="pushConfirmButtonNoJs" type="submit" name="Submit" value="#pushButtonLabel#" class="pi-button" style="display:none" />
+        <!-- No-JavaScript token-type switch. The noscript rules reveal only the one that applies: "Use
+             one-time password" in push mode, "Use push" in OTP mode when push is available. Each posts
+             noJsModeSwitch, which the adapter treats as a mode change and re-renders the form. A <button>
+             keeps the posted value ("otp"/"push") separate from the visible label, and type=submit needs
+             no script. Placed after the normal submit so that stays the implicit submitter. -->
+        <button id="noJsSwitchToOtp" type="submit" name="noJsModeSwitch" value="otp"
+                class="pi-button pi-button-secondary" style="display:none">Use one-time password</button>
+        <button id="noJsSwitchToPush" type="submit" name="noJsModeSwitch" value="push"
+                class="pi-button pi-button-secondary" style="display:none">Use push</button>
 
         <input id="autoSubmit" type="hidden" name="autoSubmit" value="#autoSubmit#" />
         <input id="mode" type="hidden" name="mode" value="#mode#" />

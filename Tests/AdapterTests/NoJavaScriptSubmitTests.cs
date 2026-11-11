@@ -52,8 +52,8 @@ namespace Tests.AdapterTests
         /// <summary>
         /// Builds an Adapter whose PrivacyIDEA client points at the mock server. Configuration's only
         /// constructor reads the Windows registry, so it is created uninitialized: the no-JS OTP path reads
-        /// only defaulting fields off it (OtpHint, AutoSubmitLength, DisablePasskey) and never touches the
-        /// forward-headers/custom-params config, because the null request short-circuits those helpers.
+        /// only defaulting fields off it (OtpHint, AutoSubmitLength, DisablePasskey). The forward-headers and
+        /// custom-params helpers return early because no forwarding is configured, so they never read request.
         /// </summary>
         private Adapter NewAdapter()
         {
@@ -202,6 +202,75 @@ namespace Tests.AdapterTests
 
             Assert.IsNotNull(result, "A pending push must re-present a form, not authenticate.");
             Assert.AreEqual(0, claims.Length);
+        }
+
+        [TestMethod]
+        public void NoJsSwitch_PushToOtp_ReRendersFormInOtpMode()
+        {
+            // No-JS token-type switch: in push mode the user selects "Use one-time password", which posts
+            // noJsModeSwitch=otp. The adapter treats it as a mode change and re-renders the form in OTP mode
+            // (no server call), so the OTP field becomes visible. The hidden mode field still says push.
+            var adapter = NewAdapter();
+            var proof = new FakeProofData(new Dictionary<string, object>
+            {
+                ["formResult"] = "",
+                ["mode"] = "push",
+                ["noJsModeSwitch"] = "otp",
+            });
+            var ctx = new FakeAuthContext(MinimalContext());
+
+            IAdapterPresentation result = adapter.TryEndAuthentication(ctx, proof, null, out Claim[] claims);
+
+            Assert.IsNotNull(result, "A mode switch re-presents the form, it does not authenticate.");
+            Assert.AreEqual(0, claims.Length);
+            string html = ((IAdapterPresentationForm)result).GetFormHtml(1033);
+            StringAssert.Contains(html, "data-mode=\"otp\"");
+        }
+
+        [TestMethod]
+        public void NoJsSwitch_OtpToPush_ReRendersFormInPushMode()
+        {
+            // The reverse: in OTP mode the user selects "Use push" (shown when a push token is available),
+            // which posts noJsModeSwitch=push. The form re-renders in push mode, so the manual poll button
+            // "I confirmed on my device" is present for the next submit.
+            var adapter = NewAdapter();
+            var proof = new FakeProofData(new Dictionary<string, object>
+            {
+                ["formResult"] = "",
+                ["mode"] = "otp",
+                ["noJsModeSwitch"] = "push",
+            });
+            var ctx = new FakeAuthContext(MinimalContext());
+
+            IAdapterPresentation result = adapter.TryEndAuthentication(ctx, proof, null, out Claim[] claims);
+
+            Assert.IsNotNull(result);
+            Assert.AreEqual(0, claims.Length);
+            string html = ((IAdapterPresentationForm)result).GetFormHtml(1033);
+            StringAssert.Contains(html, "data-mode=\"push\"");
+            StringAssert.Contains(html, "pushConfirmButtonNoJs");
+        }
+
+        [TestMethod]
+        public void NoJsSwitch_InvalidValue_IsIgnored_AndOtpStillValidates()
+        {
+            // noJsModeSwitch only accepts otp/push (WebAuthn and passkey cannot run without JavaScript). An
+            // out-of-range value is ignored: the submit is a plain OTP submit and the posted otp validates.
+            StubValidateCheckAccept();
+            var adapter = NewAdapter();
+            var proof = new FakeProofData(new Dictionary<string, object>
+            {
+                ["formResult"] = "",
+                ["noJsModeSwitch"] = "webauthn",
+                ["otp"] = "123456",
+            });
+            var ctx = new FakeAuthContext(MinimalContext());
+
+            IAdapterPresentation result = adapter.TryEndAuthentication(ctx, proof, null, out Claim[] claims);
+
+            Assert.IsNull(result);
+            Assert.AreEqual(1, claims.Length);
+            Assert.AreEqual(OtpAuthMethod, claims[0].Value);
         }
 
         [TestMethod]

@@ -65,6 +65,12 @@ namespace PrivacyIDEAADFSProvider
                 ["authCounter"] = AuthCounter,
                 ["mode"] = Mode,
                 ["pushAvailable"] = PushAvailable,
+                // Label for the no-JavaScript push button. In poll-mode enrollment (smartphone/container
+                // registration) the challenge carries an image and the action is "finish registration", not
+                // "confirm a login", so word the button for that case.
+                ["pushButtonLabel"] = string.IsNullOrEmpty(EnrollmentImg)
+                    ? "I confirmed on my device"
+                    : "I completed the registration",
                 ["webAuthnSignRequest"] = WebAuthnSignRequest,
                 ["pushMessage"] = PushMessage,
                 ["modeChanged"] = "0",

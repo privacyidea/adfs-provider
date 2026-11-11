@@ -51,18 +51,19 @@ It is possible to map different Windows domains to different privacyIDEA realms.
 If `trusted_proxies` is left empty, the provider keeps the previous behavior of trusting `X-Forwarded-For` unconditionally — this is kept for backward compatibility but is **not recommended** when IP-based policies are in use.
 
 ## Client JavaScript requirements
-The login page uses JavaScript for the modern token types and for convenience features. One-time-password login does not need it.
+The login page uses JavaScript for the modern token types and for convenience features. One-time-password and push login do not need it.
 
 Works without JavaScript:
 * One-time-password entry. The user types the OTP and selects Submit. This covers HOTP, TOTP, and any challenge-response token whose answer is an OTP (email, SMS).
-* Push login, through a manual "I confirmed on my device" button. With JavaScript the page polls automatically; without it, each button press polls the transaction once. This needs the server to place the client in push mode (set `preferred_client_mode=poll` on the privacyIDEA server), because switching token type on the page needs JavaScript.
+* Push login, through a manual "I confirmed on my device" button. With JavaScript the page polls automatically. Without it, each button press polls the transaction once.
+* Switching between one-time password and push. When both are offered, the page shows a "Use push" or "Use one-time password" button, so the user can change token type without JavaScript. This means no-JavaScript push works whenever a push token is triggered, not only when the server sets `preferred_client_mode=poll`.
 * The enrollment QR code shown by `enroll_via_multichallenge`. The user scans it, then enters the resulting OTP.
 
 Needs JavaScript (hidden when it is disabled):
-* WebAuthn and passkey (they also require a browser that supports the WebAuthn API and a secure `https` context).
-* The token-type switch buttons (WebAuthn / Passkey / Push / OTP) and the "copy to clipboard" button.
+* WebAuthn and passkey, including the buttons that switch to them. They also require a browser that supports the WebAuthn API and a secure `https` context.
+* The "copy to clipboard" button for the enrollment code.
 
-This matters for clients that do not run page JavaScript, such as a legacy embedded WebView (for example Outlook's) or a passive federation flow like device registration and Windows Hello for Business provisioning. Those clients can still complete OTP login, and push login if the server sets push as the preferred client mode.
+This matters for clients that do not run page JavaScript, such as a legacy embedded WebView (for example Outlook's) or a passive federation flow like device registration and Windows Hello for Business provisioning. Those clients can complete one-time-password and push login.
 
 ## Signing and verifying the installer
 The dll that is created by this solution requires to be strong-name signed to be deployed. Change the key file to your own in the project settings of the provider.

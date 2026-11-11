@@ -222,8 +222,20 @@ namespace privacyIDEAADFSProvider
                     return form;
                 }
             }
-            bool modeChanged = fr.ModeChanged;
-            string mode = modeChanged ? fr.NewMode : GetString(proofDict, "mode", PITokenType.Otp);
+            // A client without JavaScript switches token type with a dedicated submit button that posts
+            // noJsModeSwitch (AuthPage.html). Accept only otp and push: WebAuthn and passkey need the browser
+            // crypto API and cannot run without JavaScript. The JS path sets formResult.NewMode and still
+            // covers every mode. Switching re-renders the form below (if (modeChanged) return form;), the same
+            // as the JS mode switch, so the OTP field or the push button becomes visible for the new mode.
+            string noJsModeSwitch = GetString(proofDict, "noJsModeSwitch");
+            if (noJsModeSwitch != PITokenType.Otp && noJsModeSwitch != PITokenType.Push)
+            {
+                noJsModeSwitch = "";
+            }
+            bool modeChanged = fr.ModeChanged || noJsModeSwitch.Length > 0;
+            string mode = fr.ModeChanged ? fr.NewMode
+                : noJsModeSwitch.Length > 0 ? noJsModeSwitch
+                : GetString(proofDict, "mode", PITokenType.Otp);
             string otp = GetString(proofDict, "otp");
             form.Message = GetString(proofDict, "message");
             form.Mode = mode;
@@ -472,12 +484,8 @@ namespace privacyIDEAADFSProvider
         private Dictionary<string, string> CollectCustomParams(HttpListenerRequest request)
         {
             Dictionary<string, string> customParameters = new Dictionary<string, string>();
-            // request is never null in the AD FS pipeline, but defend against it so a caller without one
-            // (nothing to collect then) cannot turn into a NullReferenceException out of TryEndAuthentication.
-            if (request == null)
-            {
-                return customParameters;
-            }
+            // request is only read when a forwarding option is enabled below. With none enabled (the common
+            // case, and every OTP-only deployment) this returns empty without ever dereferencing request.
             if (_config.ForwardClientIP)
             {
                 customParameters.Add("client", GetClientIPAddress(request));
@@ -707,14 +715,14 @@ namespace privacyIDEAADFSProvider
 
         private List<KeyValuePair<string, string>> GetHeadersToForward(HttpListenerRequest request)
         {
-            // request is never null in the AD FS pipeline, but defend against it (nothing to forward then)
-            // so the no-JavaScript/passive paths cannot NullReference on request.Headers.
-            if (request == null)
+            List<KeyValuePair<string, string>> headersToForward = new List<KeyValuePair<string, string>>();
+            // Nothing configured to forward: return without reading request. This is the common case (no
+            // forward_headers set), and it means request is only dereferenced when there is a header to read.
+            if (_config.ForwardHeaders == null || _config.ForwardHeaders.Count == 0)
             {
-                return new List<KeyValuePair<string, string>>();
+                return headersToForward;
             }
             NameValueCollection requestHeaders = request.Headers;
-            List<KeyValuePair<string, string>> headersToForward = new List<KeyValuePair<string, string>>();
 
             foreach (string header in _config.ForwardHeaders)
             {
