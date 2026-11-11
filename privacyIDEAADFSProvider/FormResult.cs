@@ -10,5 +10,8 @@
         public string PasskeySignResponse { get; set; } = "";
         public string PasskeyRegistrationResponse { get; set; } = "";
         public string Origin { get; set; } = "";
+        // The user ticked "remember this device". The page JS copies the checkbox state here on submit;
+        // a no-JavaScript client posts a plain rememberDevice field instead (both are honoured).
+        public bool RememberDevice { get; set; } = false;
     }
 }
