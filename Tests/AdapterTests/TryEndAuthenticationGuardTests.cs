@@ -10,13 +10,12 @@ using PrivacyIDEAADFSProvider.PrivacyIDEA_Client;
 namespace Tests.AdapterTests
 {
     /// <summary>
-    /// Regression tests for the null-safety guards at the top of Adapter.TryEndAuthentication.
-    /// Historically, a passive federation request that reached the handler with an empty/unparseable
-    /// formResult (the hidden field is only populated by the page JavaScript on submit) or a null
-    /// authentication context threw a NullReferenceException straight out of TryEndAuthentication.
-    /// This was observed against the device-registration/OAuth relying party (urn:ms-drs), where the
-    /// form can be posted without the page JS having run. The guards must turn those into a graceful
-    /// retry form / ExternalAuthenticationException instead.
+    /// Regression tests for the null-safety guards at the top of Adapter.TryEndAuthentication that still
+    /// degrade to an error form: a null authentication context, and a non-empty formResult that is not
+    /// parseable JSON ("null" or malformed). An empty, whitespace, missing, or non-string formResult is a
+    /// different case — it is the no-JavaScript OTP path (NoJavaScriptSubmitTests), not an error — because
+    /// the page JavaScript only populates formResult on submit, and a legacy WebView (issue #90) or the
+    /// device-registration/OAuth passive flow (urn:ms-drs, issue #77) posts it empty.
     /// </summary>
     [TestClass]
     public class TryEndAuthenticationGuardTests
@@ -73,65 +72,11 @@ namespace Tests.AdapterTests
         };
 
         [TestMethod]
-        public void FormResultEmptyString_ReturnsRetryForm_NoNullReference()
-        {
-            // The hidden field is posted present but empty when the page JS never populated it.
-            var adapter = NewAdapter();
-            var proof = new FakeProofData(new Dictionary<string, object> { ["formResult"] = "" });
-            var ctx = new FakeAuthContext(MinimalContext());
-
-            IAdapterPresentation result = adapter.TryEndAuthentication(ctx, proof, null, out Claim[] claims);
-
-            Assert.IsNotNull(result, "Expected a presentation form, not null (which would signal success).");
-            Assert.AreEqual(0, claims.Length);
-        }
-
-        [TestMethod]
-        public void FormResultWhitespace_ReturnsRetryForm_NoNullReference()
-        {
-            var adapter = NewAdapter();
-            var proof = new FakeProofData(new Dictionary<string, object> { ["formResult"] = "   " });
-            var ctx = new FakeAuthContext(MinimalContext());
-
-            IAdapterPresentation result = adapter.TryEndAuthentication(ctx, proof, null, out Claim[] claims);
-
-            Assert.IsNotNull(result);
-            Assert.AreEqual(0, claims.Length);
-        }
-
-        [TestMethod]
-        public void FormResultMissing_ReturnsRetryForm_NoNullReference()
-        {
-            var adapter = NewAdapter();
-            var proof = new FakeProofData(new Dictionary<string, object>());
-            var ctx = new FakeAuthContext(MinimalContext());
-
-            IAdapterPresentation result = adapter.TryEndAuthentication(ctx, proof, null, out Claim[] claims);
-
-            Assert.IsNotNull(result);
-            Assert.AreEqual(0, claims.Length);
-        }
-
-        [TestMethod]
         public void FormResultLiteralNull_ReturnsRetryForm_NoNullReference()
         {
             // JsonConvert.DeserializeObject<FormResult>("null") returns null; the second guard must catch it.
             var adapter = NewAdapter();
             var proof = new FakeProofData(new Dictionary<string, object> { ["formResult"] = "null" });
-            var ctx = new FakeAuthContext(MinimalContext());
-
-            IAdapterPresentation result = adapter.TryEndAuthentication(ctx, proof, null, out Claim[] claims);
-
-            Assert.IsNotNull(result);
-            Assert.AreEqual(0, claims.Length);
-        }
-
-        [TestMethod]
-        public void FormResultNonString_ReturnsRetryForm_NoInvalidCast()
-        {
-            // A non-string value must not blow up on the (string) cast; `as string` routes it to the guard.
-            var adapter = NewAdapter();
-            var proof = new FakeProofData(new Dictionary<string, object> { ["formResult"] = 42 });
             var ctx = new FakeAuthContext(MinimalContext());
 
             IAdapterPresentation result = adapter.TryEndAuthentication(ctx, proof, null, out Claim[] claims);

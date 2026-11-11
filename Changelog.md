@@ -1,3 +1,11 @@
+## Unreleased v1.5.0
+
+### Features
+* One-time-password login now works without JavaScript. The login page built the hidden `formResult` field with JavaScript, so a client that does not run it — a legacy embedded WebView such as Outlook's (#90), or a passive federation flow like device registration / Windows Hello for Business provisioning (`urn:ms-drs`, #77) — could not submit. An empty or missing `formResult` is now treated as a plain OTP submit: the user types the one-time password and selects Submit, and the server validates it. This replaces the earlier behavior, where that case returned a retryable error form (v1.4.1).
+* Push login works without JavaScript through a manual "I confirmed on my device" button. With JavaScript the page polls on a timer; without it, each button press re-posts the form and polls the transaction once. The button is shown only in push mode when JavaScript is disabled.
+* Switching between one-time password and push works without JavaScript. When both are offered, the page shows a "Use push" or "Use one-time password" button that re-renders the form in the other mode. A no-JavaScript client can now reach push whenever a push token is triggered, not only when the server sets `preferred_client_mode=poll`.
+* The login page hides the options that only work with JavaScript (WebAuthn, passkey, and the buttons that switch to them, plus copy-to-clipboard) when JavaScript is disabled, and reveals the enrollment QR code, so a no-JavaScript client sees a clean form. WebAuthn and passkey still require JavaScript and a browser that supports them.
+
 ## 2026-07-21 v1.4.1
 
 ### Fixes
