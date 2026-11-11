@@ -49,7 +49,11 @@ function Gac-Util
     }
     catch
     {
-        Write-Host "`t`t$($MyInvocation.InvocationName): $_"
+        # Re-throw so a GAC failure (missing file, unsigned assembly, or no permission) aborts the install
+        # with a clear error, instead of being swallowed and surfacing later as a confusing registration
+        # failure. Note: Publish.GacInstall itself does not report failure, so a silent GAC problem is still
+        # caught downstream by the registration step below (which is wrapped and reports clearly).
+        throw "Failed to install '$assembly' into the GAC: $_"
     }
 }
 
@@ -166,16 +170,34 @@ $appFullName = ([system.reflection.assembly]::loadfile($myDllFullName)).FullName
 
 $typeName = "privacyIDEAADFSProvider.Adapter, "+$appFullName
 
+# This script only makes sense on an AD FS server. If the AD FS cmdlets are absent, say so clearly instead
+# of failing later with a cryptic "term is not recognized" error.
+if (-not (Get-Command Register-AdfsAuthenticationProvider -ErrorAction SilentlyContinue))
+{
+    Write-Error ("The AD FS cmdlets were not found. Run this on an AD FS server with the AD FS role " +
+        "installed.")
+    exit 1
+}
+
 # Register only if it is not already registered. Register-AdfsAuthenticationProvider throws on a name that
 # already exists, which would make a re-run abort - and the README tells admins to re-run this script to
 # apply the ACL after creating the config key. Re-running now applies the ACL above and exits cleanly; a
-# restart is only needed when the provider is newly registered (an ACL change does not need one).
-if (Get-AdfsAuthenticationProvider -Name "privacyIDEAADFSProvider" -ErrorAction SilentlyContinue)
+# restart is only needed when the provider is newly registered (an ACL change does not need one). Wrapped so
+# a registration or restart failure reports clearly and aborts, rather than throwing a raw error.
+try
 {
-    Write-Host "The provider 'privacyIDEAADFSProvider' is already registered. Skipping registration."
+    if (Get-AdfsAuthenticationProvider -Name "privacyIDEAADFSProvider" -ErrorAction SilentlyContinue)
+    {
+        Write-Host "The provider 'privacyIDEAADFSProvider' is already registered. Skipping registration."
+    }
+    else
+    {
+        Register-AdfsAuthenticationProvider -TypeName $typeName -Name "privacyIDEAADFSProvider"
+        Restart-Service adfssrv
+    }
 }
-else
+catch
 {
-    Register-AdfsAuthenticationProvider -TypeName $typeName -Name "privacyIDEAADFSProvider"
-    Restart-Service adfssrv
+    Write-Error "Failed to register the provider with AD FS or restart the service: $_"
+    exit 1
 }

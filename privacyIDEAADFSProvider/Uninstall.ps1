@@ -98,4 +98,11 @@ catch
     Write-Warning "Could not remove the event log source: $_"
 }
 
-Restart-Service adfssrv
+try
+{
+    Restart-Service adfssrv
+}
+catch
+{
+    Write-Warning "Could not restart adfssrv: $_. Restart it manually to finish applying the changes."
+}
