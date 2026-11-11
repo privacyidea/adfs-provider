@@ -15,43 +15,45 @@
                 <Control Type="Edit"     Id="in_realm"   X="78" Y="85" Width="90" Height="15" Property="REALM" />
                 <Control Type="CheckBox" Id="cbox_upn"   X="252" Y="85" Width="80" Height="15" Text="Use UPN" CheckBoxValue="1" Property="USEUPN" />
 
-                <!-- ===== Service account (challenge-response / enrollment) ===== -->
+                <!-- ===== Service account (challenge-response) ===== -->
                 <!-- Trigger challenges and Send empty password are mutually exclusive; the service account
-                     fields are enabled only when one of the options that needs it is checked. -->
-                <Control Type="GroupBox" Id="grp_service" X="12" Y="108" Width="346" Height="74" Text="Service account" />
-                <Control Type="CheckBox" Id="cbox_trigger" X="22" Y="121" Width="155" Height="15" Text="Trigger challenges" CheckBoxValue="1" Property="TRIGGERCHALLENGES">
+                     fields are enabled only when an option that needs the account is active. The
+                     enable_enrollment feature is deprecated (superseded by enroll_via_multichallenge on the
+                     server), so it has no control here, but ENABLEENROLL still gates these fields for an
+                     upgraded install that had it set. -->
+                <Control Type="GroupBox" Id="grp_service" X="12" Y="112" Width="346" Height="52" Text="Service account" />
+                <Control Type="CheckBox" Id="cbox_trigger" X="22" Y="125" Width="155" Height="15" Text="Trigger challenges" CheckBoxValue="1" Property="TRIGGERCHALLENGES">
                     <Publish Property="SENDEMPTYPASS" Value="{}" Order="1">TRIGGERCHALLENGES</Publish>
                 </Control>
-                <Control Type="CheckBox" Id="cbox_enroll" X="185" Y="121" Width="165" Height="15" Text="Enable token enrollment" CheckBoxValue="1" Property="ENABLEENROLL" />
-                <Control Type="CheckBox" Id="cbox_emptypass" X="22" Y="139" Width="160" Height="15" Text="Send empty password" CheckBoxValue="1" Property="SENDEMPTYPASS">
+                <Control Type="CheckBox" Id="cbox_emptypass" X="185" Y="125" Width="160" Height="15" Text="Send empty password" CheckBoxValue="1" Property="SENDEMPTYPASS">
                     <Publish Property="TRIGGERCHALLENGES" Value="{}" Order="1">SENDEMPTYPASS</Publish>
                 </Control>
-                <Control Type="Text" Id="label_user" X="22" Y="160" Width="22" Height="10" Text="User:" />
-                <Control Type="Edit" Id="in_serviceuser" X="46" Y="158" Width="95" Height="15" Property="SERVICEUSER" ToolTip="Username of the service account.">
+                <Control Type="Text" Id="label_user" X="22" Y="146" Width="22" Height="10" Text="User:" />
+                <Control Type="Edit" Id="in_serviceuser" X="46" Y="144" Width="95" Height="15" Property="SERVICEUSER" ToolTip="Username of the service account.">
                     <Condition Action="disable">TRIGGERCHALLENGES&lt;&gt;1</Condition>
                     <Condition Action="enable">TRIGGERCHALLENGES=1</Condition>
                     <Condition Action="enable">ENABLEENROLL=1</Condition>
                 </Control>
-                <Control Type="Text" Id="label_pass" X="148" Y="160" Width="22" Height="10" Text="Pass:" />
+                <Control Type="Text" Id="label_pass" X="148" Y="146" Width="22" Height="10" Text="Pass:" />
                 <!-- ToolTip is kept short: it maps to the MSI Control.Help column, capped at 50 chars (ICE03).
                      The full explanation is behind the "?" info button (btn_pass_info). -->
-                <Control Type="Edit" Id="in_servicepass" X="170" Y="158" Width="95" Height="15" Password="yes" Property="SERVICEPASS" ToolTip="Stored encrypted (enc: prefix).">
+                <Control Type="Edit" Id="in_servicepass" X="170" Y="144" Width="95" Height="15" Password="yes" Property="SERVICEPASS" ToolTip="Stored encrypted (enc: prefix).">
                     <Condition Action="disable">TRIGGERCHALLENGES&lt;&gt;1</Condition>
                     <Condition Action="enable">TRIGGERCHALLENGES=1</Condition>
                     <Condition Action="enable">ENABLEENROLL=1</Condition>
                 </Control>
-                <Control Type="PushButton" Id="btn_pass_info" X="270" Y="157" Width="16" Height="16" Text="?" ToolTip="Password storage info (click)">
+                <Control Type="PushButton" Id="btn_pass_info" X="270" Y="143" Width="16" Height="16" Text="?" ToolTip="Password storage info (click)">
                     <Publish Event="SpawnDialog" Value="PasswordEncryptionInfoDlg">1</Publish>
                 </Control>
 
                 <!-- ===== Remember this device (needs the API key beside it) ===== -->
-                <Control Type="GroupBox" Id="grp_remember" X="12" Y="186" Width="346" Height="32" Text="Remember this device" />
-                <Control Type="CheckBox" Id="cbox_remember" X="22" Y="198" Width="150" Height="15" Text="Enable remember this device" CheckBoxValue="1" Property="ENABLEREMEMBERDEVICE" />
-                <Control Type="Text" Id="label_apikey" X="178" Y="200" Width="32" Height="10" Text="API key:" />
-                <Control Type="Edit" Id="in_apikey" X="212" Y="198" Width="140" Height="15" Password="yes" Property="APIKEY" ToolTip="Stored encrypted (enc: prefix)." />
+                <Control Type="GroupBox" Id="grp_remember" X="12" Y="172" Width="346" Height="32" Text="Remember this device" />
+                <Control Type="CheckBox" Id="cbox_remember" X="22" Y="184" Width="150" Height="15" Text="Enable remember this device" CheckBoxValue="1" Property="ENABLEREMEMBERDEVICE" />
+                <Control Type="Text" Id="label_apikey" X="178" Y="186" Width="32" Height="10" Text="API key:" />
+                <Control Type="Edit" Id="in_apikey" X="212" Y="184" Width="140" Height="15" Password="yes" Property="APIKEY" ToolTip="Stored encrypted (enc: prefix)." />
 
                 <!-- ===== General ===== -->
-                <Control Type="CheckBox" Id="cbox_debuglog" X="18" Y="221" Width="150" Height="12" Text="Activate debug log" CheckBoxValue="1" Property="DEBUGLOG" />
+                <Control Type="CheckBox" Id="cbox_debuglog" X="18" Y="212" Width="150" Height="12" Text="Activate debug log" CheckBoxValue="1" Property="DEBUGLOG" />
 
                 <!-- ===== Bottom controls ===== -->
                 <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="&amp;Back" />
