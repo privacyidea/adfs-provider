@@ -49,6 +49,11 @@
 		<CustomAction Id='IsPrivileged' Error='You must be an admin to install this product'/>
 		<CustomAction Id="PreventDowngrading" Error="Newer version already installed."/>
 
+		<!-- Keep secrets out of verbose MSI logs (msiexec /L*V): without this the service password and the
+		     API key appear in cleartext. The reserved MsiHiddenProperties cannot be authored as a <Property>
+		     (CNDL0070), so set it with a type-51 action scheduled early in both sequences. -->
+		<CustomAction Id="HideSecretProperties" Property="MsiHiddenProperties" Value="SERVICEPASS;APIKEY"/>
+
 		<!-- INSTALL -->
 		<CustomAction Id='SetPowerShellInstallInput'
 					  Property='RunPowerShellInstall'
@@ -121,10 +126,30 @@
 			<RegistrySearch Id="SearchAutoSubmitOTPLength" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
 							Name="auto_submit_otp_length" Win64="yes" Type="raw"/>
 		</Property>
+		<!-- otp_hint has no dialog field (an advanced setting). The search preserves an admin-set value across
+		     an upgrade; on a fresh install the value is written empty so it is discoverable in the registry. -->
+		<Property Id="OTP_HINT">
+			<RegistrySearch Id="SearchOtpHint" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+							Name="otp_hint" Win64="yes" Type="raw"/>
+		</Property>
+		<Property Id="ENABLEREMEMBERDEVICE">
+			<RegistrySearch Id="SearchEnableRememberDevice" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+							Name="enable_remember_device" Win64="yes" Type="raw"/>
+		</Property>
+		<Property Id="APIKEY">
+			<RegistrySearch Id="SearchApiKey" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+							Name="api_key" Win64="yes" Type="raw"/>
+		</Property>
 		<!-- END LOOKUP -->
+
+		<!-- Hide the secret properties as early as possible in both sequences, before anything logs them. -->
+		<InstallUISequence>
+			<Custom Action="HideSecretProperties" Before="AppSearch"/>
+		</InstallUISequence>
 
 		<!-- INSTALL EXECUTE SEQUENCE -->
 		<InstallExecuteSequence>
+			<Custom Action="HideSecretProperties" Before="AppSearch"/>
 			<Custom Action='IsPrivileged' Before='AppSearch'>NOT Privileged</Custom>
 
 			<Custom Action="SetPowerShellInstallInput" After="CostFinalize">NOT Installed</Custom>
@@ -170,12 +195,15 @@
 	<Fragment>
 		<ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
 			<!-- REGISTRY ENTRIES -->
-			<Component Id="RegistryEntries">
+			<!-- Win64="yes" on every component: the install dir is ProgramFiles64Folder and the package is
+			     x64, so the components must be 64-bit too, or ICE80 fails. Setting it explicitly (rather than
+			     relying on the build platform) makes the project build cleanly on x86 and x64 alike. -->
+			<Component Id="RegistryEntries" Win64="yes">
 				<RegistryKey Root='HKLM' Key='SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)' ForceCreateOnInstall='yes'>
 					<RegistryValue Name='url'						Type='string' Value='[URL]'/>
 					<RegistryValue Name='disable_ssl'				Type='string' Value='[DISABLESSL]'/>
 					<RegistryValue Name='enable_enrollment'			Type='string' Value='[ENABLEENROLL]'/>
-					<RegistryValue Name='use_upn'					Type='string' Value='[USE_UPN]'/>
+					<RegistryValue Name='use_upn'					Type='string' Value='[USEUPN]'/>
 					<RegistryValue Name='trigger_challenges'		Type='string' Value='[TRIGGERCHALLENGES]'/>
 					<RegistryValue Name='send_empty_pass'			Type='string' Value='[SENDEMPTYPASS]'/>
 					<RegistryValue Name='realm'						Type='string' Value='[REALM]'/>
@@ -187,11 +215,13 @@
 					<RegistryValue Name='tls_version'				Type='string' Value=''/>
 					<RegistryValue Name='forward_headers'			Type='string' Value=''/>
 					<RegistryValue Name='auto_submit_otp_length'    Type='string' Value='[AUTO_SUBMIT_OTP_LENGTH]'/>
+					<RegistryValue Name='enable_remember_device'	Type='string' Value='[ENABLEREMEMBERDEVICE]'/>
+					<RegistryValue Name='api_key'					Type='string' Value='[APIKEY]'/>
 				</RegistryKey>
 			</Component>
 
 			<!-- PROVIDER DLL COMPONENT (NO GAC) -->
-			<Component Id='ProviderDll' Guid='{539D96DC-692A-4BF3-B74A-31CEC8700A4B}' DiskId='1'>
+			<Component Id='ProviderDll' Guid='{539D96DC-692A-4BF3-B74A-31CEC8700A4B}' DiskId='1' Win64="yes">
 				<File Id="ProviderDll"
 						   Name="$(var.privacyIDEAADFSProvider.TargetFileName)"
 						   Source="$(var.privacyIDEAADFSProvider.TargetPath)"
@@ -199,7 +229,7 @@
 			</Component>
 
 			<!-- NEWTONSOFT JSON COMPONENT (GAC) -->
-			<Component Id='NewtonsoftJsonDll' Guid='{CC78BE32-EB49-4008-8EFC-5DE7F7F862FA}' DiskId='1'>
+			<Component Id='NewtonsoftJsonDll' Guid='{CC78BE32-EB49-4008-8EFC-5DE7F7F862FA}' DiskId='1' Win64="yes">
 				<File Id="NewtonsoftJsonDll"
 						   Name="Newtonsoft.Json.dll"
 						   Source="$(var.privacyIDEAADFSProvider.TargetDir)\Newtonsoft.Json.dll"
@@ -208,14 +238,14 @@
 			</Component>
 
 			<!-- INSTALL SCRIPT -->
-			<Component Id="InstallScript" Guid="{3F012B01-1F99-414D-86B7-A4B33372EEAD}" DiskId="1">
+			<Component Id="InstallScript" Guid="{3F012B01-1F99-414D-86B7-A4B33372EEAD}" DiskId="1" Win64="yes">
 				<File Id="InstallScript"
 					  Name="Install.ps1"
 					  Source ="$(var.privacyIDEAADFSProvider.ProjectDir)\Install.ps1"/>
 			</Component>
 
 			<!-- UNINSTALL SCRIPT -->
-			<Component Id="UninstallScript" Guid="{0E2A4A57-C01D-4652-8FBF-E128D07B36B4}" DiskId="1">
+			<Component Id="UninstallScript" Guid="{0E2A4A57-C01D-4652-8FBF-E128D07B36B4}" DiskId="1" Win64="yes">
 				<File Id="UninstallScript"
 					  Name="Uninstall.ps1"
 					  Source ="$(var.privacyIDEAADFSProvider.ProjectDir)\Uninstall.ps1"/>

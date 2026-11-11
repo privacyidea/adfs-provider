@@ -17,7 +17,9 @@ if (-not $netRelease -or $netRelease -lt 528040)
     exit 1
 }
 
-Set-Location -Path "C:\Program Files\PrivacyIDEA AD FS"
+# Work from the folder this script was installed into, rather than a hardcoded path, so a non-default
+# install location (for example msiexec INSTALLFOLDER=...) still works.
+Set-Location -Path $PSScriptRoot
 
 $myPath = Get-Location
 $myDll = 'privacyIDEA-ADFSProvider.dll'
@@ -47,7 +49,11 @@ function Gac-Util
     }
     catch
     {
-        Write-Host "`t`t$($MyInvocation.InvocationName): $_"
+        # Re-throw so a GAC failure (missing file, unsigned assembly, or no permission) aborts the install
+        # with a clear error, instead of being swallowed and surfacing later as a confusing registration
+        # failure. Note: Publish.GacInstall itself does not report failure, so a silent GAC problem is still
+        # caught downstream by the registration step below (which is wrapped and reports clearly).
+        throw "Failed to install '$assembly' into the GAC: $_"
     }
 }
 
@@ -81,7 +87,7 @@ if (!([System.Diagnostics.EventLog]::SourceExists($source)))
 # Administrators get full control, and the AD FS service account gets read (it is what actually needs
 # the value at runtime). This is defense-in-depth + compliance, NOT a hard boundary: anyone already
 # running as SYSTEM/admin or the AD FS identity on this Tier-0 box owns the token-signing key anyway.
-$configKeyPath = 'HKLM:\SOFTWARE\NetKnights GmbH\PrivacyIDEA-ADFS'
+$configKeyPath = 'HKLM:\SOFTWARE\Netknights GmbH\PrivacyIDEA-ADFS'
 if (Test-Path $configKeyPath)
 {
     try
@@ -164,6 +170,34 @@ $appFullName = ([system.reflection.assembly]::loadfile($myDllFullName)).FullName
 
 $typeName = "privacyIDEAADFSProvider.Adapter, "+$appFullName
 
-Register-AdfsAuthenticationProvider -TypeName $typeName -Name "privacyIDEAADFSProvider"
+# This script only makes sense on an AD FS server. If the AD FS cmdlets are absent, say so clearly instead
+# of failing later with a cryptic "term is not recognized" error.
+if (-not (Get-Command Register-AdfsAuthenticationProvider -ErrorAction SilentlyContinue))
+{
+    Write-Error ("The AD FS cmdlets were not found. Run this on an AD FS server with the AD FS role " +
+        "installed.")
+    exit 1
+}
 
-Restart-Service adfssrv
+# Register only if it is not already registered. Register-AdfsAuthenticationProvider throws on a name that
+# already exists, which would make a re-run abort - and the README tells admins to re-run this script to
+# apply the ACL after creating the config key. Re-running now applies the ACL above and exits cleanly; a
+# restart is only needed when the provider is newly registered (an ACL change does not need one). Wrapped so
+# a registration or restart failure reports clearly and aborts, rather than throwing a raw error.
+try
+{
+    if (Get-AdfsAuthenticationProvider -Name "privacyIDEAADFSProvider" -ErrorAction SilentlyContinue)
+    {
+        Write-Host "The provider 'privacyIDEAADFSProvider' is already registered. Skipping registration."
+    }
+    else
+    {
+        Register-AdfsAuthenticationProvider -TypeName $typeName -Name "privacyIDEAADFSProvider"
+        Restart-Service adfssrv
+    }
+}
+catch
+{
+    Write-Error "Failed to register the provider with AD FS or restart the service: $_"
+    exit 1
+}

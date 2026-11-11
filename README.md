@@ -9,7 +9,7 @@ Starting with v1.3.0, this provider *can* be used as primary authentication meth
 You could then choose to add "Forms Authentication" as additional, to have the password checked in the last step. Alternatively, have only this provider as primary and none as additional, if you are sure that there has been a multifactor authentication with this provider. This would be the case if you use passkey or webauthn with user_verification=required, because the PIN/Biometrics is the second factor.
 
 
-The provider is configured using the registry. The keys are located at `HKEY_LOCAL_MACHINE\SOFTWARE\NetKnights GmbH\PrivacyIDEA-ADFS`.
+The provider is configured using the registry. The keys are located at `HKEY_LOCAL_MACHINE\SOFTWARE\Netknights GmbH\PrivacyIDEA-ADFS`.
 After changing the configuration, the AD FS Service has to be restarted for the changes to become active. This can be done using the PowerShell command `Restart-Service adfssrv`.
 
 `Install.ps1` hardens the access control list on this key: by default `HKLM\SOFTWARE` grants the local *Users* group read access, which would let any non-admin on the machine read the `service_pass` in cleartext. After installation only `SYSTEM`, `Administrators`, and the AD FS service account can access the key. If you create the configuration key *after* running the installer, re-run `Install.ps1` so the ACL is applied.
@@ -24,7 +24,7 @@ DPAPI encryption is bound to the machine, so an encrypted value cannot be decryp
 | disable_ssl | Set to `1` if ssl verification should be disabled. DO NOT DISABLE THIS IN A PRODUCTION ENVIRONMENT! While active, the provider writes a warning to the Windows Application event log on every service start, since disabling certificate validation leaves the connection to privacyIDEA open to interception. |
 | debug_log | Set to `1` if a detailed debug log should be written. By default it is located at `C:\PrivacyIDEA-ADFS log.txt`; use `log_path` to change the location. |
 | log_path | The full path of the file the debug log is written to when `debug_log` is enabled. Defaults to `C:\PrivacyIDEA-ADFS log.txt`. Missing parent directories are created automatically on the first write, provided the AD FS service account has permission to create them. If the location still cannot be written (e.g. insufficient permissions or an invalid drive), the provider logs a single error to the Windows Application event log and keeps retrying on subsequent writes. |
-| enable_enrollment | Set to `1` if users should automatically enroll a TOTP code if they do not have any other tokens enrolled. **!!! This feature is deprecated in favor of the new enrollment that can be controlled from the privacyIDEA server starting v3.8.0, and will be removed in a future version of this provider. !!!** |
+| enable_enrollment | Set to `1` if users should automatically enroll a TOTP code if they do not have any other tokens enrolled. **!!! This feature is deprecated in favor of server-driven enrollment (`enroll_via_multichallenge`, configured on the privacyIDEA server from v3.8.0), and will be removed in a future version of this provider. !!!** Because it is deprecated, the installer does not offer it. The code still works, so set this registry value to `1` by hand if you need it. |
 | realm | Set the realm that should be appended to every request. If this is empty, the realm parameter will be omitted from requests. |
 | service_user | Set the username of a privacyIDEA service account that can be used to trigger challenges. Configuring this is only required to use the `trigger_challenges` or `enable_enrollment` settings! |
 | service_pass | Set the password of a privacyIDEA service account that can be used to trigger challenges. Configuring this is only required to use the `trigger_challenges` or `enable_enrollment` settings! |
@@ -41,6 +41,8 @@ DPAPI encryption is bound to the machine, so an encrypted value cannot be decryp
 | forward_client_ip | Set to `1` to forward the client IP to privacyIDEA (as the `client` parameter), so server-side policies can use it. See the security note below on `trusted_proxies`. |
 | forward_client_user_agent | Set to `1` to forward the client's `User-Agent` header to privacyIDEA. |
 | trusted_proxies | Comma-separated list of reverse-proxy IPs or CIDR ranges (e.g. `10.0.0.5, 192.168.10.0/24`) that are allowed to set `X-Forwarded-For`. When set, the forwarded client IP is only trusted if the request actually arrived from one of these proxies. **Strongly recommended whenever `forward_client_ip` is enabled** — see the note below. |
+| api_key | API key that identifies this provider to privacyIDEA as an API client. Required for the "remember this device" feature (see below). Stored encrypted at rest (DPAPI), like `service_pass`. |
+| enable_remember_device | Set to `1` to turn on the "remember this device" feature in the plugin. Off by default. The feature also needs `api_key` and a server-side `remember_device` policy; all three are required (see below). |
 
 ### Domain to Realm Mapping
 It is possible to map different Windows domains to different privacyIDEA realms. To achieve this, add the subkey `HKLM\SOFTWARE\Netknights GmbH\PrivacyIDEA-ADFS\realm-mapping`. Now you can add REG_SZ entries that have the name of the Windows domain and the value of the corresponding privacyIDEA realm. Note that the realm mapping takes precedence over the general realm that can be configured as explained in the previous section.
@@ -49,6 +51,23 @@ It is possible to map different Windows domains to different privacyIDEA realms.
 `X-Forwarded-For` is set by the caller and can be forged. If privacyIDEA uses the client IP for policy decisions (geo-fencing, IP allow/deny lists, conditional MFA), a request that reaches AD FS directly could spoof this header and bypass those policies. To prevent that, set `trusted_proxies` to the IP(s)/CIDR(s) of your reverse proxy: the forwarded IP is then only trusted when the request actually originates from a listed proxy, and the real connection IP is used otherwise.
 
 If `trusted_proxies` is left empty, the provider keeps the previous behavior of trusting `X-Forwarded-For` unconditionally — this is kept for backward compatibility but is **not recommended** when IP-based policies are in use.
+
+### Remember this device
+The provider can offer a "remember this device" checkbox. When the user ticks it, a successful login stores a persistent cookie in the browser. On the next login from that browser, the second factor is skipped until the cookie expires or is revoked on the server.
+
+The feature has three independent gates, and all of them are required. The feature stays off unless every gate is set, so it cannot activate by accident:
+
+1. **Plugin switch:** set `enable_remember_device=1`. Off by default. Without it the plugin does not even send the API key.
+2. **API client:** register this provider as an **API client** in privacyIDEA (client type `privacyidea-cp`). This gives you one API key. Set it as the `api_key` registry value.
+3. **Server policy:** create a **`remember_device` policy** (scope `auth`) on the server. The provider shows the checkbox only when this policy exists. The server also sets the cookie lifetime (`remember_device_validity`) and an optional per-user device cap (`remember_device_max_devices`).
+
+The provider must also reach the server over `https`. The browser never talks to privacyIDEA directly, so the provider relays the cookie between the browser and the server.
+
+Security notes:
+* **Do not enable this when the provider is the _primary_ authentication method.** Recognition skips the factor this provider contributes. As an additional (MFA) provider it is the second factor, and AD FS already enforced the first factor before calling it. As the primary provider it is the only factor, so a recognised device would log in on the cookie alone.
+* The cookie is a rotating token. Each use issues a new value, and a replayed old value is treated as theft, which revokes the user's remembered devices on the server.
+* The cookie is `Secure` and `SameSite=Strict`, but **not** `HttpOnly`. An AD FS adapter cannot set a response header, so the sign-in page sets the cookie with JavaScript, which cannot set `HttpOnly`. A cross-site-scripting flaw on the sign-in page could therefore read it. The rotating-token scheme limits the value of a stolen cookie.
+* WebAuthn and passkey logins do not issue the cookie. It is offered for one-time-password and push logins.
 
 ## Client JavaScript requirements
 The login page uses JavaScript for the modern token types and for convenience features. One-time-password and push login do not need it.
@@ -61,6 +80,7 @@ Works without JavaScript:
 
 Needs JavaScript (hidden when it is disabled):
 * WebAuthn and passkey, including the buttons that switch to them. They also require a browser that supports the WebAuthn API and a secure `https` context.
+* "Remember this device". The provider cannot set a browser cookie from an AD FS adapter, so the page stores the device cookie with JavaScript. A browser that does not run the page JavaScript still logs in, but the device is not remembered.
 * The "copy to clipboard" button for the enrollment code.
 
 This matters for clients that do not run page JavaScript, such as a legacy embedded WebView (for example Outlook's) or a passive federation flow like device registration and Windows Hello for Business provisioning. Those clients can complete one-time-password and push login.

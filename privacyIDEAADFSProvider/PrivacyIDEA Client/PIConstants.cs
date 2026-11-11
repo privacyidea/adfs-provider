@@ -17,4 +17,11 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         public const string Interactive = "interactive";
         public const string WebAuthn = "webauthn";
     }
+
+    public static class PIConstants
+    {
+        // Name of the "remember device" cookie. Must match PERSISTENT_COOKIE_NAME in the server's
+        // privacyidea.lib.remembered_device.
+        public const string RememberDeviceCookieName = "pi_remember_device";
+    }
 }

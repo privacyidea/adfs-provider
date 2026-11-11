@@ -28,6 +28,14 @@ namespace PrivacyIDEAADFSProvider
         public string DisableOTP { get; set; } = "0";
         public string EnrollmentUrl { get; set; } = "";
         public string EnrollmentImg { get; set; } = "";
+        // "1" when the server offers "remember device" to this client: shows the checkbox.
+        public string RememberDeviceEnabled { get; set; } = "0";
+        // When set, the page JS writes this value into the pi_remember_device cookie (series:counter) with
+        // DeviceCookieMaxAge seconds of lifetime, then the form auto-submits. Used to issue or rotate it.
+        public string DeviceCookieValue { get; set; } = "";
+        public string DeviceCookieMaxAge { get; set; } = "";
+        // "1" when the page JS should delete the pi_remember_device cookie (an unrecognised/stale cookie).
+        public string DeviceCookieClear { get; set; } = "0";
 
         // Cached once: Resources.AuthPage is a ResourceManager lookup and the template is ~16 KB,
         // and the single regex pass replaces 25 sequential string.Replace calls (each of which
@@ -84,6 +92,10 @@ namespace PrivacyIDEAADFSProvider
                 ["disablePasskey"] = DisablePasskey,
                 ["passkeyChallenge"] = PasskeyChallenge,
                 ["passkeyRegistration"] = PasskeyRegistration,
+                ["rememberDeviceEnabled"] = RememberDeviceEnabled,
+                ["deviceCookieValue"] = DeviceCookieValue,
+                ["deviceCookieMaxAge"] = DeviceCookieMaxAge,
+                ["deviceCookieClear"] = DeviceCookieClear,
             };
 
             // Every value is HTML-encoded on substitution: these tokens land in text nodes, double-quoted
