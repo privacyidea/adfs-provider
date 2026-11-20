@@ -1,3 +1,8 @@
+## 2026-11-20 v1.5.1
+
+### Fixes
+* The installer now checks for .NET Framework 4.8 before it installs any file. The provider targets 4.8, which is in-box on Windows Server 2022 and later, but not on Server 2016 or 2019. On a machine without it, the installer stops up front with a message and a download link, instead of installing a provider that AD FS cannot load. A manual run of `Install.ps1` already made this check (#110).
+
 ## 2026-11-11 v1.5.0
 
 ### Features

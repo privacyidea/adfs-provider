@@ -45,6 +45,17 @@
 
 		<Condition Message="You need to be an administrator to install this product.">Privileged</Condition>
 
+		<!-- The provider targets .NET Framework 4.8. It is in-box on Windows Server 2022+, but NOT on
+		     Server 2016 (4.6.2) or 2019 (4.7.2). NETFRAMEWORK45 (from WixNetFxExtension) holds the installed
+		     .NET Framework Release value; 528040 means 4.8 or later. Block the install up front with a clear
+		     message and a download link, before any file action, so a missing runtime does not surface later
+		     as AD FS silently refusing to load the assembly. Install.ps1 repeats this check for a manual run
+		     of the script, outside the MSI. "Installed OR" lets uninstall and maintenance run regardless. -->
+		<PropertyRef Id="NETFRAMEWORK45"/>
+		<Condition Message="This product requires .NET Framework 4.8 or later. Install it from https://dotnet.microsoft.com/download/dotnet-framework/net48 (a reboot may be required), then run this installer again.">
+			<![CDATA[Installed OR (NETFRAMEWORK45 AND NETFRAMEWORK45 >= "#528040")]]>
+		</Condition>
+
 		<!-- Custom action definitions -->
 		<CustomAction Id='IsPrivileged' Error='You must be an admin to install this product'/>
 		<CustomAction Id="PreventDowngrading" Error="Newer version already installed."/>
