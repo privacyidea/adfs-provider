@@ -27,6 +27,13 @@ namespace PrivacyIDEAADFSProvider
         public string ServiceUser { get; set; } = "";
         public string ServicePass { get; set; } = "";
         public string ServiceRealm { get; set; } = "";
+        // API key that identifies this adapter to privacyIDEA as an API client. Required for the
+        // "remember device" feature. Stored encrypted at rest (DPAPI), like service_pass.
+        public string ApiKey { get; set; } = "";
+        // Plugin-side switch for the "remember device" feature. It is off by default and must be set
+        // explicitly, on top of the api_key and the server-side remember_device policy, so the feature
+        // cannot activate by accident (e.g. a left-over api_key).
+        public bool EnableRememberDevice { get; set; } = false;
         public Dictionary<string, string> RealmMap { get; set; } = new Dictionary<string, string>();
         public int AutoSubmitLength { get; set; } = 0; // 0 indicates that auto-submit is disabled
         public bool DisablePasskey { get; set; } = false;
@@ -81,6 +88,10 @@ namespace PrivacyIDEAADFSProvider
             // encrypted-at-rest). Returns "" when unset, same as Get.
             ServicePass = registryReader.ReadSecret("service_pass");
             ServiceRealm = Get("service_realm");
+
+            // api_key is a secret: ReadSecret decrypts it and migrates any legacy plaintext to
+            // encrypted-at-rest. Returns "" when unset.
+            ApiKey = registryReader.ReadSecret("api_key");
 
             OtpHint = Get("otp_hint", "One-Time-Password");
             UseUPN = GetBool("use_upn");
@@ -152,6 +163,7 @@ namespace PrivacyIDEAADFSProvider
             DisablePasskey = GetBool("disable_passkey");
             ForwardClientIP = GetBool("forward_client_ip");
             ForwardClientUserAgent = GetBool("forward_client_user_agent");
+            EnableRememberDevice = GetBool("enable_remember_device");
 
             string trustedProxies = Get("trusted_proxies");
             if (!string.IsNullOrEmpty(trustedProxies))

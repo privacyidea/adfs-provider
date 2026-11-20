@@ -75,6 +75,7 @@
     <Compile Include="PrivacyIDEA Client\PIResponse.cs" />
     <Compile Include="PrivacyIDEA Client\PIWebAuthnSignRequest.cs" />
     <Compile Include="PrivacyIDEA Client\PrivacyIDEA.cs" />
+    <Compile Include="PrivacyIDEA Client\RememberDeviceModels.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="PrivacyIDEA Client\RegistryReader.cs" />
     <Compile Include="PrivacyIDEA Client\SecretProtector.cs" />

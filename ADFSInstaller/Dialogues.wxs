@@ -3,57 +3,65 @@
     <Fragment>
         <UI>
             <TextStyle Id="Tahoma_Bold" FaceName="Tahoma" Size="8" Bold="yes" />
-            <!-- PAGE 1-->
+            <!-- PAGE 1 -->
             <Dialog Id="ConfigurationDlg" Width="370" Height="270" Title="[ProductName] Setup" NoMinimize="yes">
-                <!-- MAIN -->
-				<Control Type="Text" Id="label_url" Width="65" Height="15" X="38" Y="58" Text="privacyIDEA URL" />
-				<Control Type="Text" Id="label_realm" Width="44" Height="25" X="38" Y="105" Text="Realm (optional)" />
-				<Control Type="Text" Id="label_user" Width="26" Height="10" X="38" Y="180" Text="User:" />
-				<Control Type="Text" Id="label_pass" Width="23" Height="10" X="145" Y="180" Text="Pass:" />
-                <Control Type="Edit" Id="in_url" Width="143" Height="15" X="112" Y="56" Text="https://..." Property="URL" Help="Server URL including scheme and path." />
-                <Control Type="CheckBox" Id="cbox_ssl" Width="123" Height="15" X="38" Y="79" Text="Disable SSL verification" CheckBoxValue="1" Property="DISABLESSL" />
-                <Control Type="Edit" Id="in_realm" Width="74" Height="15" X="90" Y="109" Text="Realm" Property="REALM" />
-                <!-- TRIGGER CHALLENGE / SEND PASSWORD CONTROLS -->
-                <!-- The checkboxes are mutually exclusive and the inputs only active if the trigger challenge on is checked -->
-                <Control Type="CheckBox" Id="cbox_trigger" Width="150" Height="17" X="38" Y="154" Text="Trigger challenges using service account" CheckBoxValue="1" Property="TRIGGERCHALLENGES">
+
+                <!-- ===== privacyIDEA server ===== -->
+                <Control Type="GroupBox" Id="grp_server" X="12" Y="50" Width="346" Height="54" Text="privacyIDEA server" />
+                <Control Type="Text"     Id="label_url"  X="22" Y="65" Width="52" Height="10" Text="Server URL" />
+                <Control Type="Edit"     Id="in_url"     X="78" Y="63" Width="165" Height="15" Property="URL" Help="Server URL including scheme and path." />
+                <Control Type="CheckBox" Id="cbox_ssl"   X="252" Y="64" Width="100" Height="15" Text="Disable SSL verification" CheckBoxValue="1" Property="DISABLESSL" />
+                <Control Type="Text"     Id="label_realm" X="22" Y="87" Width="52" Height="10" Text="Realm" />
+                <Control Type="Edit"     Id="in_realm"   X="78" Y="85" Width="90" Height="15" Property="REALM" />
+                <Control Type="Text"     Id="label_realm_opt" X="172" Y="87" Width="42" Height="10" Text="(optional)" />
+                <Control Type="CheckBox" Id="cbox_upn"   X="252" Y="85" Width="80" Height="15" Text="Use UPN" CheckBoxValue="1" Property="USEUPN" />
+
+                <!-- ===== Service account (challenge-response) ===== -->
+                <!-- Trigger challenges and Send empty password are mutually exclusive; the service account
+                     fields are enabled only when an option that needs the account is active. The
+                     enable_enrollment feature is deprecated (superseded by enroll_via_multichallenge on the
+                     server), so it has no control here, but ENABLEENROLL still gates these fields for an
+                     upgraded install that had it set. -->
+                <Control Type="GroupBox" Id="grp_service" X="12" Y="112" Width="346" Height="52" Text="Service account" />
+                <Control Type="CheckBox" Id="cbox_trigger" X="22" Y="125" Width="155" Height="15" Text="Trigger challenges" CheckBoxValue="1" Property="TRIGGERCHALLENGES">
                     <Publish Property="SENDEMPTYPASS" Value="{}" Order="1">TRIGGERCHALLENGES</Publish>
                 </Control>
-                <Control Type="CheckBox" Id="cbox_emptypass" Width="236" Height="17" X="38" Y="195" Text="Send empty password" CheckBoxValue="1" Property="SENDEMPTYPASS">
+                <Control Type="CheckBox" Id="cbox_emptypass" X="185" Y="125" Width="160" Height="15" Text="Send empty password" CheckBoxValue="1" Property="SENDEMPTYPASS">
                     <Publish Property="TRIGGERCHALLENGES" Value="{}" Order="1">SENDEMPTYPASS</Publish>
                 </Control>
-				<Control Type="CheckBox" Id="cbox_enroll" Width="150" Height="17" X="200" Y="154" Text="Enable token enrollment using service account" CheckBoxValue="1" Property="ENABLEENROLL"/>
-                <!-- USERNAME AND PASSWORD INPUT -->
-                <Control Type="Edit" Id="in_serviceuser" Width="78" Height="15" X="65" Y="178" Text="Username" Property="SERVICEUSER" Help="Service user" ToolTip="Username of the the service account.">
+                <Control Type="Text" Id="label_user" X="22" Y="146" Width="22" Height="10" Text="User:" />
+                <Control Type="Edit" Id="in_serviceuser" X="46" Y="144" Width="95" Height="15" Property="SERVICEUSER" ToolTip="Username of the service account.">
                     <Condition Action="disable">TRIGGERCHALLENGES&lt;&gt;1</Condition>
                     <Condition Action="enable">TRIGGERCHALLENGES=1</Condition>
-					<Condition Action="enable">ENABLEENROLL=1</Condition>
+                    <Condition Action="enable">ENABLEENROLL=1</Condition>
                 </Control>
-                <!-- ToolTip is kept short: it maps to the MSI Control.Help column, which is capped at 50
-                     chars (ICE03). The full explanation is behind the "?" info button (btn_pass_info). -->
-                <Control Type="Edit" Id="in_servicepass" Width="78" Height="15" X="170" Y="178" Password="yes" Text="Password" Property="SERVICEPASS" ToolTip="Stored encrypted (enc: prefix).">
+                <Control Type="Text" Id="label_pass" X="148" Y="146" Width="22" Height="10" Text="Pass:" />
+                <!-- ToolTip is kept short: it maps to the MSI Control.Help column, capped at 50 chars (ICE03).
+                     The full explanation is behind the "?" info button (btn_pass_info). -->
+                <Control Type="Edit" Id="in_servicepass" X="170" Y="144" Width="95" Height="15" Password="yes" Property="SERVICEPASS" ToolTip="Stored encrypted (enc: prefix).">
                     <Condition Action="disable">TRIGGERCHALLENGES&lt;&gt;1</Condition>
                     <Condition Action="enable">TRIGGERCHALLENGES=1</Condition>
-					<Condition Action="enable">ENABLEENROLL=1</Condition>
+                    <Condition Action="enable">ENABLEENROLL=1</Condition>
                 </Control>
-                <!-- Small info button next to the password field. MSI cannot show a long hover tooltip
-                     (the Help column is ~50 chars), so clicking it opens PasswordEncryptionInfoDlg with the
-                     full explanation. This frees the dialog space the old inline note consumed. -->
-                <Control Type="PushButton" Id="btn_pass_info" Width="16" Height="16" X="250" Y="177" Text="?" ToolTip="Password storage info (click)">
+                <Control Type="PushButton" Id="btn_pass_info" X="270" Y="143" Width="16" Height="16" Text="?" ToolTip="Password storage info (click)">
                     <Publish Event="SpawnDialog" Value="PasswordEncryptionInfoDlg">1</Publish>
                 </Control>
-                <!-- END TRIGGER CHALLENGE / SEND PASSWORD CONTROLS -->
-                <Control Type="CheckBox" Id="cbox_upn" Width="50" Height="17" X="38" Y="135" Text="Use UPN" CheckBoxValue="1" Property="USEUPN" />
-                <Control Type="CheckBox" Id="cbox_debuglog" Width="116" Height="17" X="38" Y="214" Text="Activate debug log" CheckBoxValue="1" Property="DEBUGLOG" />
-                <!-- END MAIN -->
-                <!-- Bottom Controls -->
-                <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="&amp;Back">
-                    <!-- <Publish Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>-->
-                </Control>
+
+                <!-- ===== Remember this device (needs the API key beside it) ===== -->
+                <Control Type="GroupBox" Id="grp_remember" X="12" Y="172" Width="346" Height="32" Text="Remember this device" />
+                <Control Type="CheckBox" Id="cbox_remember" X="22" Y="184" Width="150" Height="15" Text="Enable remember this device" CheckBoxValue="1" Property="ENABLEREMEMBERDEVICE" />
+                <Control Type="Text" Id="label_apikey" X="178" Y="186" Width="32" Height="10" Text="API key:" />
+                <Control Type="Edit" Id="in_apikey" X="212" Y="184" Width="140" Height="15" Password="yes" Property="APIKEY" ToolTip="Stored encrypted (enc: prefix)." />
+
+                <!-- ===== General ===== -->
+                <Control Type="CheckBox" Id="cbox_debuglog" X="18" Y="212" Width="150" Height="12" Text="Activate debug log" CheckBoxValue="1" Property="DEBUGLOG" />
+
+                <!-- ===== Bottom controls ===== -->
+                <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="&amp;Back" />
                 <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="&amp;Next">
                     <Publish Event="NewDialog" Value="VerifyReadyDlg">URL</Publish>
                     <!-- URL is mandatory: if the property is empty, show the hint dialog instead of
-                         silently doing nothing. (The previous condition compared against a literal
-                         "Server URL" that the field never contained, so neither publish fired.) -->
+                         silently doing nothing. -->
                     <Publish Event="SpawnDialog" Value="NoServerURLMessageDlg">NOT URL</Publish>
                 </Control>
                 <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel">
@@ -61,7 +69,7 @@
                 </Control>
                 <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="WixUI_Bmp_Banner" />
                 <Control Id="Description" Type="Text" X="25" Y="23" Width="280" Height="15" Transparent="yes" NoPrefix="yes">
-                    <Text>Configure server URL and other properties.</Text>
+                    <Text>Configure the server connection and features.</Text>
                 </Control>
                 <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
                 <Control Id="Title" Type="Text" X="15" Y="6" Width="200" Height="15" Transparent="yes" NoPrefix="yes">
@@ -69,23 +77,21 @@
                 </Control>
                 <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="2" />
             </Dialog>
-            <!-- END PAGE 1-->
+            <!-- END PAGE 1 -->
+
             <Dialog Id="NoServerURLMessageDlg" Width="260" Height="85" Title="[ProductName] Setup" NoMinimize="yes">
-                <!--  <Control Id="Icon" Type="Icon" X="15" Y="15" Width="24" Height="24"
-              ToolTip="Information icon" FixedSize="yes" IconSize="32" Text="ExclamIcon"/>-->
                 <Control Id="Return" Type="PushButton" X="100" Y="57" Width="56" Height="17" Default="yes" Cancel="yes" Text="&amp;Return">
                     <Publish Event="EndDialog" Value="Return">1</Publish>
                 </Control>
                 <Control Id="Text" Type="Text" X="48" Y="15" Width="194" Height="30" TabSkip="no">
-                    <Text>
-            The Server URL is mandatory!
-          </Text>
+                    <Text>The Server URL is mandatory!</Text>
                 </Control>
             </Dialog>
+
             <!-- Full explanation behind the "?" info button on the password field. -->
             <Dialog Id="PasswordEncryptionInfoDlg" Width="280" Height="150" Title="[ProductName] Setup" NoMinimize="yes">
                 <Control Id="InfoText" Type="Text" X="15" Y="15" Width="250" Height="95" TabSkip="no" NoPrefix="yes">
-                    <Text>The service account password is stored encrypted (an "enc:" prefix is added to the registry value). To change it later, enter a new cleartext value here, or write it into the registry without the prefix - the provider encrypts it on the next AD FS restart.</Text>
+                    <Text>The service account password and the API key are stored encrypted (an "enc:" prefix is added to the registry value). To change one later, enter a new cleartext value here, or write it into the registry without the prefix - the provider encrypts it on the next AD FS restart.</Text>
                 </Control>
                 <Control Id="OK" Type="PushButton" X="112" Y="120" Width="56" Height="17" Default="yes" Cancel="yes" Text="&amp;OK">
                     <Publish Event="EndDialog" Value="Return">1</Publish>

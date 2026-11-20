@@ -36,6 +36,11 @@
                and offer push while in OTP mode when a push token is available. */
             #loginArea[data-mode="push"]:not([data-disable-otp="1"]) #noJsSwitchToOtp { display: inline-block !important; }
             #loginArea[data-mode="otp"][data-push-available="1"] #noJsSwitchToPush { display: inline-block !important; }
+            /* Remember-device checkbox: shown when the server offers the feature. Without JavaScript the
+               checkbox posts a plain rememberDevice field; the cookie is then set on the next page the
+               adapter renders (an auto-submit page), which needs JavaScript, so this works only in browsers
+               that run JavaScript on that follow-up page. */
+            #rememberDeviceDiv[data-enabled="1"] { display: block !important; }
         </style>
         <p>JavaScript is disabled. Enter your one-time password and select Submit, or for push confirm on your
            device and select the button. Use the token-type buttons to switch between one-time password and
@@ -81,7 +86,7 @@
         <p id="pageIntroductionText" style="color:red">#ERROR#</p>
         <br />
         <label for="otp" class="block" aria-label="#MESSAGE#">#MESSAGE#</label>
-        <input id="otp" name="otp" type="password" value="" class="text" placeholder="#OTPTEXT#" size="35" autocomplete="new-password" autofocus />
+        <input id="otp" name="otp" type="password" value="" class="text" placeholder="#OTPTEXT#" size="35" autocomplete="one-time-code" autofocus />
         <input id="submitButton" type="submit" name="Submit" value="#SUBMIT#" onclick="submitForm()" />
         <!-- No-JavaScript push: a manual poll button. Hidden by default (with JavaScript the page auto-polls);
              the noscript rules reveal it only in push mode. It is placed after the normal submit button so
@@ -96,6 +101,18 @@
                 class="pi-button pi-button-secondary" style="display:none">Use one-time password</button>
         <button id="noJsSwitchToPush" type="submit" name="noJsModeSwitch" value="push"
                 class="pi-button pi-button-secondary" style="display:none">Use push</button>
+
+        <!-- Remember this device. Hidden unless the server offers the feature (rememberDeviceEnabled=1);
+             the page JS and the noscript rule un-hide it then. Posts a plain rememberDevice field (value 1
+             when checked); the JS path also copies it into formResult. -->
+        <div id="rememberDeviceDiv" data-enabled="#rememberDeviceEnabled#" style="display:none">
+            <label><input id="rememberDevice" name="rememberDevice" type="checkbox" value="1" /> Remember this device</label>
+        </div>
+
+        <!-- Carriers for the device cookie, read by the JS below (no name, so they are not posted back). -->
+        <input id="deviceCookieValue" type="hidden" value="#deviceCookieValue#" />
+        <input id="deviceCookieMaxAge" type="hidden" value="#deviceCookieMaxAge#" />
+        <input id="deviceCookieClear" type="hidden" value="#deviceCookieClear#" />
 
         <input id="autoSubmit" type="hidden" name="autoSubmit" value="#autoSubmit#" />
         <input id="mode" type="hidden" name="mode" value="#mode#" />
@@ -158,7 +175,34 @@
                 passkeySignResponse: "",
                 passkeyRegistrationResponse: "",
                 origin: "",
+                rememberDevice: false,
             };
+
+            // Remember-device cookie handling. The adapter cannot set a response cookie from an AD FS
+            // adapter, so the cookie is managed here. It is Secure + SameSite=Strict; it is not HttpOnly,
+            // because only JavaScript can set it. The value is the opaque series:counter token.
+            (function () {
+                const clear = document.querySelector("#deviceCookieClear");
+                if (clear && clear.value === "1") {
+                    document.cookie = "pi_remember_device=; path=/; max-age=0; secure; samesite=strict";
+                }
+                const cv = document.querySelector("#deviceCookieValue");
+                if (cv && cv.value !== "") {
+                    const maEl = document.querySelector("#deviceCookieMaxAge");
+                    let maxAge = parseInt(maEl ? maEl.value : "", 10);
+                    if (!Number.isFinite(maxAge) || maxAge <= 0) {
+                        maxAge = 2592000; // 30 days, if the server sent no usable Max-Age
+                    }
+                    document.cookie = "pi_remember_device=" + cv.value +
+                        "; path=/; max-age=" + maxAge + "; secure; samesite=strict";
+                }
+            })();
+
+            // Show the remember-device checkbox when the server offers the feature.
+            if (document.querySelector("#rememberDeviceDiv")?.dataset.enabled === "1") {
+                document.querySelector("#rememberDeviceDiv").style.display = "block";
+            }
+
             disable("retryPasskeyLogin");
             disable("retryPasskeyRegistration");
             if (value("enrollmentOptional") !== "1") {
@@ -319,6 +363,10 @@
                         (window.location.port ? ':' + window.location.port : '');
                 }
                 formResult.origin = window.origin;
+                const rememberBox = document.querySelector("#rememberDevice");
+                if (rememberBox) {
+                    formResult.rememberDevice = rememberBox.checked;
+                }
                 set("formResult", JSON.stringify(formResult));
                 document.forms["loginForm"].requestSubmit();
             }

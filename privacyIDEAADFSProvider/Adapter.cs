@@ -22,6 +22,9 @@ namespace privacyIDEAADFSProvider
         private PrivacyIDEA _privacyIDEA;
         private Configuration _config;
         private bool _debugLog = false;
+        // Whether the server offers "remember device" to this client (cached at pipeline load). Gates the
+        // checkbox and the recognition attempt. The server still enforces its policy per user.
+        private bool _rememberDeviceEnabled = false;
         private AdapterMetadata _metadata;
 
         public IAuthenticationAdapterMetadata Metadata =>
@@ -59,6 +62,40 @@ namespace privacyIDEAADFSProvider
                 Headers = GetHeadersToForward(request),
                 CustomParameters = CollectCustomParams(request),
             };
+
+            // Remember-device recognition: if the browser presents a device cookie bound to this user, skip
+            // the second factor. Runs before any challenge is triggered. The result is decided server-side;
+            // we only act on it, and we store the outcome in authContext.Data (not a client-posted field),
+            // so a browser cannot forge a "recognised" marker to bypass MFA.
+            if (_rememberDeviceEnabled && _privacyIDEA != null)
+            {
+                string deviceCookie = GetDeviceCookie(request);
+                if (!string.IsNullOrEmpty(deviceCookie))
+                {
+                    RememberDeviceResult remember = _privacyIDEA.CheckRememberDevice(username, deviceCookie, context);
+                    if (remember.Recognized)
+                    {
+                        Log("Remembered device recognised; skipping the second factor.");
+                        authContext.Data["authSuccess"] = "1";
+                        authContext.Data["userid"] = username;
+                        authContext.Data["domain"] = domain;
+                        // On a fresh hit the server rotated the cookie; relay the new value so the browser
+                        // stores it. On a tolerated duplicate (grace) there is no new cookie and the browser
+                        // keeps the one it has.
+                        ApplyCookieToForm(form, remember.Cookie);
+                        form.AutoSubmit = "1";
+                        return form;
+                    }
+                    // Not recognised. If the cookie is dead (unknown/expired, or a detected theft the server
+                    // already revoked), tell the page to delete it so the browser stops presenting it. A
+                    // cookie that simply belongs to a different user on a shared browser is left untouched.
+                    if (remember.Cookie != null && remember.Cookie.IsClear)
+                    {
+                        form.DeviceCookieClear = "1";
+                    }
+                }
+            }
+            form.RememberDeviceEnabled = _rememberDeviceEnabled ? "1" : "0";
 
             PIResponse response = null;
             if (_privacyIDEA != null)
@@ -170,7 +207,8 @@ namespace privacyIDEAADFSProvider
             {
                 OtpHint = _config.OtpHint,
                 AutoSubmitLength = _config.AutoSubmitLength,
-                DisablePasskey = _config.DisablePasskey ? "1" : "0"
+                DisablePasskey = _config.DisablePasskey ? "1" : "0",
+                RememberDeviceEnabled = _rememberDeviceEnabled ? "1" : "0"
             };
             form.EnrollmentImg = GetString(proofDict, "enrollmentImg");
             form.EnrollmentLink = GetString(proofDict, "enrollmentLink");
@@ -280,6 +318,13 @@ namespace privacyIDEAADFSProvider
             };
             PIResponse response = null;
 
+            // The user ticked "remember this device". The page JS copies the checkbox into formResult; a
+            // no-JavaScript client posts a plain rememberDevice field. Honour it only when the server offers
+            // the feature. When set, the final validate/check below asks the server to issue a device cookie.
+            bool wantRemember = _rememberDeviceEnabled
+                && (fr.RememberDevice || GetString(proofDict, "rememberDevice") == "1");
+            PICookie issuedCookie = null;
+
             // Optional enroll-via-multichallenge: user clicked "Not Now"
             if (fr.EnrollmentCancelled)
             {
@@ -346,7 +391,9 @@ namespace privacyIDEAADFSProvider
                 {
                     // Outofband-mode finalize: empty otp + the pushed transaction id.
                     // https://privacyidea.readthedocs.io/en/latest/tokens/authentication_modes.html#outofband-mode
-                    response = _privacyIDEA.ValidateCheck(user, "", transactionid, context);
+                    response = wantRemember
+                        ? _privacyIDEA.ValidateCheckRemember(user, "", transactionid, context, out issuedCookie)
+                        : _privacyIDEA.ValidateCheck(user, "", transactionid, context);
                 }
                 else
                 {
@@ -371,7 +418,9 @@ namespace privacyIDEAADFSProvider
             }
             else
             {
-                response = _privacyIDEA.ValidateCheck(user, otp, transactionid, context);
+                response = wantRemember
+                    ? _privacyIDEA.ValidateCheckRemember(user, otp, transactionid, context, out issuedCookie)
+                    : _privacyIDEA.ValidateCheck(user, otp, transactionid, context);
             }
 
             bool newChallenge = false;
@@ -389,6 +438,18 @@ namespace privacyIDEAADFSProvider
                         Log("Passkey Authentication: Usernames do not match! User from privacyidea: " + response.Username +
                             ", user from context: " + user);
                         form.ErrorMessage = "The passkey is not for the user trying to log in!";
+                        return form;
+                    }
+                    else if (issuedCookie != null && !issuedCookie.IsClear)
+                    {
+                        // The server issued a remember-device cookie on this successful auth. We cannot set a
+                        // browser cookie on the final success (that returns claims and AD FS redirects away),
+                        // so render a brief auto-submit page that stores the cookie via JavaScript. The next
+                        // TryEndAuthentication returns the claims (authSuccess short-circuits at the top).
+                        Log("Issuing a remember-device cookie; rendering the cookie-set page.");
+                        authContext.Data["authSuccess"] = "1";
+                        ApplyCookieToForm(form, issuedCookie);
+                        form.AutoSubmit = "1";
                         return form;
                     }
                     else
@@ -622,6 +683,31 @@ namespace privacyIDEAADFSProvider
             {
                 _privacyIDEA.RealmMap = _config.RealmMap;
             }
+
+            // The "remember device" feature needs three gates, all required: the plugin switch
+            // (enable_remember_device), an api_key, and the server-side remember_device policy (the
+            // capability below). Without the switch, no api_key is even sent.
+            if (_config.EnableRememberDevice && !string.IsNullOrEmpty(_config.ApiKey))
+            {
+                _privacyIDEA.ApiKey = _config.ApiKey;
+                // Cache whether the server offers remember-device to this client. It is a UX hint (whether
+                // to show the checkbox and attempt recognition); the server still enforces its policy per
+                // user. A failure here must never abort provider load, so default to off.
+                try
+                {
+                    _rememberDeviceEnabled = _privacyIDEA.GetRememberDeviceCapability();
+                    Log("Remember-device capability from the server: " + _rememberDeviceEnabled);
+                }
+                catch (Exception e)
+                {
+                    Error("Could not query the remember-device capability: " + e.Message);
+                    _rememberDeviceEnabled = false;
+                }
+            }
+            else if (!_config.EnableRememberDevice && !string.IsNullOrEmpty(_config.ApiKey))
+            {
+                Log("An api_key is set but enable_remember_device is off; the remember-device feature stays disabled.");
+            }
         }
 
         public void OnAuthenticationPipelineUnload()
@@ -757,6 +843,32 @@ namespace privacyIDEAADFSProvider
             // the formResult guard). Fall back to the default instead of throwing an InvalidCastException out of
             // TryEndAuthentication — that would surface as exactly the 500 the guards set out to eliminate.
             return dict.TryGetValue(key, out object value) && value is string s ? s : defaultValue;
+        }
+
+        /// <summary>Reads the pi_remember_device cookie value from the browser request, or "" if absent.</summary>
+        private static string GetDeviceCookie(HttpListenerRequest request)
+        {
+            try
+            {
+                return request?.Cookies[PIConstants.RememberDeviceCookieName]?.Value ?? "";
+            }
+            catch
+            {
+                return "";
+            }
+        }
+
+        /// <summary>
+        /// Puts a to-be-set device cookie onto the form, so the page JavaScript writes it to the browser.
+        /// A null or clear directive leaves the form untouched (the browser keeps the cookie it has).
+        /// </summary>
+        private static void ApplyCookieToForm(AdapterPresentationForm form, PICookie cookie)
+        {
+            if (cookie != null && !cookie.IsClear)
+            {
+                form.DeviceCookieValue = cookie.Value;
+                form.DeviceCookieMaxAge = cookie.MaxAgeSeconds.ToString();
+            }
         }
 
         private static string Stamp(string message) =>

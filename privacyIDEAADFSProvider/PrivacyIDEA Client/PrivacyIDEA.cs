@@ -14,6 +14,9 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         public string Url { get; set; } = "";
         public string Realm { get; set; } = "";
         public Dictionary<string, string> RealmMap { get; set; } = new Dictionary<string, string>();
+        // Identifies this adapter as an API client to privacyIDEA (the X-API-Key header). Required for the
+        // "remember device" feature; when empty, no X-API-Key is sent and the request stays unidentified.
+        public string? ApiKey { get; set; }
 
         private readonly bool _sslVerify;
         private readonly string _userAgent;
@@ -177,6 +180,137 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             var parameters = BuildParameters(map, context);
             string response = SendRequest("/validate/check", parameters, context?.Headers);
             return PIResponse.FromJSON(response, this);
+        }
+
+        /// <summary>
+        /// Like <see cref="ValidateCheck"/>, but also asks the server to issue a persistent "remember device"
+        /// cookie (request_persistent_cookie=1). On success the server returns a Set-Cookie header, which is
+        /// parsed into <paramref name="issuedCookie"/> for the caller to relay to the browser. Requires an
+        /// API key; the server still gates issuance on its remember_device policy for the user.
+        /// </summary>
+        public PIResponse ValidateCheckRemember(string user, string otp, string transactionid,
+            PIRequestContext context, out PICookie issuedCookie)
+        {
+            issuedCookie = null;
+            var map = new Dictionary<string, string>
+            {
+                { "user", user },
+                { "pass", otp },
+                { "request_persistent_cookie", "1" }
+            };
+            if (transactionid != null)
+            {
+                map.Add("transaction_id", transactionid);
+            }
+            var parameters = BuildParameters(map, context);
+            string response = SendRequestCore("/validate/check", parameters, context?.Headers, "POST", null, out string[] setCookie);
+            issuedCookie = ParseSetCookie(setCookie);
+            return PIResponse.FromJSON(response, this);
+        }
+
+        /// <summary>
+        /// Ask the server whether the "remember device" feature is offered to this API client
+        /// (GET /validate/capabilities). This is a client-level hint, not a per-user guarantee; the server
+        /// still enforces the remember_device policy per user at issuance and recognition. Returns false when
+        /// no API key is set, the server is unreachable, or the capability is off.
+        /// </summary>
+        public bool GetRememberDeviceCapability()
+        {
+            if (string.IsNullOrEmpty(ApiKey))
+            {
+                return false;
+            }
+            string response = SendRequest("/validate/capabilities", new Dictionary<string, string>(), null, "GET");
+            if (string.IsNullOrEmpty(response))
+            {
+                return false;
+            }
+            try
+            {
+                return (bool)JObject.Parse(response)["result"]["value"]["capabilities"]["remember_device"];
+            }
+            catch (Exception)
+            {
+                Error("/validate/capabilities response has wrong format or no remember_device capability.");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Present a remember-device cookie to the server (POST /validate/remember_device) to learn whether
+        /// the device is recognised for this user. Recognition is NOT an authentication: it verifies no
+        /// credential and triggers no challenge. On a fresh hit the server rotates the cookie; the new value
+        /// (or a clear directive on a miss/theft) is returned in the result for the caller to relay.
+        /// </summary>
+        public RememberDeviceResult CheckRememberDevice(string user, string cookieValue, PIRequestContext context)
+        {
+            var result = new RememberDeviceResult { Recognized = false };
+            if (string.IsNullOrEmpty(ApiKey) || string.IsNullOrEmpty(cookieValue) || string.IsNullOrEmpty(user))
+            {
+                return result;
+            }
+            var parameters = BuildParameters(new Dictionary<string, string> { { "user", user } }, context);
+            string cookieHeader = PIConstants.RememberDeviceCookieName + "=" + cookieValue;
+            string response = SendRequestCore("/validate/remember_device", parameters, context?.Headers, "POST",
+                cookieHeader, out string[] setCookie);
+            if (!string.IsNullOrEmpty(response))
+            {
+                try
+                {
+                    result.Recognized = (bool)JObject.Parse(response)["result"]["value"];
+                }
+                catch (Exception)
+                {
+                    Error("/validate/remember_device response has wrong format or no 'value'.");
+                    result.Recognized = false;
+                }
+            }
+            result.Cookie = ParseSetCookie(setCookie);
+            return result;
+        }
+
+        /// <summary>
+        /// Extracts the remember-device cookie from the raw Set-Cookie response header(s): its value and
+        /// Max-Age. Returns null when no such cookie is present. A returned <see cref="PICookie"/> with an
+        /// empty value or a non-positive Max-Age is a clear directive (see <see cref="PICookie.IsClear"/>).
+        /// </summary>
+        private static PICookie ParseSetCookie(string[] setCookieHeaders)
+        {
+            if (setCookieHeaders == null)
+            {
+                return null;
+            }
+            foreach (string header in setCookieHeaders)
+            {
+                if (string.IsNullOrEmpty(header))
+                {
+                    continue;
+                }
+                string[] parts = header.Split(';');
+                string first = parts[0].Trim();
+                int eq = first.IndexOf('=');
+                if (eq < 0)
+                {
+                    continue;
+                }
+                string name = first.Substring(0, eq).Trim();
+                if (!name.Equals(PIConstants.RememberDeviceCookieName, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                string value = first.Substring(eq + 1).Trim();
+                int maxAge = 0;
+                for (int i = 1; i < parts.Length; i++)
+                {
+                    string attr = parts[i].Trim();
+                    if (attr.StartsWith("Max-Age=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        int.TryParse(attr.Substring("Max-Age=".Length).Trim(), out maxAge);
+                    }
+                }
+                return new PICookie(value, maxAge);
+            }
+            return null;
         }
 
         /// <summary>
@@ -505,6 +639,18 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// </summary>
         private string SendRequest(string endpoint, Dictionary<string, string> parameters, List<KeyValuePair<string, string>> headers = null, string method = "POST")
         {
+            return SendRequestCore(endpoint, parameters, headers, method, null, out _);
+        }
+
+        /// <summary>
+        /// Core request sender. <paramref name="cookieToSend"/> is sent as the Cookie header when set (used
+        /// to present a remember-device cookie), and <paramref name="setCookie"/> returns the raw Set-Cookie
+        /// response header(s) so the caller can relay an issued or rotated cookie back to the browser.
+        /// </summary>
+        private string SendRequestCore(string endpoint, Dictionary<string, string> parameters,
+            List<KeyValuePair<string, string>> headers, string method, string cookieToSend, out string[] setCookie)
+        {
+            setCookie = null;
             // Guard the string-building: ParametersForLog allocates and iterates every parameter, and this
             // runs on every request. LogServerResponse mirrors debug_log, so when debugging is off we skip
             // the work entirely instead of composing a string the logger would discard.
@@ -536,6 +682,23 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             if (!string.IsNullOrEmpty(_authToken))
             {
                 request.Headers["Authorization"] = _authToken;
+            }
+            if (!string.IsNullOrEmpty(ApiKey))
+            {
+                // X-API-Key is a custom header (not restricted), so it can be set directly. It identifies
+                // this adapter as an API client, which the server needs to attribute remember-device cookies.
+                request.Headers["X-API-Key"] = ApiKey;
+            }
+            if (!string.IsNullOrEmpty(cookieToSend))
+            {
+                try
+                {
+                    request.Headers[HttpRequestHeader.Cookie] = cookieToSend;
+                }
+                catch (Exception e)
+                {
+                    Error("Could not set the Cookie header: " + e.Message);
+                }
             }
             if (headers != null)
             {
@@ -593,6 +756,17 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             {
                 Error("Request to " + endpoint + " failed: " + e.Message);
                 return "";
+            }
+
+            // Capture Set-Cookie before the body is read/disposed. GetValues splits multiple cookie headers
+            // correctly (a single combined string would break on the commas inside cookie dates).
+            try
+            {
+                setCookie = response.Headers?.GetValues("Set-Cookie");
+            }
+            catch (Exception)
+            {
+                setCookie = null;
             }
 
             string ret = "";
