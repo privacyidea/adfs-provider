@@ -1,8 +1,3 @@
-## 2026-11-20 v1.5.1
-
-### Fixes
-* The installer now checks for .NET Framework 4.8 before it installs any file. The provider targets 4.8, which is in-box on Windows Server 2022 and later, but not on Server 2016 or 2019. On a machine without it, the installer stops up front with a message and a download link, instead of installing a provider that AD FS cannot load. A manual run of `Install.ps1` already made this check (#110).
-
 ## 2026-11-11 v1.5.0
 
 ### Features
@@ -11,6 +6,9 @@
 * Push login works without JavaScript through a manual "I confirmed on my device" button. With JavaScript the page polls on a timer; without it, each button press re-posts the form and polls the transaction once. The button is shown only in push mode when JavaScript is disabled.
 * Switching between one-time password and push works without JavaScript. When both are offered, the page shows a "Use push" or "Use one-time password" button that re-renders the form in the other mode. A no-JavaScript client can now reach push whenever a push token is triggered, not only when the server sets `preferred_client_mode=poll`.
 * The login page hides the options that only work with JavaScript (WebAuthn, passkey, and the buttons that switch to them, plus copy-to-clipboard) when JavaScript is disabled, and reveals the enrollment QR code, so a no-JavaScript client sees a clean form. WebAuthn and passkey still require JavaScript and a browser that supports them.
+
+### Fixes
+* The installer now checks for .NET Framework 4.8 before it installs any file. The provider targets 4.8, which is in-box on Windows Server 2022 and later, but not on Server 2016 or 2019. On a machine without it, the installer stops up front with a message and a download link, instead of installing a provider that AD FS cannot load. A manual run of `Install.ps1` already made this check (#110).
 
 ### Other changes
 * The one-time-password input now uses `autocomplete="one-time-code"` instead of `new-password`. Browsers and password managers no longer offer to save the one-time password as a credential.
