@@ -199,8 +199,9 @@
             })();
 
             // Show the remember-device checkbox when the server offers the feature.
-            if (document.querySelector("#rememberDeviceDiv")?.dataset.enabled === "1") {
-                document.querySelector("#rememberDeviceDiv").style.display = "block";
+            const rememberDiv = document.querySelector("#rememberDeviceDiv");
+            if (rememberDiv && rememberDiv.dataset.enabled === "1") {
+                rememberDiv.style.display = "block";
             }
 
             disable("retryPasskeyLogin");
@@ -211,7 +212,8 @@
 
             // Reveal the enrollment block matching the active mode, or drop it entirely so the
             // hidden <img src=""> doesn't trigger a spurious browser request.
-            const enrollmentMode = document.querySelector("#enrollmentBlock")?.dataset.enrollmentMode || "none";
+            const enrollmentBlock = document.querySelector("#enrollmentBlock");
+            const enrollmentMode = (enrollmentBlock && enrollmentBlock.dataset.enrollmentMode) || "none";
             if (enrollmentMode === "legacy") {
                 const el = document.querySelector(".enrollment-legacy");
                 if (el) el.style.display = "block";
@@ -219,10 +221,11 @@
                 const el = document.querySelector(".enrollment-image");
                 if (el) el.style.display = "block";
                 if (value("enrollmentLink") === "") {
-                    document.querySelector(".enrollment-link")?.remove();
+                    const enrollmentLinkEl = document.querySelector(".enrollment-link");
+                    if (enrollmentLinkEl) enrollmentLinkEl.remove();
                 }
-            } else {
-                document.querySelector("#enrollmentBlock")?.remove();
+            } else if (enrollmentBlock) {
+                enrollmentBlock.remove();
             }
 
             if (value("autoSubmit") === "1") {
