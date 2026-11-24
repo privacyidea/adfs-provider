@@ -189,12 +189,15 @@
                 const cv = document.querySelector("#deviceCookieValue");
                 if (cv && cv.value !== "") {
                     const maEl = document.querySelector("#deviceCookieMaxAge");
-                    let maxAge = parseInt(maEl ? maEl.value : "", 10);
-                    if (!Number.isFinite(maxAge) || maxAge <= 0) {
-                        maxAge = 2592000; // 30 days, if the server sent no usable Max-Age
+                    const maxAge = parseInt(maEl ? maEl.value : "", 10);
+                    if (Number.isFinite(maxAge) && maxAge > 0) {
+                        document.cookie = "pi_remember_device=" + cv.value +
+                            "; path=/; max-age=" + maxAge + "; secure; samesite=strict";
+                    } else {
+                        // No usable Max-Age from the server. Do not invent a lifetime for a security token.
+                        // Remove any existing cookie instead of storing one that cannot be aged correctly.
+                        document.cookie = "pi_remember_device=; path=/; max-age=0; secure; samesite=strict";
                     }
-                    document.cookie = "pi_remember_device=" + cv.value +
-                        "; path=/; max-age=" + maxAge + "; secure; samesite=strict";
                 }
             })();
 

@@ -16,12 +16,13 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         }
 
         /// <summary>
-        /// True when the server wants the cookie removed, rather than set to a new value. The server clears
-        /// a dead cookie with an empty value (pi_remember_device=;) and a past expiry (a miss or a detected
-        /// theft); an issued or rotated cookie always carries a non-empty value. The empty value is the
-        /// reliable signal: a non-empty value with an unparsed Max-Age is still a cookie to set, not a clear.
+        /// True when the cookie must be removed rather than stored. The server clears a dead cookie with an
+        /// empty value (pi_remember_device=;) and a non-positive Max-Age (a miss or a detected theft). An
+        /// issued or rotated cookie always carries a non-empty value and a positive Max-Age. A non-positive
+        /// Max-Age is also a clear, because Max-Age&lt;=0 is the HTTP delete signal and because a stored
+        /// security token with no server-set lifetime must not be kept (the client must not invent one).
         /// </summary>
-        public bool IsClear => string.IsNullOrEmpty(Value);
+        public bool IsClear => string.IsNullOrEmpty(Value) || MaxAgeSeconds <= 0;
     }
 
     /// <summary>
