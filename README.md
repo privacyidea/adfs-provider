@@ -63,27 +63,63 @@ The feature has three independent gates, and all of them are required. The featu
 
 The provider must also reach the server over `https`. The browser never talks to privacyIDEA directly, so the provider relays the cookie between the browser and the server.
 
+The provider asks the server whether it offers the feature when AD FS starts. If the answer is no, for example because privacyIDEA was not reachable at that moment, the provider writes a warning to the event log and asks again during sign-ins, at most every 5 minutes. So you do not need to restart AD FS after you create the policy. If you remove the policy later, the server stops issuing and recognizing device cookies at once, and the checkbox disappears after the next AD FS restart.
+
 Security notes:
 * **Do not enable this when the provider is the _primary_ authentication method.** Recognition skips the factor this provider contributes. As an additional (MFA) provider it is the second factor, and AD FS already enforced the first factor before calling it. As the primary provider it is the only factor, so a recognised device would log in on the cookie alone.
 * The cookie is a rotating token. Each use issues a new value, and a replayed old value is treated as theft, which revokes the user's remembered devices on the server.
-* The cookie is `Secure` and `SameSite=Strict`, but **not** `HttpOnly`. An AD FS adapter cannot set a response header, so the sign-in page sets the cookie with JavaScript, which cannot set `HttpOnly`. A cross-site-scripting flaw on the sign-in page could therefore read it. The rotating-token scheme limits the value of a stolen cookie.
+* The cookie is `Secure` and `SameSite=Lax` (see the next section for why not `Strict`), but **not** `HttpOnly`. An AD FS adapter cannot set a response header, so the sign-in page sets the cookie with JavaScript, which cannot set `HttpOnly`. A cross-site-scripting flaw on the sign-in page could therefore read it. The rotating-token scheme limits the value of a stolen cookie.
 * WebAuthn and passkey logins do not issue the cookie. It is offered for one-time-password and push logins.
+
+#### Why the cookie is `SameSite=Lax`, not `Strict`
+The provider reads the device cookie only when AD FS asks for the second factor. In many sign-ins, that request is part of a navigation that started on another site:
+
+* The user comes from Microsoft 365 (`login.microsoftonline.com`) or from a relying party on another domain, and is redirected to AD FS.
+* AD FS accepts the first factor without showing its own login form, for example with Windows Integrated Authentication (Kerberos) on the intranet, or with an existing AD FS single sign-on session.
+
+Browsers do not send a `SameSite=Strict` cookie on a navigation that started on another site. With `Strict`, a remembered device would therefore never be recognized in these sign-ins, and the second factor would be asked every time. It would work only when the user types the password into the AD FS login form, because that form posts to AD FS itself.
+
+With `SameSite=Lax`, the browser sends the cookie on top-level navigations from other sites, so recognition works in these sign-ins too. The browser still does not send it on cross-site `POST` requests, inside frames, or with images, scripts and other requests that another site embeds.
+
+What this means:
+
+* A sign-in that another site starts can complete without a second-factor prompt when two things hold: the browser has a valid device cookie for the user, and AD FS accepts the first factor without user interaction (for example Windows Integrated Authentication). Skipping the second factor on a remembered device is the purpose of the feature. The security token that AD FS issues still goes only to the relying party's registered reply address, never to the site that started the sign-in.
+* The first factor is still checked by AD FS on every sign-in. The device cookie replaces only the second factor.
+* The cookie is bound to the user and rotates on every use. A copied cookie works at most until its next use, and a replayed old value revokes all of the user's remembered devices.
+
+If you do not want a remembered device to skip the second factor in sign-ins that AD FS completes without user interaction, do not enable the feature for the users or realms concerned. The `remember_device` policy on the server controls who can use it.
 
 ## Client JavaScript requirements
 The login page uses JavaScript for the modern token types and for convenience features. One-time-password and push login do not need it.
 
+The page script is plain ES5, so it also runs in Internet Explorer 11 and in the legacy Edge engine (EdgeHTML 18) that older Office sign-in windows embed. Internet Explorer 11 has no WebAuthn API, so the page hides the security key and passkey options there. One-time password, push and "remember this device" work. CI checks every change to the page script with the Internet Explorer script engine (`tools/Check-AuthPageEcmaScript.ps1`).
+
+The page falls back to the no-JavaScript form described below in two cases: when JavaScript is disabled, and when JavaScript is on but the page script cannot run to the end (for example in an engine that cannot parse it).
+
 Works without JavaScript:
 * One-time-password entry. The user types the OTP and selects Submit. This covers HOTP, TOTP, and any challenge-response token whose answer is an OTP (email, SMS).
 * Push login, through a manual "I confirmed on my device" button. With JavaScript the page polls automatically. Without it, each button press polls the transaction once.
-* Switching between one-time password and push. When both are offered, the page shows a "Use push" or "Use one-time password" button, so the user can change token type without JavaScript. This means no-JavaScript push works whenever a push token is triggered, not only when the server sets `preferred_client_mode=poll`.
+* Switching between one-time password and push. When both are offered, the page shows a "Use push" or "Use one-time password" button, so the user can change token type without JavaScript. "Use push" is shown in every mode other than push (one-time password, WebAuthn, an enrollment), so no-JavaScript push works whenever a push token is triggered, not only when the server sets `preferred_client_mode=poll`.
 * The enrollment QR code shown by `enroll_via_multichallenge`. The user scans it, then enters the resulting OTP.
 
 Needs JavaScript (hidden when it is disabled):
 * WebAuthn and passkey, including the buttons that switch to them. They also require a browser that supports the WebAuthn API and a secure `https` context.
-* "Remember this device". The provider cannot set a browser cookie from an AD FS adapter, so the page stores the device cookie with JavaScript. A browser that does not run the page JavaScript still logs in, but the device is not remembered.
+* "Remember this device". The provider cannot set a browser cookie from an AD FS adapter, so the page stores the device cookie with JavaScript. Without JavaScript the checkbox is not shown. The browser still logs in, but the device is not remembered.
+* The "Not Now" button that skips an optional enrollment (`enroll_via_multichallenge` with the optional setting). Without JavaScript the user cannot skip, and completes the enrollment.
 * The "copy to clipboard" button for the enrollment code.
 
 This matters for clients that do not run page JavaScript, such as a legacy embedded WebView (for example Outlook's) or a passive federation flow like device registration and Windows Hello for Business provisioning. Those clients can complete one-time-password and push login.
+
+## Installing, upgrading and uninstalling
+The MSI runs `Install.ps1` and `Uninstall.ps1` from the installation folder. You can also run them by hand.
+
+**Install.** `Install.ps1` puts the provider into the GAC and registers it with AD FS. After the first installation, enable it as a second factor: AD FS Management > Authentication Methods > Additional Authentication Methods, or `Set-AdfsGlobalAuthenticationPolicy -AdditionalAuthenticationProvider`. AD FS ties a registration to one assembly version. If another version of the provider is registered, for example after the DLL was replaced by hand, `Install.ps1` replaces that registration and keeps the provider in the authentication policy lists it was in. Running `Install.ps1` again with the same version changes nothing except the access control list of the configuration key.
+
+**Upgrade.** Run the new MSI. It removes the old version and installs the new one.
+* From 1.5.0 on, the upgrade keeps the provider enabled: the old version's uninstall records the global authentication policy lists that contain the provider (`policy_membership` in the configuration key), and the new version's install puts it back into the same lists.
+* **Upgrading from 1.4.x or older:** the old version's uninstaller takes the provider out of the global authentication policy and does not record it. After the upgrade, enable the provider again as an additional authentication method (see Install). Until you do, AD FS does not offer it as a second factor.
+
+**Uninstall.** The uninstall takes the provider out of the global authentication policy lists, unregisters it, and then removes the assembly from the GAC. If AD FS refuses to unregister it, the uninstall stops with an error before anything is removed, and the provider stays installed and working. This prevents an AD FS registration that points to a removed assembly, which would break every sign-in that uses the provider. Make sure that the AD FS service runs and that no authentication policy still requires the provider, then run the uninstall again.
 
 ## Signing and verifying the installer
 The dll that is created by this solution requires to be strong-name signed to be deployed. Change the key file to your own in the project settings of the provider.
@@ -110,7 +146,7 @@ The detailed debug log (`debug_log`, written to `C:\PrivacyIDEA-ADFS log.txt`) i
 
 - **Usernames, UPNs and domains** are recorded so that an authentication can be traced end to end. This is required for the log to be useful for diagnostics and for security auditing.
 - **Full server responses** from privacyIDEA are recorded as well; these may include token serials and any user attributes the server returns.
-- **Secrets are masked.** The service account password (`password`), the user credential (`pass`, which in privacyIDEA carries the static PIN in front of the OTP) and the `Authorization` header (JWT) are redacted before anything is written. One-time values such as transaction IDs are not secrets and are logged in clear text.
+- **Secrets are masked.** The service account password (`password`), the user credential (`pass`, which in privacyIDEA carries the static PIN in front of the OTP), the `Authorization` header (JWT), the `X-API-Key` header (`api_key`) and the `Cookie` header (a presented remember-device token) are redacted before anything is written. One-time values such as transaction IDs are not secrets and are logged in clear text.
 
 This log lives on your own AD FS server and is under your control as the data controller. To meet your obligations (GDPR / ISO 27001):
 
