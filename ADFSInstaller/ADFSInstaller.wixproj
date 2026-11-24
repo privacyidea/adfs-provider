@@ -8,6 +8,10 @@
     <SchemaVersion>2.0</SchemaVersion>
     <OutputName>PrivacyIDEA-ADFS-Provider</OutputName>
     <OutputType>Package</OutputType>
+    <!-- ICE61 warns that the package removes a version that is not older than itself. That is intended:
+         MajorUpgrade AllowSameVersionUpgrades="yes" in Product.wxs lets a build of the same version replace
+         the installed build. -->
+    <SuppressIces>ICE61</SuppressIces>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
     <OutputPath>bin\$(Configuration)\</OutputPath>

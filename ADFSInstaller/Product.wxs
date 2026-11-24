@@ -17,7 +17,15 @@
 				 Manufacturer="$(var.Publisher)"
 				 Description="$(var.ProductName) $(var.Version) $(var.Platform) Setup"/>
 
-		<MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed."/>
+		<!-- AllowSameVersionUpgrades: every build gets a new product code (Id="*"). Without this attribute, Windows
+		     Installer treats a second build of the same version as a separate product: it adds a second entry in
+		     Programs and Features, keeps the old DLL (a file of an equal version is not overwritten), and Install.ps1
+		     skips the registration, so AD FS keeps running the old code. With it, a build of the same version
+		     replaces the installed one like any other upgrade. Windows Installer ignores the fourth version field,
+		     so this also covers 1.5.0.0 versus 1.5.0.1. A side effect: an older build of the same version can
+		     replace a newer one. This attribute causes the ICE61 warning, which the wixproj suppresses. -->
+		<MajorUpgrade AllowSameVersionUpgrades="yes"
+					  DowngradeErrorMessage="A newer version of [ProductName] is already installed."/>
 
 		<?if $(var.Platform) = x86 ?>
 		<Condition Message="The privacyIDEA AD FS Provider can not be installed on a x86 machine.">
@@ -78,9 +86,14 @@
 					  Value="&quot;C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe&quot; -NonInteractive -ExecutionPolicy Bypass -InputFormat None -NoProfile -File &quot;[INSTALLFOLDER]Install.ps1&quot; -Upgrade"
 					  Execute='immediate'/>
 
+		<!-- CAQuietExec64, not CAQuietExec: the WiX custom action server is a 32-bit process. With CAQuietExec,
+		     Windows redirects the System32 path below to SysWOW64 and runs a 32-bit PowerShell. A 32-bit process
+		     reads HKLM\SOFTWARE through the WOW6432Node view, so the scripts did not find the configuration key:
+		     Install.ps1 skipped the ACL hardening and the policy_membership value was never written or read.
+		     CAQuietExec64 turns the redirection off and runs the 64-bit PowerShell. -->
 		<CustomAction Id="RunPowerShellInstall"
 					  BinaryKey="WixCA"
-					  DllEntry="CAQuietExec"
+					  DllEntry="CAQuietExec64"
 					  Execute="commit"
 					  Return="check"
 					  Impersonate="no"/>
@@ -91,9 +104,10 @@
 					  Value="&quot;C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe&quot; -NonInteractive -ExecutionPolicy Bypass -InputFormat None -NoProfile -File &quot;[INSTALLFOLDER]Uninstall.ps1&quot;"
 					  Execute='immediate'/>
 
+		<!-- CAQuietExec64 for the same reason as RunPowerShellInstall. -->
 		<CustomAction Id="RunPowerShellUninstall"
 					  BinaryKey="WixCA"
-					  DllEntry="CAQuietExec"
+					  DllEntry="CAQuietExec64"
 					  Execute="deferred"
 					  Return="check"
 					  Impersonate="no"/>
