@@ -36,11 +36,9 @@
                and offer push while in OTP mode when a push token is available. */
             #loginArea[data-mode="push"]:not([data-disable-otp="1"]) #noJsSwitchToOtp { display: inline-block !important; }
             #loginArea[data-mode="otp"][data-push-available="1"] #noJsSwitchToPush { display: inline-block !important; }
-            /* Remember-device checkbox: shown when the server offers the feature. Without JavaScript the
-               checkbox posts a plain rememberDevice field; the cookie is then set on the next page the
-               adapter renders (an auto-submit page), which needs JavaScript, so this works only in browsers
-               that run JavaScript on that follow-up page. */
-            #rememberDeviceDiv[data-enabled="1"] { display: block !important; }
+            /* The remember-device checkbox is intentionally not revealed without JavaScript. The cookie that
+               remembers the device is set only by JavaScript, so the feature cannot work without it. The
+               checkbox keeps its default hidden state when scripting is off, so it is never offered. */
         </style>
         <p>JavaScript is disabled. Enter your one-time password and select Submit, or for push confirm on your
            device and select the button. Use the token-type buttons to switch between one-time password and
