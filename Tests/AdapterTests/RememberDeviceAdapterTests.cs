@@ -161,6 +161,112 @@ namespace Tests.AdapterTests
         }
 
         [TestMethod]
+        public void PushPoll_NotConfirmed_KeepsTheBoxTicked()
+        {
+            // Push re-posts the form on a timer. A poll that is not confirmed yet renders the form again. The box
+            // must stay ticked, otherwise the poll that sees the confirmation posts rememberDevice=false and no
+            // cookie is issued.
+            _server.Given(Request.Create().WithPath("/validate/polltransaction").UsingGet())
+                .RespondWith(Response.Create().WithStatusCode(200).WithBody(PushFixtures.PollPending));
+            var adapter = NewAdapter(rememberEnabled: true);
+            var proof = new FakeProofData(new Dictionary<string, object>
+            {
+                ["formResult"] = "{\"rememberDevice\":true}",
+                ["mode"] = "push",
+            });
+            var context = MinimalContext();
+            context["previousResponse"] = PushFixtures.PushChallenge;
+            var ctx = new FakeAuthContext(context);
+
+            IAdapterPresentation result = adapter.TryEndAuthentication(ctx, proof, null, out Claim[] claims);
+
+            Assert.IsNotNull(result, "An unconfirmed push renders the form again.");
+            Assert.AreEqual(0, claims.Length);
+            string html = ((IAdapterPresentationForm)result).GetFormHtml(1033);
+            StringAssert.Contains(html, "name=\"rememberDevice\" type=\"checkbox\" value=\"1\" checked ",
+                "The re-rendered form must keep the box ticked.");
+        }
+
+        [TestMethod]
+        public void NotOptedIn_RenderedAgain_BoxNotTicked()
+        {
+            // Without the tick, the re-rendered form shows the box unticked (no checked attribute).
+            _server.Given(Request.Create().WithPath("/validate/polltransaction").UsingGet())
+                .RespondWith(Response.Create().WithStatusCode(200).WithBody(PushFixtures.PollPending));
+            var adapter = NewAdapter(rememberEnabled: true);
+            var proof = new FakeProofData(new Dictionary<string, object>
+            {
+                ["formResult"] = "{\"rememberDevice\":false}",
+                ["mode"] = "push",
+            });
+            var context = MinimalContext();
+            context["previousResponse"] = PushFixtures.PushChallenge;
+
+            IAdapterPresentation result = adapter.TryEndAuthentication(new FakeAuthContext(context), proof, null, out _);
+
+            string html = ((IAdapterPresentationForm)result).GetFormHtml(1033);
+            StringAssert.Contains(html, "name=\"rememberDevice\" type=\"checkbox\" value=\"1\"  />");
+        }
+
+        private const string CapabilityOn = "{\"result\":{\"status\":true,\"value\":{\"capabilities\":{\"remember_device\":true}}}}";
+
+        private static void InvokePrivate(object target, string method)
+        {
+            MethodInfo mi = target.GetType().GetMethod(method, BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.IsNotNull(mi, $"Method {method} not found on {target.GetType().Name}.");
+            mi.Invoke(target, null);
+        }
+
+        private static object GetPrivateField(object target, string field) =>
+            target.GetType().GetField(field, BindingFlags.NonPublic | BindingFlags.Instance).GetValue(target);
+
+        [TestMethod]
+        public void CapabilityOff_RetryDue_AsksAgainAndTurnsOn()
+        {
+            // The server was not reachable at AD FS start, so the capability is cached off. Once the retry is
+            // due, the next sign-in asks again and the feature turns on without an AD FS restart.
+            _server.Given(Request.Create().WithPath("/validate/capabilities").UsingGet())
+                .RespondWith(Response.Create().WithStatusCode(200).WithBody(CapabilityOn));
+            var adapter = NewAdapter(rememberEnabled: false);
+            SetPrivateField(adapter, "_rememberDeviceConfigured", true);
+            SetPrivateField(adapter, "_capabilityCheckDueTicks", 0L);
+
+            InvokePrivate(adapter, "RefreshRememberDeviceCapability");
+
+            Assert.IsTrue((bool)GetPrivateField(adapter, "_rememberDeviceEnabled"));
+            Assert.IsTrue((long)GetPrivateField(adapter, "_capabilityCheckDueTicks") > System.DateTime.UtcNow.Ticks,
+                "The next check is scheduled one interval ahead.");
+        }
+
+        [TestMethod]
+        public void CapabilityOff_RetryNotDue_DoesNotAskTheServer()
+        {
+            // Within the retry interval, sign-ins do not query the server.
+            _server.Given(Request.Create().WithPath("/validate/capabilities").UsingGet())
+                .RespondWith(Response.Create().WithStatusCode(200).WithBody(CapabilityOn));
+            var adapter = NewAdapter(rememberEnabled: false);
+            SetPrivateField(adapter, "_rememberDeviceConfigured", true);
+            SetPrivateField(adapter, "_capabilityCheckDueTicks", System.DateTime.UtcNow.AddMinutes(5).Ticks);
+
+            InvokePrivate(adapter, "RefreshRememberDeviceCapability");
+
+            Assert.IsFalse((bool)GetPrivateField(adapter, "_rememberDeviceEnabled"));
+            Assert.AreEqual(0, System.Linq.Enumerable.Count(_server.LogEntries), "No request within the interval.");
+        }
+
+        [TestMethod]
+        public void CapabilityNotConfigured_NeverAsks()
+        {
+            // Without the plugin switch and an api_key, the capability is never queried.
+            var adapter = NewAdapter(rememberEnabled: false);
+            SetPrivateField(adapter, "_capabilityCheckDueTicks", 0L);
+
+            InvokePrivate(adapter, "RefreshRememberDeviceCapability");
+
+            Assert.AreEqual(0, System.Linq.Enumerable.Count(_server.LogEntries));
+        }
+
+        [TestMethod]
         public void CapabilityOff_OptInIgnored_ReturnsClaimsDirectly()
         {
             // The server does not offer the feature (capability cached off). Even if the client posts

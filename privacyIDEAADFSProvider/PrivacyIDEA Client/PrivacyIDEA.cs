@@ -220,7 +220,10 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             {
                 return false;
             }
-            string response = SendRequest("/validate/capabilities", new Dictionary<string, string>(), null, "GET");
+            // Short timeout: this call runs at provider load and, while the capability is off, during a sign-in.
+            // Without it, an unreachable server that drops packets holds the caller for the 100 s default.
+            string response = SendRequestCore("/validate/capabilities", new Dictionary<string, string>(), null, "GET",
+                null, out _, CapabilityTimeoutMs);
             if (string.IsNullOrEmpty(response))
             {
                 return false;
@@ -647,8 +650,11 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// to present a remember-device cookie), and <paramref name="setCookie"/> returns the raw Set-Cookie
         /// response header(s) so the caller can relay an issued or rotated cookie back to the browser.
         /// </summary>
+        private const int CapabilityTimeoutMs = 5000;
+
         private string SendRequestCore(string endpoint, Dictionary<string, string> parameters,
-            List<KeyValuePair<string, string>> headers, string method, string cookieToSend, out string[] setCookie)
+            List<KeyValuePair<string, string>> headers, string method, string cookieToSend, out string[] setCookie,
+            int timeoutMs = 0)
         {
             setCookie = null;
             // Guard the string-building: ParametersForLog allocates and iterates every parameter, and this
@@ -675,6 +681,11 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
 
             request.Method = method;
             request.UserAgent = _userAgent;
+            if (timeoutMs > 0)
+            {
+                request.Timeout = timeoutMs;
+                request.ReadWriteTimeout = timeoutMs;
+            }
             if (!_sslVerify)
             {
                 request.ServerCertificateValidationCallback = (s, c, ch, errs) => true;
@@ -820,10 +831,16 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             }
         }
 
+        // Header names whose values are secrets and must never reach the debug log: the service JWT
+        // (Authorization), the remember-device API key (X-API-Key), and a presented remember-device cookie
+        // (Cookie). Compared case-insensitively.
+        private static readonly HashSet<string> s_maskedLogHeaders =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Authorization", "X-API-Key", "Cookie" };
+
         /// <summary>
-        /// Same shape as the old HttpRequestMessage.Headers.ToString(), but redacts Authorization so the JWT
-        /// doesn't end up in the debug log (HttpClient kept Authorization on DefaultRequestHeaders, which the
-        /// per-request log line did not cover — preserve that masking behavior).
+        /// Same shape as the old HttpRequestMessage.Headers.ToString(), but redacts secret headers so they do
+        /// not end up in the debug log. The deny-set covers the service JWT (Authorization), the remember-device
+        /// API key (X-API-Key), and a presented remember-device cookie (Cookie).
         /// </summary>
         private static string FormatHeadersForLog(WebHeaderCollection headers)
         {
@@ -831,7 +848,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             foreach (string key in headers)
             {
                 sb.Append(key).Append(": ");
-                sb.Append(key.Equals("Authorization", StringComparison.OrdinalIgnoreCase) ? "***" : headers[key]);
+                sb.Append(s_maskedLogHeaders.Contains(key) ? "***" : headers[key]);
                 sb.Append("\r\n");
             }
             return sb.ToString();

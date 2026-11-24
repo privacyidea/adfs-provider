@@ -165,5 +165,56 @@ namespace Tests.IntegrationTests
             Assert.IsTrue(resp.isAuthenticationSuccessful());
             Assert.IsNull(issued);
         }
+
+        [TestMethod]
+        public void CheckRememberDevice_NonEmptyValue_NoMaxAge_IsTreatedAsClear()
+        {
+            // A non-empty cookie value with no Max-Age has no server-set lifetime. The client must treat it
+            // as a clear, not store it, and must never invent a lifetime for a security token.
+            _server.Given(Request.Create().WithPath("/validate/remember_device").UsingPost())
+                .RespondWith(Response.Create().WithStatusCode(200)
+                    .WithHeader("Set-Cookie", "pi_remember_device=stale-series:9; Path=/; Secure; HttpOnly; SameSite=Strict")
+                    .WithBody(RecognizedFalse));
+
+            var pi = TestHelpers.PIPointedAt(_server);
+            pi.ApiKey = "secret-key";
+
+            RememberDeviceResult result = pi.CheckRememberDevice("alice", "old-series:1", null);
+
+            Assert.IsNotNull(result.Cookie);
+            Assert.AreEqual(0, result.Cookie.MaxAgeSeconds);
+            Assert.IsTrue(result.Cookie.IsClear, "a non-empty value with no Max-Age must be treated as a clear");
+        }
+
+        [TestMethod]
+        public void DebugLog_MasksApiKeyAndPresentedCookie()
+        {
+            // With debug logging on, the outbound headers are logged. The API key (X-API-Key) and the
+            // presented remember-device cookie (Cookie) are secrets and must be masked, not written in clear.
+            _server.Given(Request.Create().WithPath("/validate/remember_device").UsingPost())
+                .RespondWith(Response.Create().WithStatusCode(200).WithBody(RecognizedFalse));
+
+            var pi = TestHelpers.PIPointedAt(_server);
+            pi.ApiKey = "secret-key";
+            var log = new CapturingLog();
+            pi.Logger = log;
+            pi.LogServerResponse = true;
+
+            pi.CheckRememberDevice("alice", "tok-series:1", null);
+
+            string all = string.Join("\n", log.Messages);
+            StringAssert.Contains(all, "X-API-Key: ***");
+            StringAssert.Contains(all, "Cookie: ***");
+            Assert.IsFalse(all.Contains("secret-key"), "the api_key leaked into the debug log");
+            Assert.IsFalse(all.Contains("tok-series:1"), "the presented cookie leaked into the debug log");
+        }
+
+        private sealed class CapturingLog : IPILog
+        {
+            public readonly System.Collections.Generic.List<string> Messages = new System.Collections.Generic.List<string>();
+            public void Log(string message) => Messages.Add(message);
+            public void Error(string message) => Messages.Add(message);
+            public void Error(System.Exception exception) => Messages.Add(exception.ToString());
+        }
     }
 }

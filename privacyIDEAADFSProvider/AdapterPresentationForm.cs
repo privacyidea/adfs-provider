@@ -30,6 +30,9 @@ namespace PrivacyIDEAADFSProvider
         public string EnrollmentImg { get; set; } = "";
         // "1" when the server offers "remember device" to this client: shows the checkbox.
         public string RememberDeviceEnabled { get; set; } = "0";
+        // Renders the checkbox ticked, so a form that is rendered again (push poll, wrong OTP, mode switch)
+        // keeps the user's choice.
+        public bool RememberDeviceChecked { get; set; } = false;
         // When set, the page JS writes this value into the pi_remember_device cookie (series:counter) with
         // DeviceCookieMaxAge seconds of lifetime, then the form auto-submits. Used to issue or rotate it.
         public string DeviceCookieValue { get; set; } = "";
@@ -93,6 +96,8 @@ namespace PrivacyIDEAADFSProvider
                 ["passkeyChallenge"] = PasskeyChallenge,
                 ["passkeyRegistration"] = PasskeyRegistration,
                 ["rememberDeviceEnabled"] = RememberDeviceEnabled,
+                // A bare attribute in the checkbox tag: "checked" or nothing.
+                ["rememberDeviceChecked"] = RememberDeviceChecked ? "checked" : "",
                 ["deviceCookieValue"] = DeviceCookieValue,
                 ["deviceCookieMaxAge"] = DeviceCookieMaxAge,
                 ["deviceCookieClear"] = DeviceCookieClear,

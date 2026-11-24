@@ -231,8 +231,9 @@ namespace Tests.AdapterTests
         public void NoJsSwitch_OtpToPush_ReRendersFormInPushMode()
         {
             // The reverse: in OTP mode the user selects "Use push" (shown when a push token is available),
-            // which posts noJsModeSwitch=push. The form re-renders in push mode, so the manual poll button
-            // "I confirmed on my device" is present for the next submit.
+            // which posts noJsModeSwitch=push. The form re-renders in push mode. The page CSS shows the manual
+            // poll button "I confirmed on my device" in push mode. The button markup is in every form, so the
+            // assertions check the mode itself: the data-mode attribute and the posted mode field.
             var adapter = NewAdapter();
             var proof = new FakeProofData(new Dictionary<string, object>
             {
@@ -248,7 +249,7 @@ namespace Tests.AdapterTests
             Assert.AreEqual(0, claims.Length);
             string html = ((IAdapterPresentationForm)result).GetFormHtml(1033);
             StringAssert.Contains(html, "data-mode=\"push\"");
-            StringAssert.Contains(html, "pushConfirmButtonNoJs");
+            StringAssert.Contains(html, "name=\"mode\" value=\"push\"");
         }
 
         [TestMethod]

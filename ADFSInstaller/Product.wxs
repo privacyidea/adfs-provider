@@ -71,6 +71,13 @@
 					  Value="&quot;C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe&quot; -NonInteractive -ExecutionPolicy Bypass -InputFormat None -NoProfile -File &quot;[INSTALLFOLDER]Install.ps1&quot;"
 					  Execute='immediate'/>
 
+		<!-- Same command with -Upgrade, for a major upgrade (WIX_UPGRADE_DETECTED). Install.ps1 then puts the provider
+		     back into the global authentication policy lists that the old version's Uninstall.ps1 recorded. -->
+		<CustomAction Id='SetPowerShellInstallInputUpgrade'
+					  Property='RunPowerShellInstall'
+					  Value="&quot;C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe&quot; -NonInteractive -ExecutionPolicy Bypass -InputFormat None -NoProfile -File &quot;[INSTALLFOLDER]Install.ps1&quot; -Upgrade"
+					  Execute='immediate'/>
+
 		<CustomAction Id="RunPowerShellInstall"
 					  BinaryKey="WixCA"
 					  DllEntry="CAQuietExec"
@@ -164,6 +171,7 @@
 			<Custom Action='IsPrivileged' Before='AppSearch'>NOT Privileged</Custom>
 
 			<Custom Action="SetPowerShellInstallInput" After="CostFinalize">NOT Installed</Custom>
+			<Custom Action="SetPowerShellInstallInputUpgrade" After="SetPowerShellInstallInput">NOT Installed AND WIX_UPGRADE_DETECTED</Custom>
 			<Custom Action="RunPowerShellInstall" After="InstallInitialize">NOT Installed</Custom>
 
 			<Custom Action="SetPowerShellUninstallInput" After="CostFinalize">Installed</Custom>

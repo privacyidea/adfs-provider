@@ -16,32 +16,32 @@
         background-color: rgb(120, 120, 120);
     }
 </style>
-<div id="loginArea" data-mode="#mode#" data-push-available="#pushAvailable#" data-disable-otp="#disableOTP#">
-    <!-- No-JavaScript fallback. The <noscript> content is applied ONLY when scripting is disabled, so it
-         never affects the normal JS path. One-time-password entry works without JavaScript: the server
-         treats an empty formResult as a plain OTP submit. These rules hide the controls that only work with
-         JavaScript (WebAuthn, Passkey, mode switch, copy-to-clipboard) and reveal the enrollment block that
-         the page JS would otherwise un-hide. Push has no auto-poll without JavaScript, so in push mode the
-         OTP input is hidden and a manual "I confirmed on my device" button is shown: each click re-posts the
-         form, which polls the transaction once. -->
+<div id="loginArea" class="pi-no-js" data-mode="#mode#" data-push-available="#pushAvailable#" data-disable-otp="#disableOTP#">
+    <!-- Fallback for clients where the page script does not run to the end: scripting is disabled, or the
+         engine cannot parse or run the script. The pi-no-js class on #loginArea switches these rules on. The
+         script removes the class as the last step of its setup, so with a working script they never apply.
+         (A <noscript> block would cover only "scripting disabled", not a script that fails.)
+         One-time-password entry works without JavaScript: the server treats an empty formResult as a plain OTP
+         submit. These rules hide the controls that only work with JavaScript (WebAuthn, passkey, mode switch,
+         copy-to-clipboard, skip enrollment) and reveal the enrollment block that the script would otherwise
+         un-hide. Push has no auto-poll without JavaScript, so in push mode the OTP input is hidden and a manual
+         "I confirmed on my device" button is shown: each click re-posts the form, which polls the transaction
+         once. The remember-device checkbox is not revealed: only JavaScript can store its cookie. -->
+    <style>
+        #loginArea.pi-no-js .pi-js-only { display: none !important; }
+        #loginArea.pi-no-js #enrollmentBlock[data-enrollment-mode="image"] .enrollment-image,
+        #loginArea.pi-no-js #enrollmentBlock[data-enrollment-mode="legacy"] .enrollment-legacy { display: block !important; }
+        /* The script removes the enrollment link when there is none. Without the script, hide an empty one. */
+        #loginArea.pi-no-js .enrollment-link[href=""] { display: none !important; }
+        #loginArea.pi-no-js[data-mode="push"] #otp,
+        #loginArea.pi-no-js[data-mode="push"] #submitButton { display: none !important; }
+        #loginArea.pi-no-js[data-mode="push"] #pushConfirmButtonNoJs { display: inline-block !important; }
+        /* Token-type switch without JavaScript: offer OTP while in push mode (unless OTP is disabled), and offer
+           push in every other mode (OTP, WebAuthn, an enrollment type) when a push token is available. */
+        #loginArea.pi-no-js[data-mode="push"]:not([data-disable-otp="1"]) #noJsSwitchToOtp { display: inline-block !important; }
+        #loginArea.pi-no-js:not([data-mode="push"])[data-push-available="1"] #noJsSwitchToPush { display: inline-block !important; }
+    </style>
     <noscript>
-        <style>
-            .pi-js-only { display: none !important; }
-            #enrollmentBlock[data-enrollment-mode="image"] .enrollment-image,
-            #enrollmentBlock[data-enrollment-mode="legacy"] .enrollment-legacy { display: block !important; }
-            #loginArea[data-mode="push"] #otp,
-            #loginArea[data-mode="push"] #submitButton { display: none !important; }
-            #loginArea[data-mode="push"] #pushConfirmButtonNoJs { display: inline-block !important; }
-            /* Token-type switch without JavaScript: offer OTP while in push mode (unless OTP is disabled),
-               and offer push while in OTP mode when a push token is available. */
-            #loginArea[data-mode="push"]:not([data-disable-otp="1"]) #noJsSwitchToOtp { display: inline-block !important; }
-            #loginArea[data-mode="otp"][data-push-available="1"] #noJsSwitchToPush { display: inline-block !important; }
-            /* Remember-device checkbox: shown when the server offers the feature. Without JavaScript the
-               checkbox posts a plain rememberDevice field; the cookie is then set on the next page the
-               adapter renders (an auto-submit page), which needs JavaScript, so this works only in browsers
-               that run JavaScript on that follow-up page. */
-            #rememberDeviceDiv[data-enabled="1"] { display: block !important; }
-        </style>
         <p>JavaScript is disabled. Enter your one-time password and select Submit, or for push confirm on your
            device and select the button. Use the token-type buttons to switch between one-time password and
            push. Security key and passkey options need JavaScript and are hidden.</p>
@@ -87,7 +87,9 @@
         <br />
         <label for="otp" class="block" aria-label="#MESSAGE#">#MESSAGE#</label>
         <input id="otp" name="otp" type="password" value="" class="text" placeholder="#OTPTEXT#" size="35" autocomplete="one-time-code" autofocus />
-        <input id="submitButton" type="submit" name="Submit" value="#SUBMIT#" onclick="submitForm()" />
+        <!-- The click handler only fills formResult. The browser then submits the form itself, because calling
+             form.submit() from the click handler of a submit button can send the form twice in Internet Explorer. -->
+        <input id="submitButton" type="submit" name="Submit" value="#SUBMIT#" onclick="prepareSubmit()" />
         <!-- No-JavaScript push: a manual poll button. Hidden by default (with JavaScript the page auto-polls);
              the noscript rules reveal it only in push mode. It is placed after the normal submit button so
              that stays the implicit submitter. type=submit re-posts the form, which polls the transaction once. -->
@@ -106,7 +108,7 @@
              the page JS and the noscript rule un-hide it then. Posts a plain rememberDevice field (value 1
              when checked); the JS path also copies it into formResult. -->
         <div id="rememberDeviceDiv" data-enabled="#rememberDeviceEnabled#" style="display:none">
-            <label><input id="rememberDevice" name="rememberDevice" type="checkbox" value="1" /> Remember this device</label>
+            <label><input id="rememberDevice" name="rememberDevice" type="checkbox" value="1" #rememberDeviceChecked# /> Remember this device</label>
         </div>
 
         <!-- Carriers for the device cookie, read by the JS below (no name, so they are not posted back). -->
@@ -163,10 +165,26 @@
 
         <script>
             'use strict';
-            // Keep in sync with PITokenType in PIConstants.cs.
-            const MODE = { OTP: "otp", PUSH: "push", WEBAUTHN: "webauthn", PASSKEY: "passkey" };
+            // This script must also run in old engines: Internet Explorer 11 (ES5 only) and the legacy Edge
+            // engine (EdgeHTML 18) that older Office sign-in windows embed. These engines compile the whole
+            // block at once, so one unsupported token is a syntax error that disables every function here.
+            // Write ES5 only: var (no let or const), function expressions (no arrow functions), no template
+            // literals, no for...of, no trailing commas in calls. Check for newer browser APIs before use.
+            // tools/Check-AuthPageEcmaScript.ps1 enforces this in CI.
 
-            let formResult = {
+            // Old Internet Explorer versions define console only while the developer tools are open.
+            if (typeof window.console === "undefined") {
+                window.console = { log: function () { } };
+            }
+
+            // Keep in sync with PITokenType in PIConstants.cs.
+            var MODE = { OTP: "otp", PUSH: "push", WEBAUTHN: "webauthn", PASSKEY: "passkey" };
+
+            // Security keys and passkeys need WebAuthn. Internet Explorer 11 does not have it.
+            var webAuthnSupported = !!(window.PublicKeyCredential && navigator.credentials
+                && typeof navigator.credentials.get === "function" && typeof window.Promise === "function");
+
+            var formResult = {
                 passkeyLoginRequested: false,
                 enrollmentCancelled: false,
                 modeChanged: false,
@@ -175,32 +193,48 @@
                 passkeySignResponse: "",
                 passkeyRegistrationResponse: "",
                 origin: "",
-                rememberDevice: false,
+                rememberDevice: false
             };
 
             // Remember-device cookie handling. The adapter cannot set a response cookie from an AD FS
-            // adapter, so the cookie is managed here. It is Secure + SameSite=Strict; it is not HttpOnly,
-            // because only JavaScript can set it. The value is the opaque series:counter token.
+            // adapter, so the cookie is managed here. The value is the opaque series:counter token.
+            // - Secure: sent only over https.
+            // - Not HttpOnly: only JavaScript can set it here, and JavaScript cannot set HttpOnly.
+            // - SameSite=Lax, not Strict: the provider reads the cookie only when AD FS asks for the second
+            //   factor (BeginAuthentication). That request is often part of a navigation that started on
+            //   another site, for example a redirect from login.microsoftonline.com or a relying party, with
+            //   Windows Integrated Authentication or an AD FS SSO session as the first factor. Browsers do not
+            //   send a Strict cookie on such a navigation, so the device would never be recognized there. Lax
+            //   cookies are sent on top-level navigations from other sites, but not on cross-site POSTs or
+            //   embedded requests. README.md ("Remember this device") explains the trade-off.
             (function () {
-                const clear = document.querySelector("#deviceCookieClear");
+                // Internet Explorer ignores max-age, so each cookie also carries the equivalent expires date.
+                // Browsers that support max-age use it and ignore expires.
+                var deleteCookie = "pi_remember_device=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; secure; samesite=lax";
+                var clear = document.querySelector("#deviceCookieClear");
                 if (clear && clear.value === "1") {
-                    document.cookie = "pi_remember_device=; path=/; max-age=0; secure; samesite=strict";
+                    document.cookie = deleteCookie;
                 }
-                const cv = document.querySelector("#deviceCookieValue");
+                var cv = document.querySelector("#deviceCookieValue");
                 if (cv && cv.value !== "") {
-                    const maEl = document.querySelector("#deviceCookieMaxAge");
-                    let maxAge = parseInt(maEl ? maEl.value : "", 10);
-                    if (!Number.isFinite(maxAge) || maxAge <= 0) {
-                        maxAge = 2592000; // 30 days, if the server sent no usable Max-Age
+                    var maEl = document.querySelector("#deviceCookieMaxAge");
+                    var maxAge = parseInt(maEl ? maEl.value : "", 10);
+                    if (isFinite(maxAge) && maxAge > 0) {
+                        var expires = new Date(new Date().getTime() + maxAge * 1000).toUTCString();
+                        document.cookie = "pi_remember_device=" + cv.value + "; path=/; max-age=" + maxAge +
+                            "; expires=" + expires + "; secure; samesite=lax";
+                    } else {
+                        // No usable Max-Age from the server. Do not invent a lifetime for a security token.
+                        // Remove any existing cookie instead of storing one that cannot be aged correctly.
+                        document.cookie = deleteCookie;
                     }
-                    document.cookie = "pi_remember_device=" + cv.value +
-                        "; path=/; max-age=" + maxAge + "; secure; samesite=strict";
                 }
             })();
 
             // Show the remember-device checkbox when the server offers the feature.
-            if (document.querySelector("#rememberDeviceDiv")?.dataset.enabled === "1") {
-                document.querySelector("#rememberDeviceDiv").style.display = "block";
+            var rememberDiv = document.querySelector("#rememberDeviceDiv");
+            if (rememberDiv && rememberDiv.getAttribute("data-enabled") === "1") {
+                rememberDiv.style.display = "block";
             }
 
             disable("retryPasskeyLogin");
@@ -211,18 +245,19 @@
 
             // Reveal the enrollment block matching the active mode, or drop it entirely so the
             // hidden <img src=""> doesn't trigger a spurious browser request.
-            const enrollmentMode = document.querySelector("#enrollmentBlock")?.dataset.enrollmentMode || "none";
+            var enrollmentBlock = document.querySelector("#enrollmentBlock");
+            var enrollmentMode = (enrollmentBlock && enrollmentBlock.getAttribute("data-enrollment-mode")) || "none";
             if (enrollmentMode === "legacy") {
-                const el = document.querySelector(".enrollment-legacy");
-                if (el) el.style.display = "block";
+                var legacyEl = document.querySelector(".enrollment-legacy");
+                if (legacyEl) legacyEl.style.display = "block";
             } else if (enrollmentMode === "image") {
-                const el = document.querySelector(".enrollment-image");
-                if (el) el.style.display = "block";
+                var imageEl = document.querySelector(".enrollment-image");
+                if (imageEl) imageEl.style.display = "block";
                 if (value("enrollmentLink") === "") {
-                    document.querySelector(".enrollment-link")?.remove();
+                    removeElement(document.querySelector(".enrollment-link"));
                 }
             } else {
-                document.querySelector("#enrollmentBlock")?.remove();
+                removeElement(enrollmentBlock);
             }
 
             if (value("autoSubmit") === "1") {
@@ -237,10 +272,19 @@
                 disable("usePushButton");
             }
 
+            // Without WebAuthn (for example in Internet Explorer 11) security keys and passkeys cannot work:
+            // hide their buttons and never start a prompt. One-time password and push still work.
+            if (!webAuthnSupported) {
+                disable("passkeyLoginButton");
+                disable("useWebAuthnButton");
+            }
+
             if (value("passkeyChallenge") != "") {
                 disable("passkeyLoginButton");
-                enable("retryPasskeyLogin");
-                passkeyAuthentication();
+                if (webAuthnSupported) {
+                    enable("retryPasskeyLogin");
+                    passkeyAuthentication();
+                }
             }
 
             if (value("passkeyRegistration") != "") {
@@ -249,11 +293,13 @@
                 disable("submitButton");
                 disable("otp");
 
-                enable("retryPasskeyRegistration");
-                registerPasskey();
+                if (webAuthnSupported) {
+                    enable("retryPasskeyRegistration");
+                    registerPasskey();
+                }
             }
 
-            let asl = value("autoSubmitLength")
+            var asl = value("autoSubmitLength");
             if (asl !== "") {
                 setAutoSubmit(asl);
             }
@@ -272,12 +318,12 @@
             switch (value("mode")) {
                 case MODE.PUSH: {
                     // authCounter is 0 on the first render and increments each poll.
-                    const pollingIntervals = [3, 2, 2, 1];
+                    var pollingIntervals = [3, 2, 2, 1];
                     disable("otp");
                     disable("usePushButton");
                     disable("submitButton");
-                    const idx = Math.min(Number(value("authCounter")) || 0, pollingIntervals.length - 1);
-                    setTimeout(() => submitForm(), pollingIntervals[idx] * 1000);
+                    var idx = Math.min(Number(value("authCounter")) || 0, pollingIntervals.length - 1);
+                    setTimeout(function () { submitForm(); }, pollingIntervals[idx] * 1000);
                     break;
                 }
                 case MODE.OTP:
@@ -292,6 +338,14 @@
 
             setLoginOptionsVisibility();
 
+            // The setup above ran to the end: switch off the fallback rules (pi-no-js, see the top of this
+            // file). Keep this the last statement of the setup, so that a script that fails earlier leaves the
+            // fallback in place.
+            var loginAreaElement = document.getElementById("loginArea");
+            if (loginAreaElement) {
+                loginAreaElement.className = loginAreaElement.className.replace(/(^|\s)pi-no-js(\s|$)/, " ");
+            }
+
             function doWebAuthn() {
                 // changeMode() re-renders/submits the form, so return immediately after calling it —
                 // otherwise execution continues and may start a WebAuthn prompt against an unloading page
@@ -302,13 +356,19 @@
                     return;
                 }
 
-                if (!window.isSecureContext) {
-                    console.log("Insecure context detected: Aborting WebAuthn authentication!")
+                if (!webAuthnSupported) {
+                    console.log("WebAuthn is not available in this browser: switching to one-time password.");
                     changeMode(MODE.OTP);
                     return;
                 }
 
-                const requestStr = value("webAuthnSignRequest");
+                if (!window.isSecureContext) {
+                    console.log("Insecure context detected: Aborting WebAuthn authentication!");
+                    changeMode(MODE.OTP);
+                    return;
+                }
+
+                var requestStr = value("webAuthnSignRequest");
 
                 if (requestStr.length === 0) {
                     changeMode(MODE.OTP);
@@ -316,11 +376,11 @@
                 }
 
                 try {
-                    const requestjson = JSON.parse(requestStr);
+                    var requestjson = JSON.parse(requestStr);
 
-                    const webAuthnSignResponse = webAuthnSign(requestjson);
-                    webAuthnSignResponse.then((webauthnresponse) => {
-                        const response = JSON.stringify(webauthnresponse);
+                    var webAuthnSignResponse = webAuthnSign(requestjson);
+                    webAuthnSignResponse.then(function (webauthnresponse) {
+                        var response = JSON.stringify(webauthnresponse);
                         formResult.webAuthnSignResponse = response;
                         submitForm();
                     });
@@ -330,45 +390,62 @@
             }
 
             function setLoginOptionsVisibility() {
-                let ids = ["passkeyLoginButton", "retryPasskeyLogin", "useOTPButton", "usePushButton", "useWebAuthnButton"]
-                let shouldShow = false;
-                for (let id of ids) {
-                    let element = document.querySelector("#" + id);
-                    if (element && window.getComputedStyle(element).display !== "none" && window.getComputedStyle(element).display !== "hidden") {
-                        console.log("shouldshow=true because of " + id);
+                var ids = ["passkeyLoginButton", "retryPasskeyLogin", "useOTPButton", "usePushButton", "useWebAuthnButton"];
+                var shouldShow = false;
+                for (var i = 0; i < ids.length; i++) {
+                    var option = document.querySelector("#" + ids[i]);
+                    if (option && window.getComputedStyle(option).display !== "none" && window.getComputedStyle(option).display !== "hidden") {
+                        console.log("shouldshow=true because of " + ids[i]);
                         shouldShow = true;
                         break;
                     }
                 }
                 if (!shouldShow) {
-                    let element = document.querySelector("#alternateTokenDiv");
-                    if (element) {
-                        element.style.display = "none";
+                    var alternateDiv = document.querySelector("#alternateTokenDiv");
+                    if (alternateDiv) {
+                        alternateDiv.style.display = "none";
                     }
                 }
 
                 // If the otp input field is visible, hide the otp button
-                let otpInput = document.querySelector("#otp");
+                var otpInput = document.querySelector("#otp");
                 if (otpInput && otpInput.style.display !== "none" && otpInput.style.display !== "hidden") {
-                    let element = document.querySelector("#useOTPButton");
-                    if (element) {
-                        element.style.display = "none";
+                    var otpButton = document.querySelector("#useOTPButton");
+                    if (otpButton) {
+                        otpButton.style.display = "none";
                     }
                 }
             }
 
-            function submitForm() {
-                if (!window.location.origin) {
-                    window.location.origin = window.location.protocol + "//" + window.location.hostname +
+            // Writes the collected state into the hidden formResult field. The Submit button calls only this
+            // and lets the browser submit the form, because calling form.submit() from the click handler of a
+            // submit button can send the form twice in Internet Explorer.
+            function prepareSubmit() {
+                // window.origin does not exist in Internet Explorer or EdgeHTML, but location.origin does.
+                var origin = window.origin || window.location.origin;
+                if (!origin) {
+                    origin = window.location.protocol + "//" + window.location.hostname +
                         (window.location.port ? ':' + window.location.port : '');
                 }
-                formResult.origin = window.origin;
-                const rememberBox = document.querySelector("#rememberDevice");
+                formResult.origin = origin;
+                var rememberBox = document.querySelector("#rememberDevice");
                 if (rememberBox) {
                     formResult.rememberDevice = rememberBox.checked;
                 }
                 set("formResult", JSON.stringify(formResult));
-                document.forms["loginForm"].requestSubmit();
+            }
+
+            // Prepares and submits the form from script (timers, mode changes, WebAuthn and passkey results).
+            function submitForm() {
+                prepareSubmit();
+                var form = document.forms["loginForm"];
+                if (typeof form.requestSubmit === "function") {
+                    form.requestSubmit();
+                } else {
+                    // Internet Explorer and EdgeHTML have no requestSubmit(). Call the prototype method, so that
+                    // a form control named "submit" cannot shadow it.
+                    HTMLFormElement.prototype.submit.call(form);
+                }
             }
 
 
@@ -403,9 +480,25 @@
             function enable(id) {
                 var element = document.querySelector("#" + id);
                 if (element != null) {
-                    element.style.display = "initial";
+                    try {
+                        element.style.display = "initial";
+                    } catch (e) {
+                        // Old Internet Explorer document modes throw on an unknown CSS value.
+                    }
+                    // Internet Explorer does not know the "initial" keyword and keeps the old value. Remove the
+                    // inline value instead, so that the element falls back to its default display.
+                    if (element.style.display !== "initial") {
+                        element.style.display = "";
+                    }
                 } else {
                     console.log(id + " is null!");
+                }
+            }
+
+            // Element.remove() does not exist in Internet Explorer.
+            function removeElement(element) {
+                if (element && element.parentNode) {
+                    element.parentNode.removeChild(element);
                 }
             }
 
@@ -430,11 +523,20 @@
                 var copyText = document.querySelector("#enrollmentValue");
                 copyText.select();
                 copyText.setSelectionRange(0, 99999); /* For mobile devices */
-                navigator.clipboard.writeText(copyText.value);
+                if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+                    navigator.clipboard.writeText(copyText.value);
+                } else {
+                    // Internet Explorer has no Clipboard API. Copy the selected text instead.
+                    try {
+                        document.execCommand("copy");
+                    } catch (e) {
+                        console.log("Could not copy the text: " + e);
+                    }
+                }
             }
 
             function setAutoSubmit(inputLength) {
-                let otpField = document.querySelector("#otp")
+                var otpField = document.querySelector("#otp");
                 if (otpField) {
                     otpField.addEventListener("keyup", function () {
                         if (otpField.value.length === parseInt(inputLength)) {
@@ -445,35 +547,39 @@
             }
 
             function passkeyAuthentication() {
+                if (!webAuthnSupported) {
+                    console.log("Passkeys need WebAuthn, which this browser does not have.");
+                    return "";
+                }
                 if (value("mode") === MODE.PUSH) {
                     changeMode(MODE.PASSKEY);
                     return;
                 }
-                let passkeyChallenge = value("passkeyChallenge");
+                var passkeyChallenge = value("passkeyChallenge");
                 if (passkeyChallenge == "") {
-                    console.log("Passkey Authentication: Challenge data is empty!")
+                    console.log("Passkey Authentication: Challenge data is empty!");
                     return "";
                 }
-                let challengeObject = JSON.parse(passkeyChallenge.replace(/(&quot;)/g, "\""));
-                let userVerification = "preferred";
-                if (["required", "preferred", "discouraged"].includes(challengeObject.user_verification)) {
+                var challengeObject = JSON.parse(passkeyChallenge.replace(/(&quot;)/g, "\""));
+                var userVerification = "preferred";
+                if (["required", "preferred", "discouraged"].indexOf(challengeObject.user_verification) !== -1) {
                     userVerification = challengeObject.user_verification;
                 }
                 navigator.credentials.get({
                     publicKey: {
-                        challenge: Uint8Array.from(challengeObject.challenge, c => c.charCodeAt(0)),
+                        challenge: Uint8Array.from(challengeObject.challenge, function (c) { return c.charCodeAt(0); }),
                         rpId: challengeObject.rpId,
-                        userVerification: userVerification,
-                    },
-                }).then(credential => {
-                    let params = {
+                        userVerification: userVerification
+                    }
+                }).then(function (credential) {
+                    var params = {
                         transaction_id: challengeObject.transaction_id,
                         credential_id: credential.id,
                         authenticatorData: bytesToBase64(
                             new Uint8Array(credential.response.authenticatorData)),
                         clientDataJSON: bytesToBase64(new Uint8Array(credential.response.clientDataJSON)),
                         signature: bytesToBase64(new Uint8Array(credential.response.signature)),
-                        userHandle: bytesToBase64(new Uint8Array(credential.response.userHandle)),
+                        userHandle: bytesToBase64(new Uint8Array(credential.response.userHandle))
                     };
                     formResult.passkeySignResponse = JSON.stringify(params);
                     submitForm();
@@ -483,18 +589,23 @@
             }
 
             function registerPasskey() {
-                let registrationData = value("passkeyRegistration");
-                if (registrationData == "") {
-                    console.log("Passkey Registration: Registration data is empty!")
+                if (!webAuthnSupported) {
+                    console.log("Passkeys need WebAuthn, which this browser does not have.");
                     return "";
                 }
-                let data = JSON.parse(registrationData.replace(/(&quot;)/g, "\""));
-                let excludedCredentials = [];
+                var registrationData = value("passkeyRegistration");
+                if (registrationData == "") {
+                    console.log("Passkey Registration: Registration data is empty!");
+                    return "";
+                }
+                var data = JSON.parse(registrationData.replace(/(&quot;)/g, "\""));
+                var excludedCredentials = [];
                 if (data.excludeCredentials) {
-                    for (const cred of data.excludeCredentials) {
+                    for (var i = 0; i < data.excludeCredentials.length; i++) {
+                        var cred = data.excludeCredentials[i];
                         excludedCredentials.push({
                             id: base64URLToBytes(cred.id),
-                            type: cred.type,
+                            type: cred.type
                         });
                     }
                 }
@@ -507,30 +618,30 @@
                             name: data.user.name,
                             displayName: data.user.displayName
                         },
-                        challenge: Uint8Array.from(data.challenge, c => c.charCodeAt(0)),
+                        challenge: Uint8Array.from(data.challenge, function (c) { return c.charCodeAt(0); }),
                         pubKeyCredParams: data.pubKeyCredParams,
                         excludeCredentials: excludedCredentials,
                         authenticatorSelection: data.authenticatorSelection,
                         timeout: data.timeout,
                         extensions: {
-                            credProps: true,
+                            credProps: true
                         },
                         attestation: data.attestation
                     }
                 }).then(function (publicKeyCred) {
-                    let params = {
+                    var params = {
                         credential_id: publicKeyCred.id.replace(/\+/g, '-').replace(/\//g, '_'),
                         rawId: bytesToBase64(new Uint8Array(publicKeyCred.rawId)),
                         authenticatorAttachment: publicKeyCred.authenticatorAttachment,
                         attestationObject: bytesToBase64(
                             new Uint8Array(publicKeyCred.response.attestationObject)),
-                        clientDataJSON: bytesToBase64(new Uint8Array(publicKeyCred.response.clientDataJSON)),
-                    }
+                        clientDataJSON: bytesToBase64(new Uint8Array(publicKeyCred.response.clientDataJSON))
+                    };
                     if (publicKeyCred.response.attestationObject) {
                         params.attestationObject = bytesToBase64(
                             new Uint8Array(publicKeyCred.response.attestationObject));
                     }
-                    const extResults = publicKeyCred.getClientExtensionResults();
+                    var extResults = publicKeyCred.getClientExtensionResults();
                     if (extResults.credProps) {
                         params.credProps = extResults.credProps;
                     }
@@ -544,19 +655,28 @@
             }
 
             function bytesToBase64(bytes) {
-                const binString = Array.from(bytes, (byte) =>
-                    String.fromCodePoint(byte),).join("");
+                var binString = "";
+                for (var i = 0; i < bytes.length; i++) {
+                    binString += String.fromCharCode(bytes[i]);
+                }
                 return btoa(binString).replace(/\+/g, '-').replace(/\//g, '_');
             }
 
+            // Appends "=" until the length is a multiple of 4. String.padEnd does not exist in Internet Explorer.
+            function padBase64(base64) {
+                var padLength = (4 - (base64.length % 4)) % 4;
+                for (var i = 0; i < padLength; i++) {
+                    base64 += "=";
+                }
+                return base64;
+            }
+
             function base64URLToBytes(base64URLString) {
-                const base64 = base64URLString.replace(/-/g, '+').replace(/_/g, '/');
-                const padLength = (4 - (base64.length % 4)) % 4;
-                const padded = base64.padEnd(base64.length + padLength, '=');
-                const binary = atob(padded);
-                const buffer = new ArrayBuffer(binary.length);
-                const bytes = new Uint8Array(buffer);
-                for (let i = 0; i < binary.length; i++) {
+                var base64 = base64URLString.replace(/-/g, '+').replace(/_/g, '/');
+                var binary = atob(padBase64(base64));
+                var buffer = new ArrayBuffer(binary.length);
+                var bytes = new Uint8Array(buffer);
+                for (var i = 0; i < binary.length; i++) {
                     bytes[i] = binary.charCodeAt(i);
                 }
                 return buffer;
@@ -566,17 +686,19 @@
             // keep the `=` padding — that difference is load-bearing for the server, so the two
             // encoding paths intentionally diverge.
             function webAuthnBase64DecToArr(b64url) {
-                const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
-                const padLength = (4 - (b64.length % 4)) % 4;
-                const binary = atob(b64.padEnd(b64.length + padLength, '='));
-                const bytes = new Uint8Array(binary.length);
-                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                var b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+                var binary = atob(padBase64(b64));
+                var bytes = new Uint8Array(binary.length);
+                for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
                 return bytes;
             }
 
             function webAuthnBase64EncArr(buffer) {
-                const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-                const binString = Array.from(bytes, b => String.fromCharCode(b)).join("");
+                var bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+                var binString = "";
+                for (var i = 0; i < bytes.length; i++) {
+                    binString += String.fromCharCode(bytes[i]);
+                }
                 return btoa(binString).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
             }
 

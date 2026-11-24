@@ -1,5 +1,10 @@
 #Requires -RunAsAdministrator
 # Install the provider
+param(
+    # Set by the MSI when it replaces an older version (major upgrade). Install.ps1 then puts the provider
+    # back into the global authentication policy lists that Uninstall.ps1 of the old version recorded.
+    [switch]$Upgrade
+)
 
 # The provider targets .NET Framework 4.8. This is in-box on Windows Server 2022+, but NOT on
 # Server 2016 (ships 4.6.2) or 2019 (ships 4.7.2) — installing the ADFS role does not pull it in.
@@ -179,22 +184,116 @@ if (-not (Get-Command Register-AdfsAuthenticationProvider -ErrorAction SilentlyC
     exit 1
 }
 
-# Register only if it is not already registered. Register-AdfsAuthenticationProvider throws on a name that
-# already exists, which would make a re-run abort - and the README tells admins to re-run this script to
-# apply the ACL after creating the config key. Re-running now applies the ACL above and exits cleanly; a
-# restart is only needed when the provider is newly registered (an ACL change does not need one). Wrapped so
-# a registration or restart failure reports clearly and aborts, rather than throwing a raw error.
+$name = "privacyIDEAADFSProvider"
+# AD FS ties a registration to one assembly version. The registered AdminName carries that version
+# (privacyIDEA-ADFSProvider_<version>, see AdapterMetadata.AdminName).
+$newVersion = [System.Reflection.AssemblyName]::GetAssemblyName($myDllFullName).Version.ToString()
+$expectedAdminName = "privacyIDEA-ADFSProvider_$newVersion"
+
+# The global authentication policy lists that can contain the provider. Uninstall.ps1 uses the same keys.
+$policyLists = @{
+    'PrimaryIntranet' = 'PrimaryIntranetAuthenticationProvider'
+    'PrimaryExtranet' = 'PrimaryExtranetAuthenticationProvider'
+    'Additional'      = 'AdditionalAuthenticationProvider'
+}
+
+# Returns the keys of the policy lists that contain the provider.
+function Get-PolicyMembership
+{
+    $policy = Get-AdfsGlobalAuthenticationPolicy
+    $member = @()
+    foreach ($key in $policyLists.Keys)
+    {
+        if (@($policy.($policyLists[$key])) -contains $name) { $member += $key }
+    }
+    return ,$member
+}
+
+# Adds the provider to, or removes it from, the given policy lists. Each list is written back through its own
+# parameter.
+function Set-PolicyMembership([string[]]$Lists, [bool]$Add)
+{
+    $policy = Get-AdfsGlobalAuthenticationPolicy
+    foreach ($key in $Lists)
+    {
+        $property = $policyLists[$key]
+        if (-not $property) { continue }
+        $list = New-Object 'System.Collections.Generic.List[string]'
+        foreach ($entry in @($policy.$property)) { if ($entry) { $list.Add([string]$entry) } }
+        if ($Add) { if (-not $list.Contains($name)) { $list.Add($name) } }
+        else { [void]$list.Remove($name) }
+        $arguments = @{}
+        $arguments[$property] = $list.ToArray()
+        Set-AdfsGlobalAuthenticationPolicy @arguments
+    }
+}
+
+# Register the provider, or replace a registration of another version.
+#
+# - Same version registered: nothing to do. The README tells admins to re-run this script to apply the ACL after
+#   they create the configuration key, so a re-run must not fail. No restart is needed for an ACL change.
+# - Another version registered (for example after the DLL was replaced by hand): replace the registration, so
+#   that AD FS does not stay on the old assembly. Unregister fails while the provider is in a policy list, so the
+#   provider leaves its lists first and goes back into the same lists afterwards. If the replacement fails, the
+#   old registration is restored (the old assembly is still in the GAC, versions sit side by side).
+# - Not registered: register. On an MSI upgrade (-Upgrade), put the provider back into the policy lists that
+#   Uninstall.ps1 of the old version recorded in the policy_membership value.
+#
+# Wrapped so that a registration or restart failure reports clearly and aborts the MSI (non-zero exit).
 try
 {
-    if (Get-AdfsAuthenticationProvider -Name "privacyIDEAADFSProvider" -ErrorAction SilentlyContinue)
+    $registered = Get-AdfsAuthenticationProvider -Name $name -ErrorAction Stop -WarningAction SilentlyContinue
+    if ($registered -and $registered.AdminName -eq $expectedAdminName)
     {
-        Write-Host "The provider 'privacyIDEAADFSProvider' is already registered. Skipping registration."
+        Write-Host "The provider '$name' is already registered with version $newVersion. Skipping registration."
+    }
+    elseif ($registered)
+    {
+        $oldVersion = $registered.AdminName -replace '^privacyIDEA-ADFSProvider_', ''
+        Write-Host "Replacing the registration of '$name' (version $oldVersion) with version $newVersion."
+        $membership = Get-PolicyMembership
+        Set-PolicyMembership -Lists $membership -Add $false
+        try
+        {
+            Unregister-AdfsAuthenticationProvider -Name $name -Confirm:$false -ErrorAction Stop
+            Register-AdfsAuthenticationProvider -TypeName $typeName -Name $name -ErrorAction Stop
+        }
+        catch
+        {
+            $reason = $_
+            if (-not (Get-AdfsAuthenticationProvider -Name $name -ErrorAction SilentlyContinue -WarningAction SilentlyContinue))
+            {
+                try
+                {
+                    $oldAssembly = [System.Reflection.AssemblyName]::GetAssemblyName($myDllFullName)
+                    $oldAssembly.Version = [Version]$oldVersion
+                    Register-AdfsAuthenticationProvider -TypeName ("privacyIDEAADFSProvider.Adapter, " + $oldAssembly.FullName) `
+                        -Name $name -ErrorAction Stop
+                }
+                catch
+                {
+                    Write-Warning "Could not restore the registration of version ${oldVersion}: $_"
+                }
+            }
+            Set-PolicyMembership -Lists $membership -Add $true
+            throw $reason
+        }
+        Set-PolicyMembership -Lists $membership -Add $true
+        Restart-Service adfssrv
     }
     else
     {
-        Register-AdfsAuthenticationProvider -TypeName $typeName -Name "privacyIDEAADFSProvider"
+        Register-AdfsAuthenticationProvider -TypeName $typeName -Name $name -ErrorAction Stop
+        $recorded = (Get-ItemProperty -Path $configKeyPath -Name 'policy_membership' -ErrorAction SilentlyContinue).policy_membership
+        if ($Upgrade -and $recorded)
+        {
+            Set-PolicyMembership -Lists ($recorded -split ',') -Add $true
+            Write-Host "Put the provider back into the global authentication policy lists: $recorded."
+        }
         Restart-Service adfssrv
     }
+    # The recorded lists are used once. Remove them, so that a later fresh install does not pick them up.
+    Remove-ItemProperty -Path $configKeyPath -Name 'policy_membership' -ErrorAction SilentlyContinue
 }
 catch
 {
