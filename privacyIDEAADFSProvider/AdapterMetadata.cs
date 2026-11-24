@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 using Microsoft.IdentityServer.Web.Authentication.External;
+using PrivacyIDEAADFSProvider;
 
 namespace privacyIDEAADFSProvider
 {
@@ -8,14 +9,11 @@ namespace privacyIDEAADFSProvider
     {
         public string AdapterVersion { get; set; }
 
+        // The languages of the login page. Texts has a German, an English and a French table, and serves every
+        // LCID below from one of them. English is first: if AD FS falls back to an entry of this list for a
+        // browser language that is not in it, the page is then English.
         private static readonly int[] s_lcids =
         {
-            // German
-            1031,   // de-DE
-            3079,   // de-AT
-            2055,   // de-CH
-            5127,   // de-LI
-            4103,   // de-LU
             // English
             1033,   // en-US
             2057,   // en-GB
@@ -25,6 +23,12 @@ namespace privacyIDEAADFSProvider
             5129,   // en-NZ
             7177,   // en-ZA
             16393,   // en-IN
+            // German
+            1031,   // de-DE
+            3079,   // de-AT
+            2055,   // de-CH
+            5127,   // de-LI
+            4103,   // de-LU
             // French
             1036,   // fr-FR
             2060,   // fr-BE
@@ -44,7 +48,7 @@ namespace privacyIDEAADFSProvider
             s_lcids.ToDictionary(i => i, _ => "privacyIDEA AD FS Provider");
 
         private static readonly Dictionary<int, string> s_descriptions =
-            s_lcids.ToDictionary(i => i, _ => "AD FS Provider to authenticate with privacyIDEA.");
+            s_lcids.ToDictionary(i => i, i => Texts.Get(i, Texts.ProviderDescription));
 
         private static readonly string[] s_identityClaims =
         {

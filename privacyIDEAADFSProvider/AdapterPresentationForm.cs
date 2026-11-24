@@ -1,6 +1,7 @@
 ﻿using Microsoft.IdentityServer.Web.Authentication.External;
 using PrivacyIDEAADFSProvider.PrivacyIDEA_Client;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Net;
 using System.Text.RegularExpressions;
 
@@ -8,7 +9,40 @@ namespace PrivacyIDEAADFSProvider
 {
     class AdapterPresentationForm : IAdapterPresentationForm
     {
-        public string ErrorMessage { get; set; } = "";
+        // Seconds between two push checks of the page when push_poll_interval is not set.
+        public const int DefaultPushPollInterval = 3;
+
+        private string _errorMessage = "";
+        // Set by SetError: a key of Texts. GetFormHtml then shows the message in the page language.
+        private string _errorKey;
+
+        /// The message above the form. A message from the server is shown as it is. Setting this property
+        /// clears a message that SetError set.
+        public string ErrorMessage
+        {
+            get => _errorMessage;
+            set
+            {
+                _errorMessage = value ?? "";
+                _errorKey = null;
+            }
+        }
+
+        /// Sets one of the provider's own messages, a key of Texts. GetFormHtml shows it in the language of the
+        /// page, and ErrorMessage holds the English text (for the log and for the checks in the adapter).
+        public void SetError(string textKey)
+        {
+            _errorMessage = Texts.Get(Texts.EnglishLcid, textKey);
+            _errorKey = textKey;
+        }
+
+        public static AdapterPresentationForm WithError(string textKey)
+        {
+            var form = new AdapterPresentationForm();
+            form.SetError(textKey);
+            return form;
+        }
+
         public string OtpHint { get; set; } = "";
         public string Message { get; set; } = "";
         public string PushMessage { get; set; } = "";
@@ -40,6 +74,20 @@ namespace PrivacyIDEAADFSProvider
         // "1" when the page JS should delete the pi_remember_device cookie (an unrecognised/stale cookie).
         public string DeviceCookieClear { get; set; } = "0";
 
+        // Push checks of the page (AuthPage.html, startPushPolling). PushPollInterval comes from
+        // push_poll_interval; 0 or less means DefaultPushPollInterval.
+        public int PushPollInterval { get; set; } = 0;
+        // "" while the page checks automatically, "stopped" after the user or the time limit stopped it (the page
+        // posts this back), "refused" after the user declined or cancelled the push on the device (set by the
+        // adapter on each poll, never taken from the client).
+        public string PushPollState { get; set; } = "";
+        // The browser time (milliseconds since 1970) of the first automatic check, for the time limit. The page
+        // sets it and posts it back.
+        public string PushPollStarted { get; set; } = "";
+        // The id of the control that had the focus when the page posted itself for a push check. The page puts
+        // the focus back on it after the reload.
+        public string FocusId { get; set; } = "";
+
         // Cached once: Resources.AuthPage is a ResourceManager lookup and the template is ~16 KB,
         // and the single regex pass replaces 25 sequential string.Replace calls (each of which
         // allocated a fresh ~16 KB copy).
@@ -63,29 +111,40 @@ namespace PrivacyIDEAADFSProvider
                 enrollmentMode = "image";
             }
 
+            // The placeholder of the OTP field: the otp_hint setting, else the translated default.
+            string otpHint = string.IsNullOrEmpty(OtpHint) ? Texts.Get(lcid, Texts.OtpLabel) : OtpHint;
+
             var tokens = new Dictionary<string, string>
             {
                 ["enrollmentMode"] = enrollmentMode,
                 ["enrollmentUrl"] = EnrollmentUrl,
                 ["enrollmentImg"] = EnrollmentImg,
                 ["enrollmentLink"] = EnrollmentLink,
-                ["ERROR"] = ErrorMessage,
-                ["OTPTEXT"] = string.IsNullOrEmpty(OtpHint) ? "One-Time-Password" : OtpHint,
-                ["SUBMIT"] = "Submit",
+                ["ERROR"] = _errorKey != null ? Texts.Get(lcid, _errorKey) : ErrorMessage,
+                ["OTPTEXT"] = otpHint,
+                // The visible label of the OTP field: the server's challenge message. Without a triggered
+                // challenge (the default configuration) there is no message, so show the placeholder text as a
+                // label too. A placeholder alone disappears while the user types.
+                ["otpLabel"] = string.IsNullOrEmpty(Message) ? otpHint : Message,
+                // The server message, posted back in a hidden field, so a wrong OTP shows the same label again.
                 ["MESSAGE"] = Message,
                 ["authCounter"] = AuthCounter,
                 ["mode"] = Mode,
                 ["pushAvailable"] = PushAvailable,
-                // Label for the no-JavaScript push button. In poll-mode enrollment (smartphone/container
+                // Label for the manual push button. In poll-mode enrollment (smartphone/container
                 // registration) the challenge carries an image and the action is "finish registration", not
                 // "confirm a login", so word the button for that case.
-                ["pushButtonLabel"] = string.IsNullOrEmpty(EnrollmentImg)
-                    ? "I confirmed on my device"
-                    : "I completed the registration",
+                ["pushButtonLabel"] = Texts.Get(lcid, string.IsNullOrEmpty(EnrollmentImg)
+                    ? Texts.PushConfirm
+                    : Texts.PushConfirmRegistration),
+                ["pushPollInterval"] = (PushPollInterval >= 1 ? PushPollInterval : DefaultPushPollInterval)
+                    .ToString(CultureInfo.InvariantCulture),
+                ["pushPollState"] = PushPollState,
+                ["pushPollStarted"] = PushPollStarted,
+                ["focusId"] = FocusId,
                 ["webAuthnSignRequest"] = WebAuthnSignRequest,
                 ["pushMessage"] = PushMessage,
                 ["modeChanged"] = "0",
-                ["pollInterval"] = "1",
                 // Empty string when 0 so the JS `if (asl !== "") setAutoSubmit(asl)` guard skips it,
                 // matching the previous "leave placeholder unreplaced" → parseInt → NaN behavior.
                 ["autoSubmitLength"] = AutoSubmitLength > 0 ? AutoSubmitLength.ToString() : "",
@@ -102,6 +161,11 @@ namespace PrivacyIDEAADFSProvider
                 ["deviceCookieMaxAge"] = DeviceCookieMaxAge,
                 ["deviceCookieClear"] = DeviceCookieClear,
             };
+            // The fixed texts of the page, in the language that AD FS chose: #txt<Key># (see Texts).
+            foreach (string key in Texts.Keys)
+            {
+                tokens["txt" + key] = Texts.Get(lcid, key);
+            }
 
             // Every value is HTML-encoded on substitution: these tokens land in text nodes, double-quoted
             // attributes (aria-label, placeholder, href, hidden input values), so server/config-provided
@@ -119,10 +183,11 @@ namespace PrivacyIDEAADFSProvider
             return null;
         }
 
-        /// Returns the title string for the web page which presents the HTML form content to the end user
+        /// Returns the title string for the web page which presents the HTML form content to the end user.
+        /// It names the task, not the product, in the language of the page.
         public string GetPageTitle(int lcid)
         {
-            return "privacyIDEA AD FS";
+            return Texts.Get(lcid, Texts.PageTitle);
         }
 
     }

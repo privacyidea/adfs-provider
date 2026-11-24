@@ -62,6 +62,23 @@ namespace Tests.Fixtures
             ""result"": {""status"": true, ""value"": true}
         }";
 
+        /// /validate/polltransaction response after the user selected "not me" on the device (3.10 and later).
+        public const string PollDeclined = @"{
+            ""detail"": {""challenge_status"": ""declined""},
+            ""result"": {""status"": true, ""value"": false}
+        }";
+
+        /// /validate/polltransaction response after the user aborted the push on the device (3.14 and later).
+        public const string PollCancelled = @"{
+            ""detail"": {""challenge_status"": ""cancelled""},
+            ""result"": {""status"": true, ""value"": false}
+        }";
+
+        /// /validate/polltransaction response of a server older than 3.10: no detail.challenge_status.
+        public const string PollPendingNoDetail = @"{
+            ""result"": {""status"": true, ""value"": false}
+        }";
+
         /// Final /validate/check ACCEPT after a confirmed push (empty pass + transaction id).
         public const string PushFinalAccept = @"{
             ""detail"": {""message"": ""Found matching challenge"", ""serial"": ""PIPU0001F75E""},

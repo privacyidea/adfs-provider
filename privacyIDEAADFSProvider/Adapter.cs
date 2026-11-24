@@ -60,6 +60,7 @@ namespace privacyIDEAADFSProvider
             {
                 OtpHint = _config.OtpHint,
                 AutoSubmitLength = _config.AutoSubmitLength,
+                PushPollInterval = _config.PushPollInterval,
                 DisablePasskey = _config.DisablePasskey ? "1" : "0"
             };
 
@@ -196,7 +197,7 @@ namespace privacyIDEAADFSProvider
             if (authContext == null || authContext.Data == null)
             {
                 Error("AuthContext is null or its Data is null!");
-                return new AdapterPresentationForm { ErrorMessage = "Internal error. Please try again." };
+                return AdapterPresentationForm.WithError(Texts.InternalError);
             }
 
             if (proofData == null || proofData.Properties == null)
@@ -218,6 +219,7 @@ namespace privacyIDEAADFSProvider
             {
                 OtpHint = _config.OtpHint,
                 AutoSubmitLength = _config.AutoSubmitLength,
+                PushPollInterval = _config.PushPollInterval,
                 DisablePasskey = _config.DisablePasskey ? "1" : "0",
                 RememberDeviceEnabled = _rememberDeviceEnabled ? "1" : "0"
             };
@@ -227,6 +229,13 @@ namespace privacyIDEAADFSProvider
             // Carry the optional-enrollment flag across poll reloads, otherwise the "Not Now"
             // skip button (gated on enrollmentOptional=="1" in the page JS) disappears after the first poll.
             form.EnrollmentOptional = GetString(proofDict, "enrollmentOptional", "0");
+            // Push check state that the page posts back (AuthPage.html, startPushPolling). Accept only
+            // "stopped" from the client: "refused" is decided by the server on each poll. The other two values
+            // are put back into the page, so accept only digits and an element id made of letters.
+            form.PushPollState = GetString(proofDict, "pushPollState") == "stopped" ? "stopped" : "";
+            form.PushPollStarted = OnlyChars(GetString(proofDict, "pushPollStarted"), 20, c => c >= '0' && c <= '9');
+            form.FocusId = OnlyChars(GetString(proofDict, "focusId"), 64,
+                c => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'));
 
             // The formResult hidden field is populated by the page JavaScript on submit (AuthPage.html).
             // A client without JavaScript posts it empty: a legacy embedded WebView (issue #90), or the
@@ -261,13 +270,13 @@ namespace privacyIDEAADFSProvider
                     // user-controlled WebAuthn/passkey blobs, and Newtonsoft's e.Message echoes the offending
                     // character, so neither the payload nor the message is safe to dump into the event log.
                     Error($"formResult is not valid JSON (length {((string)formResult).Length}, {e.GetType().Name}).");
-                    form.ErrorMessage = "Internal error. Please try again.";
+                    form.SetError(Texts.InternalError);
                     return form;
                 }
                 if (fr == null)
                 {
                     Error($"formResult could not be parsed into a FormResult (length {((string)formResult).Length}).");
-                    form.ErrorMessage = "Internal error. Please try again.";
+                    form.SetError(Texts.InternalError);
                     return form;
                 }
             }
@@ -318,6 +327,10 @@ namespace privacyIDEAADFSProvider
 
             if (modeChanged)
             {
+                // A new token type starts fresh: a switch back to push checks automatically again.
+                form.PushPollState = "";
+                form.PushPollStarted = "";
+                form.FocusId = "";
                 return form;
             }
 
@@ -351,7 +364,14 @@ namespace privacyIDEAADFSProvider
                     outgoingClaims = Claims();
                     return null;
                 }
-                form.ErrorMessage = response?.Message ?? "Failed to cancel enrollment.";
+                if (response?.Message != null)
+                {
+                    form.ErrorMessage = response.Message;
+                }
+                else
+                {
+                    form.SetError(Texts.CancelEnrollmentFailed);
+                }
                 return form;
             }
 
@@ -370,7 +390,7 @@ namespace privacyIDEAADFSProvider
                 // ValidateInitialize failed (e.g. the server was unreachable). Surface it instead of
                 // falling through to the final else, which would fire an empty-pass /validate/check.
                 Error("Failed to initialize Passkey authentication: no response from the server.");
-                form.ErrorMessage = "Could not start Passkey authentication. Try again or use another token type.";
+                form.SetError(Texts.PasskeyStartFailed);
                 return form;
             }
 
@@ -379,7 +399,7 @@ namespace privacyIDEAADFSProvider
                 if (string.IsNullOrEmpty(fr.Origin))
                 {
                     Error("Incomplete data for Passkey authentication: Origin is missing!");
-                    form.ErrorMessage = "Could not complete Passkey authentication. Try again or use another token type.";
+                    form.SetError(Texts.PasskeyFailed);
                 }
                 else
                 {
@@ -395,7 +415,7 @@ namespace privacyIDEAADFSProvider
                 {
                     Error($"Incomplete data for Passkey registration: Serial {serial}, transactionid {transactionid} " +
                         $"or origin {fr.Origin} missing!");
-                    form.ErrorMessage = "Could not complete Passkey registration. Try again or use another token type.";
+                    form.SetError(Texts.PasskeyRegistrationFailed);
                 }
                 else
                 {
@@ -405,7 +425,11 @@ namespace privacyIDEAADFSProvider
             }
             else if (mode == PITokenType.Push)
             {
-                if (_privacyIDEA.PollTransaction(transactionid, context))
+                // enroll_via_multichallenge poll (smartphone/push token enrollment) carries a QR image;
+                // a plain push-token login does not. Word the messages accordingly.
+                bool enrollment = !string.IsNullOrEmpty(form.EnrollmentImg);
+                PIPollStatus pollStatus = _privacyIDEA.PollTransactionStatus(transactionid, context);
+                if (pollStatus == PIPollStatus.Accept)
                 {
                     // Outofband-mode finalize: empty otp + the pushed transaction id.
                     // https://privacyidea.readthedocs.io/en/latest/tokens/authentication_modes.html#outofband-mode
@@ -413,13 +437,19 @@ namespace privacyIDEAADFSProvider
                         ? _privacyIDEA.ValidateCheckRemember(user, "", transactionid, context, out issuedCookie)
                         : _privacyIDEA.ValidateCheck(user, "", transactionid, context);
                 }
+                else if (pollStatus == PIPollStatus.Declined || pollStatus == PIPollStatus.Cancelled)
+                {
+                    // The user refused the push on the device. Another check cannot succeed, so the page stops
+                    // checking and says why. The other login options stay available.
+                    Log("Push " + pollStatus + " on the device for transaction " + transactionid + ".");
+                    form.PushPollState = "refused";
+                    form.SetError(enrollment ? Texts.RegistrationCancelled
+                        : pollStatus == PIPollStatus.Declined ? Texts.PushDeclined
+                        : Texts.PushCancelled);
+                }
                 else
                 {
-                    // enroll_via_multichallenge poll (smartphone/push token enrollment) carries a QR image;
-                    // a plain push-token login does not. Word the "still waiting" message accordingly.
-                    form.ErrorMessage = !string.IsNullOrEmpty(form.EnrollmentImg)
-                        ? "Registration not completed yet!"
-                        : "Authentication not confirmed yet!";
+                    form.SetError(enrollment ? Texts.RegistrationNotCompleted : Texts.PushNotConfirmed);
                 }
             }
             else if (!string.IsNullOrEmpty(fr.WebAuthnSignResponse))
@@ -427,7 +457,7 @@ namespace privacyIDEAADFSProvider
                 if (string.IsNullOrEmpty(fr.Origin))
                 {
                     Error("Incomplete data for WebAuthn authentication: Origin is missing!");
-                    form.ErrorMessage = "Could not complete WebAuthn authentication. Try again or use another token type.";
+                    form.SetError(Texts.WebAuthnFailed);
                 }
                 else
                 {
@@ -449,6 +479,9 @@ namespace privacyIDEAADFSProvider
                 {
                     newChallenge = true;
                     form = ExtractChallengeDataToForm(response, form, authContext);
+                    // A new transaction: a push of it starts with automatic checks again.
+                    form.PushPollState = "";
+                    form.PushPollStarted = "";
                 }
                 else if (response.isAuthenticationSuccessful())
                 {
@@ -456,7 +489,7 @@ namespace privacyIDEAADFSProvider
                     {
                         Log("Passkey Authentication: Usernames do not match! User from privacyidea: " + response.Username +
                             ", user from context: " + user);
-                        form.ErrorMessage = "The passkey is not for the user trying to log in!";
+                        form.SetError(Texts.PasskeyWrongUser);
                         return form;
                     }
                     else if (issuedCookie != null && !issuedCookie.IsClear)
@@ -500,14 +533,14 @@ namespace privacyIDEAADFSProvider
                 // In case of unconfirmed push response will be null too. Therefore, set the message only if there is none yet.
                 if (string.IsNullOrEmpty(form.ErrorMessage))
                 {
-                    form.ErrorMessage = "The authentication server could not be reached.";
+                    form.SetError(Texts.ServerUnreachable);
                     Error("Reponse from server was null!");
                 }
             }
 
             if (string.IsNullOrEmpty(form.ErrorMessage) && !newChallenge)
             {
-                form.ErrorMessage = "An error occurred.";
+                form.SetError(Texts.GenericError);
             }
             return form;
         }
@@ -894,6 +927,10 @@ namespace privacyIDEAADFSProvider
                             "http://schemas.microsoft.com/ws/2012/12/authmethod/otp")
                         };
         }
+
+        /// <summary>The value if it has at most maxLength characters and every one passes the check, else "".</summary>
+        private static string OnlyChars(string value, int maxLength, Func<char, bool> allowed) =>
+            value.Length <= maxLength && value.All(allowed) ? value : "";
 
         private string GetString(Dictionary<string, object> dict, string key, string defaultValue = "")
         {

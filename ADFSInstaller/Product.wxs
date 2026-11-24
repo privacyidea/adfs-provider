@@ -179,6 +179,11 @@
 			<RegistrySearch Id="SearchServiceRealm" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
 							Name="service_realm" Win64="yes" Type="raw"/>
 		</Property>
+		<!-- push_poll_interval has no dialog field. On a fresh install it is written empty (the default of 3 seconds). -->
+		<Property Id="PUSH_POLL_INTERVAL">
+			<RegistrySearch Id="SearchPushPollInterval" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+							Name="push_poll_interval" Win64="yes" Type="raw"/>
+		</Property>
 		<Property Id="ENABLEREMEMBERDEVICE">
 			<RegistrySearch Id="SearchEnableRememberDevice" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
 							Name="enable_remember_device" Win64="yes" Type="raw"/>
@@ -263,6 +268,7 @@
 					<RegistryValue Name='tls_version'				Type='string' Value='[TLS_VERSION]'/>
 					<RegistryValue Name='forward_headers'			Type='string' Value='[FORWARD_HEADERS]'/>
 					<RegistryValue Name='auto_submit_otp_length'    Type='string' Value='[AUTO_SUBMIT_OTP_LENGTH]'/>
+					<RegistryValue Name='push_poll_interval'		Type='string' Value='[PUSH_POLL_INTERVAL]'/>
 					<RegistryValue Name='enable_remember_device'	Type='string' Value='[ENABLEREMEMBERDEVICE]'/>
 					<RegistryValue Name='api_key'					Type='string' Value='[APIKEY]'/>
 				</RegistryKey>
