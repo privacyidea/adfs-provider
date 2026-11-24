@@ -286,5 +286,157 @@ namespace Tests.AdapterTests
             Assert.IsNull(result);
             Assert.AreEqual(1, claims.Length);
         }
+
+        // WebAuthn, passkey and passkey registration finish the login with their own /validate/check call. The box
+        // must be honoured there too: the page posts it with the FIDO2 result like with any other submit.
+
+        private const string PasskeyAssertion =
+            "{\"transaction_id\":\"44444444444444444444\",\"credential_id\":\"cred\",\"authenticatorData\":\"ad\"," +
+            "\"clientDataJSON\":\"cd\",\"signature\":\"sig\",\"userHandle\":\"uh\"}";
+        private const string WebAuthnAssertion =
+            "{\"credentialid\":\"c\",\"clientdata\":\"cd\",\"signaturedata\":\"s\",\"authenticatordata\":\"ad\"}";
+        private const string PasskeyAttestation =
+            "{\"credential_id\":\"cred\",\"clientDataJSON\":\"cd\",\"attestationObject\":\"ao\",\"rawId\":\"raw\"," +
+            "\"authenticatorAttachment\":\"platform\"}";
+
+        private static string FormResultJson(bool remember, string field, string fido2Response) =>
+            System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object>
+            {
+                ["rememberDevice"] = remember,
+                [field] = fido2Response,
+                ["origin"] = "https://sso.example.com",
+            });
+
+        private void StubFido2AcceptWithCookie(string acceptBody) =>
+            _server.Given(
+                    Request.Create().WithPath("/validate/check").UsingPost()
+                        .WithBody(b => b != null && b.Contains("request_persistent_cookie=1") && b.Contains("credential_id=")))
+                .RespondWith(Response.Create().WithStatusCode(200)
+                    .WithHeader("Set-Cookie", "pi_remember_device=fido-series:1; Max-Age=3600; Path=/; Secure; HttpOnly; SameSite=Strict")
+                    .WithBody(acceptBody));
+
+        private string SingleCheckRequestBody()
+        {
+            var checks = System.Linq.Enumerable.ToList(System.Linq.Enumerable.Where(_server.LogEntries,
+                e => e.RequestMessage.Path == "/validate/check"));
+            Assert.AreEqual(1, checks.Count, "Exactly one /validate/check call is expected.");
+            return checks[0].RequestMessage.Body;
+        }
+
+        [TestMethod]
+        public void Passkey_OptIn_Success_RequestsCookie_RendersCookieSetPage()
+        {
+            StubFido2AcceptWithCookie(PasskeyFixtures.PasskeyAuthAccept);
+            var adapter = NewAdapter(rememberEnabled: true);
+            var proof = new FakeProofData(new Dictionary<string, object>
+            {
+                ["formResult"] = FormResultJson(true, "passkeySignResponse", PasskeyAssertion),
+            });
+            var context = MinimalContext();
+            context["passkeyTransactionId"] = "44444444444444444444";
+            var ctx = new FakeAuthContext(context);
+
+            IAdapterPresentation result = adapter.TryEndAuthentication(ctx, proof, null, out Claim[] claims);
+
+            Assert.IsNotNull(result, "The server issued a cookie, so the adapter must render the cookie-set page.");
+            Assert.AreEqual(0, claims.Length);
+            Assert.AreEqual("1", ctx.Data["authSuccess"]);
+            StringAssert.Contains(((IAdapterPresentationForm)result).GetFormHtml(1033), "fido-series:1");
+            StringAssert.Contains(SingleCheckRequestBody(), "request_persistent_cookie=1");
+        }
+
+        [TestMethod]
+        public void Passkey_NotOptedIn_NoCookieRequested_ReturnsClaims()
+        {
+            _server.Given(Request.Create().WithPath("/validate/check").UsingPost())
+                .RespondWith(Response.Create().WithStatusCode(200).WithBody(PasskeyFixtures.PasskeyAuthAccept));
+            var adapter = NewAdapter(rememberEnabled: true);
+            var proof = new FakeProofData(new Dictionary<string, object>
+            {
+                ["formResult"] = FormResultJson(false, "passkeySignResponse", PasskeyAssertion),
+            });
+            var context = MinimalContext();
+            context["passkeyTransactionId"] = "44444444444444444444";
+
+            IAdapterPresentation result = adapter.TryEndAuthentication(new FakeAuthContext(context), proof, null, out Claim[] claims);
+
+            Assert.IsNull(result);
+            Assert.AreEqual(1, claims.Length);
+            Assert.IsFalse(SingleCheckRequestBody().Contains("request_persistent_cookie"),
+                "Without the tick, the passkey check must not ask for a cookie.");
+        }
+
+        [TestMethod]
+        public void Passkey_OptIn_OtherUsersPasskey_NoCookiePage_NoClaims()
+        {
+            // The passkey belongs to bob while alice signs in. The adapter rejects the login, so the cookie that the
+            // server issued for bob must not reach the browser.
+            StubFido2AcceptWithCookie(PasskeyFixtures.PasskeyAuthAcceptDifferentUser);
+            var adapter = NewAdapter(rememberEnabled: true);
+            var proof = new FakeProofData(new Dictionary<string, object>
+            {
+                ["formResult"] = FormResultJson(true, "passkeySignResponse", PasskeyAssertion),
+            });
+            var context = MinimalContext();
+            context["passkeyTransactionId"] = "44444444444444444444";
+            var ctx = new FakeAuthContext(context);
+
+            IAdapterPresentation result = adapter.TryEndAuthentication(ctx, proof, null, out Claim[] claims);
+
+            Assert.IsNotNull(result);
+            Assert.AreEqual(0, claims.Length);
+            Assert.IsFalse(ctx.Data.ContainsKey("authSuccess"), "A rejected login must not be marked as successful.");
+            Assert.IsFalse(((IAdapterPresentationForm)result).GetFormHtml(1033).Contains("fido-series:1"),
+                "The cookie issued for another user must not reach the page.");
+        }
+
+        [TestMethod]
+        public void WebAuthn_OptIn_Success_RequestsCookie_RendersCookieSetPage()
+        {
+            StubFido2AcceptWithCookie(OtpFixtures.SimpleAccept);
+            var adapter = NewAdapter(rememberEnabled: true);
+            var proof = new FakeProofData(new Dictionary<string, object>
+            {
+                ["formResult"] = FormResultJson(true, "webAuthnSignResponse", WebAuthnAssertion),
+                ["mode"] = "webauthn",
+            });
+            var context = MinimalContext();
+            context["previousResponse"] = WebAuthnFixtures.SingleWebAuthnChallenge;
+            var ctx = new FakeAuthContext(context);
+
+            IAdapterPresentation result = adapter.TryEndAuthentication(ctx, proof, null, out Claim[] claims);
+
+            Assert.IsNotNull(result, "The server issued a cookie, so the adapter must render the cookie-set page.");
+            Assert.AreEqual(0, claims.Length);
+            StringAssert.Contains(((IAdapterPresentationForm)result).GetFormHtml(1033), "fido-series:1");
+            string body = SingleCheckRequestBody();
+            StringAssert.Contains(body, "request_persistent_cookie=1");
+            StringAssert.Contains(body, "transaction_id=66666666666666666666");
+        }
+
+        [TestMethod]
+        public void PasskeyRegistration_OptIn_Success_RequestsCookie_RendersCookieSetPage()
+        {
+            _server.Given(
+                    Request.Create().WithPath("/validate/check").UsingPost()
+                        .WithBody(b => b != null && b.Contains("request_persistent_cookie=1") && b.Contains("attestationObject=")))
+                .RespondWith(Response.Create().WithStatusCode(200)
+                    .WithHeader("Set-Cookie", "pi_remember_device=reg-series:1; Max-Age=3600; Path=/; Secure; HttpOnly; SameSite=Strict")
+                    .WithBody(OtpFixtures.SimpleAccept));
+            var adapter = NewAdapter(rememberEnabled: true);
+            var proof = new FakeProofData(new Dictionary<string, object>
+            {
+                ["formResult"] = FormResultJson(true, "passkeyRegistrationResponse", PasskeyAttestation),
+            });
+            var context = MinimalContext();
+            context["previousResponse"] = PasskeyFixtures.PasskeyRegistrationChallenge;
+            var ctx = new FakeAuthContext(context);
+
+            IAdapterPresentation result = adapter.TryEndAuthentication(ctx, proof, null, out Claim[] claims);
+
+            Assert.IsNotNull(result, "The server issued a cookie, so the adapter must render the cookie-set page.");
+            Assert.AreEqual(0, claims.Length);
+            StringAssert.Contains(((IAdapterPresentationForm)result).GetFormHtml(1033), "reg-series:1");
+        }
     }
 }
