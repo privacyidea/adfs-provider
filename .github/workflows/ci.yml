@@ -35,7 +35,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check login page stays ES2017 (EdgeHTML 18 compatibility)
+      - name: Check login page script runs in Internet Explorer 11 (ES5)
         shell: pwsh
         run: pwsh -NoProfile -File tools/Check-AuthPageEcmaScript.ps1
 
