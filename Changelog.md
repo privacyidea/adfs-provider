@@ -1,4 +1,4 @@
-## 2026-11-11 v1.5.0
+## 2026-11-25 v1.5.0
 
 ### Features
 * "Remember this device" login. The provider can now offer a checkbox that stores a persistent cookie after a successful login, so the second factor is skipped on the next login from that browser. It has three required gates: the plugin switch `enable_remember_device=1`, an API key (the new encrypted `api_key` setting), and a privacyIDEA server that offers the feature (a `remember_device` policy, scope `auth`); it also needs `https`. The cookie is a rotating token (a replayed value is treated as theft and revokes the user's devices) and is `Secure` + `SameSite=Lax`. It is not `Strict`, because a `Strict` cookie is not sent in sign-ins that start on another site, such as a redirect from Microsoft 365 with Windows Integrated Authentication, so the device would never be recognized there; the README explains the trade-off. It is not `HttpOnly`, because an AD FS adapter cannot set a response header and the page sets the cookie with JavaScript. It works for one-time-password, push, WebAuthn and passkey logins, and for a passkey registration.
@@ -12,6 +12,7 @@
 * A push that the user declines or cancels on the device ends the push check with a message. Before, the page kept saying "Authentication not confirmed yet!" until the challenge expired. This needs privacyIDEA 3.10 or later (3.14 for a cancelled push).
 
 ### Fixes
+* 1.5.0 contains the fix of 1.4.1, which had no final release (only the pre-release `v1.4.1dev0`). A login form that arrives with an empty, malformed or non-string `formResult`, or with a null authentication context, no longer fails with "An error occurred during a passive federation request." (#78). In 1.5.0, an empty `formResult` is a plain one-time-password submit (see Features).
 * The installer now checks for .NET Framework 4.8 before it installs any file. The provider targets 4.8, which is in-box on Windows Server 2022 and later, but not on Server 2016 or 2019. On a machine without it, the installer stops up front with a message and a download link, instead of installing a provider that AD FS cannot load. A manual run of `Install.ps1` already made this check (#110).
 * `Install.ps1` replaces a registration of another provider version. AD FS ties a registration to one assembly version, and before, `Install.ps1` skipped registration whenever the name existed, so after a manual DLL update AD FS kept loading the old version. The provider stays in the authentication policy lists it was in.
 * An MSI upgrade keeps the provider enabled. The old version's uninstall records the global authentication policy lists that contain the provider, and the new version's install puts it back into them. This works for upgrades from 1.5.0 on (see the upgrade note below).
