@@ -1,62 +1,112 @@
 ﻿#Requires -RunAsAdministrator
 
-# Detach the provider from every global auth policy list so Unregister is allowed. Each list is cast to
-# List[string] before .Remove (the value Get-AdfsGlobalAuthenticationPolicy returns can be a fixed-size
-# array, on which .Remove throws), and each is written back via its OWN parameter — earlier versions
-# wrote the primary lists back via -AdditionalAuthenticationProvider, which never cleared the primary
-# assignment and clobbered the additional list, so the following Unregister failed with "in use".
-$policy = Get-AdfsGlobalAuthenticationPolicy
 $name = "privacyIDEAADFSProvider"
+$configKeyPath = 'HKLM:\SOFTWARE\Netknights GmbH\PrivacyIDEA-ADFS'
 
-# Wrapped so a policy-update quirk (e.g. AD FS rejecting an empty primary list if this provider was the
-# sole primary method) doesn't abort the whole uninstall before GAC removal. If detach fails, the later
-# Unregister may report "in use" — surface that rather than leaving the machine half-uninstalled.
-try
-{
-    if ($policy.PrimaryIntranetAuthenticationProvider -contains $name)
-    {
-        $list = [System.Collections.Generic.List[string]]$policy.PrimaryIntranetAuthenticationProvider
-        [void]$list.Remove($name)
-        Set-AdfsGlobalAuthenticationPolicy -PrimaryIntranetAuthenticationProvider $list
-    }
-    if ($policy.PrimaryExtranetAuthenticationProvider -contains $name)
-    {
-        $list = [System.Collections.Generic.List[string]]$policy.PrimaryExtranetAuthenticationProvider
-        [void]$list.Remove($name)
-        Set-AdfsGlobalAuthenticationPolicy -PrimaryExtranetAuthenticationProvider $list
-    }
-    if ($policy.AdditionalAuthenticationProvider -contains $name)
-    {
-        $list = [System.Collections.Generic.List[string]]$policy.AdditionalAuthenticationProvider
-        [void]$list.Remove($name)
-        Set-AdfsGlobalAuthenticationPolicy -AdditionalAuthenticationProvider $list
-    }
-}
-catch
-{
-    Write-Warning "Could not fully detach the provider from the global auth policy: $_"
-}
-
-# Unregister the provider and restart the AD FS service
 # Work from the folder this script was installed into, rather than a hardcoded path, so a non-default
 # install location still works.
 Set-Location -Path $PSScriptRoot
-$myPath = Get-Location
 $myDll = 'privacyIDEA-ADFSProvider.dll'
-$myDllFullName = (get-item $myDll).FullName
+$myDllFullName = (Get-Item $myDll).FullName
 
-# Best-effort cleanup: each step is wrapped so one failure (for example Unregister reporting the provider
-# is still in use because the detach above failed) does not abort the rest and leave the machine
-# half-uninstalled.
-try
-{
-    Unregister-AdfsAuthenticationProvider -Name "privacyIDEAADFSProvider" -Confirm:$false -ErrorAction Stop
-}
-catch
-{
-    Write-Warning "Could not unregister the provider (it may still be in use): $_. Continuing with cleanup."
+# The global authentication policy lists that can contain the provider. Install.ps1 uses the same keys.
+$policyLists = @{
+    'PrimaryIntranet' = 'PrimaryIntranetAuthenticationProvider'
+    'PrimaryExtranet' = 'PrimaryExtranetAuthenticationProvider'
+    'Additional'      = 'AdditionalAuthenticationProvider'
 }
 
+# Returns the keys of the policy lists that contain the provider.
+function Get-PolicyMembership
+{
+    $policy = Get-AdfsGlobalAuthenticationPolicy
+    $member = @()
+    foreach ($key in $policyLists.Keys)
+    {
+        if (@($policy.($policyLists[$key])) -contains $name) { $member += $key }
+    }
+    return ,$member
+}
+
+# Adds the provider to, or removes it from, the given policy lists. Each list is cast to a List[string] (the
+# value Get-AdfsGlobalAuthenticationPolicy returns can be a fixed-size array) and written back through its OWN
+# parameter. Earlier versions wrote the primary lists back via -AdditionalAuthenticationProvider, which never
+# cleared the primary assignment and clobbered the additional list, so the following Unregister failed with
+# "in use".
+function Set-PolicyMembership([string[]]$Lists, [bool]$Add)
+{
+    $policy = Get-AdfsGlobalAuthenticationPolicy
+    foreach ($key in $Lists)
+    {
+        $property = $policyLists[$key]
+        if (-not $property) { continue }
+        $list = New-Object 'System.Collections.Generic.List[string]'
+        foreach ($entry in @($policy.$property)) { if ($entry) { $list.Add([string]$entry) } }
+        if ($Add) { if (-not $list.Contains($name)) { $list.Add($name) } }
+        else { [void]$list.Remove($name) }
+        $arguments = @{}
+        $arguments[$property] = $list.ToArray()
+        Set-AdfsGlobalAuthenticationPolicy @arguments
+    }
+}
+
+# Take the provider out of AD FS: out of every global authentication policy list (Unregister fails while it is
+# in one), then unregister it.
+#
+# If that fails, stop with an error BEFORE anything is removed. Removing the assembly from the GAC while AD FS is
+# still registered to it breaks every sign-in that uses the provider, and on an MSI upgrade the new version would
+# then find a registration that points to a missing assembly. The non-zero exit makes the MSI roll back, so the
+# provider stays installed and working. The policy lists are restored first.
+#
+# The lists that contained the provider are recorded in the policy_membership value. On an MSI upgrade the new
+# version's Install.ps1 (run with -Upgrade right after this script) puts the provider back into the same lists,
+# so the upgrade keeps it enabled.
+if (-not (Get-Command Unregister-AdfsAuthenticationProvider -ErrorAction SilentlyContinue))
+{
+    Write-Warning "The AD FS cmdlets were not found, so the provider is not unregistered. Continuing with the cleanup."
+}
+else
+{
+    $membership = @()
+    try
+    {
+        # -ErrorAction Stop: if AD FS cannot be reached, do not mistake that for "not registered".
+        if (Get-AdfsAuthenticationProvider -Name $name -ErrorAction Stop -WarningAction SilentlyContinue)
+        {
+            $membership = Get-PolicyMembership
+            if ($membership.Count -gt 0 -and (Test-Path $configKeyPath))
+            {
+                Set-ItemProperty -Path $configKeyPath -Name 'policy_membership' -Value ($membership -join ',')
+            }
+            Set-PolicyMembership -Lists $membership -Add $false
+            Unregister-AdfsAuthenticationProvider -Name $name -Confirm:$false -ErrorAction Stop
+        }
+        else
+        {
+            Write-Host "The provider '$name' is not registered with AD FS. Continuing with the cleanup."
+        }
+    }
+    catch
+    {
+        $reason = $_
+        try
+        {
+            Set-PolicyMembership -Lists $membership -Add $true
+        }
+        catch
+        {
+            Write-Warning "Could not put the provider back into the global authentication policy lists ($($membership -join ', ')): $_"
+        }
+        Remove-ItemProperty -Path $configKeyPath -Name 'policy_membership' -ErrorAction SilentlyContinue
+        Write-Error ("Could not unregister the provider from AD FS: $reason The provider stays installed. Make sure " +
+            "that the AD FS service runs, remove the provider from every authentication policy that uses it, then " +
+            "run the uninstall again.")
+        exit 1
+    }
+}
+
+# From here on, AD FS no longer references the assembly. Each step is wrapped, so that one failure does not
+# abort the rest of the cleanup.
 try
 {
     [System.Reflection.Assembly]::LoadWithPartialName("System.EnterpriseServices") | Out-Null
@@ -72,12 +122,12 @@ catch
 # this script (the README's manual-uninstall path) otherwise leaves service_pass and api_key behind. On a
 # major upgrade this runs for the old version and the new install re-writes the values from its prefilled
 # properties, so the secrets are preserved across an upgrade while a real uninstall clears them.
+# policy_membership is kept on purpose: the new version's Install.ps1 reads it on an upgrade.
 try
 {
-    $configKey = 'HKLM:\SOFTWARE\Netknights GmbH\PrivacyIDEA-ADFS'
     foreach ($secret in 'service_pass', 'api_key')
     {
-        Remove-ItemProperty -Path $configKey -Name $secret -ErrorAction SilentlyContinue
+        Remove-ItemProperty -Path $configKeyPath -Name $secret -ErrorAction SilentlyContinue
     }
 }
 catch
