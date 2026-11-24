@@ -167,6 +167,54 @@ namespace Tests.IntegrationTests
         }
 
         [TestMethod]
+        public void ValidateCheckPasskey_RequestPersistentCookie_SendsApiKeyOriginAndParam_ParsesIssuedCookie()
+        {
+            // A passkey login can also ask for the cookie. The stub matches only when the API key (which the server
+            // needs to attribute the device), the Origin header (FIDO2) and the opt-in parameter are all sent.
+            _server.Given(
+                    Request.Create().WithPath("/validate/check").UsingPost()
+                        .WithHeader("X-API-Key", new ExactMatcher("secret-key"))
+                        .WithHeader("Origin", new ExactMatcher("https://sso.example.com"))
+                        .WithBody(b => b != null && b.Contains("request_persistent_cookie=1")
+                            && b.Contains("credential_id=cred") && b.Contains("transaction_id=44444444444444444444")))
+                .RespondWith(Response.Create().WithStatusCode(200)
+                    .WithHeader("Set-Cookie", "pi_remember_device=pk-series:1; Max-Age=1209600; Path=/; Secure; HttpOnly; SameSite=Strict")
+                    .WithBody(OtpAccept));
+
+            var pi = TestHelpers.PIPointedAt(_server);
+            pi.ApiKey = "secret-key";
+
+            PIResponse resp = pi.ValidateCheckPasskey("44444444444444444444",
+                "{\"credential_id\":\"cred\",\"authenticatorData\":\"ad\",\"clientDataJSON\":\"cd\",\"signature\":\"s\"}",
+                "https://sso.example.com", null, true, out PICookie issued);
+
+            Assert.IsNotNull(resp);
+            Assert.IsTrue(resp.isAuthenticationSuccessful());
+            Assert.IsNotNull(issued);
+            Assert.AreEqual("pk-series:1", issued.Value);
+        }
+
+        [TestMethod]
+        public void ValidateCheckWebAuthn_WithoutOptIn_DoesNotAskForCookie()
+        {
+            _server.Given(Request.Create().WithPath("/validate/check").UsingPost())
+                .RespondWith(Response.Create().WithStatusCode(200)
+                    .WithHeader("Set-Cookie", "pi_remember_device=unexpected:1; Max-Age=3600; Path=/")
+                    .WithBody(OtpAccept));
+
+            var pi = TestHelpers.PIPointedAt(_server);
+            pi.ApiKey = "secret-key";
+
+            PIResponse resp = pi.ValidateCheckWebAuthn("alice", "66666666666666666666",
+                "{\"credentialid\":\"c\",\"clientdata\":\"cd\",\"signaturedata\":\"s\",\"authenticatordata\":\"ad\"}",
+                "https://sso.example.com", null, false, out PICookie issued);
+
+            Assert.IsNotNull(resp);
+            Assert.IsNull(issued, "Without the opt-in, a Set-Cookie header is not taken as an issued cookie.");
+            Assert.IsFalse(_server.LogEntries.Single().RequestMessage.Body.Contains("request_persistent_cookie"));
+        }
+
+        [TestMethod]
         public void CheckRememberDevice_NonEmptyValue_NoMaxAge_IsTreatedAsClear()
         {
             // A non-empty cookie value with no Max-Age has no server-set lifetime. The client must treat it

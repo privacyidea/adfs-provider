@@ -164,6 +164,21 @@
 			<RegistrySearch Id="SearchOtpHint" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
 							Name="otp_hint" Win64="yes" Type="raw"/>
 		</Property>
+		<!-- forward_headers, tls_version and service_realm have no dialog field either. Without a search, the
+		     installer wrote them empty on every install and upgrade, so a value that an admin set in the registry
+		     was lost. On a fresh install the properties stay empty and the values are written empty, as before. -->
+		<Property Id="FORWARD_HEADERS">
+			<RegistrySearch Id="SearchForwardHeaders" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+							Name="forward_headers" Win64="yes" Type="raw"/>
+		</Property>
+		<Property Id="TLS_VERSION">
+			<RegistrySearch Id="SearchTlsVersion" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+							Name="tls_version" Win64="yes" Type="raw"/>
+		</Property>
+		<Property Id="SERVICE_REALM">
+			<RegistrySearch Id="SearchServiceRealm" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
+							Name="service_realm" Win64="yes" Type="raw"/>
+		</Property>
 		<Property Id="ENABLEREMEMBERDEVICE">
 			<RegistrySearch Id="SearchEnableRememberDevice" Root="HKLM" Key="SOFTWARE\$(var.Publisher)\$(var.SimpleProductName)"
 							Name="enable_remember_device" Win64="yes" Type="raw"/>
@@ -242,11 +257,11 @@
 					<RegistryValue Name='realm'						Type='string' Value='[REALM]'/>
 					<RegistryValue Name='service_user'				Type='string' Value='[SERVICEUSER]'/>
 					<RegistryValue Name='service_pass'				Type='string' Value='[SERVICEPASS]'/>
-					<RegistryValue Name='service_realm'				Type='string' Value=''/>
+					<RegistryValue Name='service_realm'				Type='string' Value='[SERVICE_REALM]'/>
 					<RegistryValue Name='debug_log'					Type='string' Value='[DEBUGLOG]'/>
 					<RegistryValue Name='otp_hint'					Type='string' Value='[OTP_HINT]'/>
-					<RegistryValue Name='tls_version'				Type='string' Value=''/>
-					<RegistryValue Name='forward_headers'			Type='string' Value=''/>
+					<RegistryValue Name='tls_version'				Type='string' Value='[TLS_VERSION]'/>
+					<RegistryValue Name='forward_headers'			Type='string' Value='[FORWARD_HEADERS]'/>
 					<RegistryValue Name='auto_submit_otp_length'    Type='string' Value='[AUTO_SUBMIT_OTP_LENGTH]'/>
 					<RegistryValue Name='enable_remember_device'	Type='string' Value='[ENABLEREMEMBERDEVICE]'/>
 					<RegistryValue Name='api_key'					Type='string' Value='[APIKEY]'/>

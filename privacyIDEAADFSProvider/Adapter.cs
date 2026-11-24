@@ -331,7 +331,9 @@ namespace privacyIDEAADFSProvider
 
             // The user ticked "remember this device". The page JS copies the checkbox into formResult; a
             // no-JavaScript client posts a plain rememberDevice field. Honour it only when the server offers
-            // the feature. When set, the final validate/check below asks the server to issue a device cookie.
+            // the feature. When set, the final validate/check below asks the server to issue a device cookie,
+            // for every kind of login that can finish here: one-time password, push, WebAuthn, passkey, and a
+            // passkey registration (enroll_via_multichallenge).
             bool wantRemember = _rememberDeviceEnabled
                 && (fr.RememberDevice || GetString(proofDict, "rememberDevice") == "1");
             // Keep the box ticked on every form that this request renders again: a push poll that is not
@@ -381,7 +383,8 @@ namespace privacyIDEAADFSProvider
                 }
                 else
                 {
-                    response = _privacyIDEA.ValidateCheckPasskey(passkeyTransactionid, fr.PasskeySignResponse, fr.Origin, context);
+                    response = _privacyIDEA.ValidateCheckPasskey(passkeyTransactionid, fr.PasskeySignResponse, fr.Origin, context,
+                        wantRemember, out issuedCookie);
                 }
             }
             // Passkey Registration (enroll_via_multichallenge)
@@ -397,7 +400,7 @@ namespace privacyIDEAADFSProvider
                 else
                 {
                     response = _privacyIDEA.ValidateCheckCompletePasskeyRegistration(transactionid, serial, user,
-                        fr.PasskeyRegistrationResponse, fr.Origin, context);
+                        fr.PasskeyRegistrationResponse, fr.Origin, context, wantRemember, out issuedCookie);
                 }
             }
             else if (mode == PITokenType.Push)
@@ -428,7 +431,8 @@ namespace privacyIDEAADFSProvider
                 }
                 else
                 {
-                    response = _privacyIDEA.ValidateCheckWebAuthn(user, transactionid, fr.WebAuthnSignResponse, fr.Origin, context);
+                    response = _privacyIDEA.ValidateCheckWebAuthn(user, transactionid, fr.WebAuthnSignResponse, fr.Origin, context,
+                        wantRemember, out issuedCookie);
                 }
             }
             else

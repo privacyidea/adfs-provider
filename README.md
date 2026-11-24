@@ -69,7 +69,8 @@ Security notes:
 * **Do not enable this when the provider is the _primary_ authentication method.** Recognition skips the factor this provider contributes. As an additional (MFA) provider it is the second factor, and AD FS already enforced the first factor before calling it. As the primary provider it is the only factor, so a recognised device would log in on the cookie alone.
 * The cookie is a rotating token. Each use issues a new value, and a replayed old value is treated as theft, which revokes the user's remembered devices on the server.
 * The cookie is `Secure` and `SameSite=Lax` (see the next section for why not `Strict`), but **not** `HttpOnly`. An AD FS adapter cannot set a response header, so the sign-in page sets the cookie with JavaScript, which cannot set `HttpOnly`. A cross-site-scripting flaw on the sign-in page could therefore read it. The rotating-token scheme limits the value of a stolen cookie.
-* WebAuthn and passkey logins do not issue the cookie. It is offered for one-time-password and push logins.
+
+The checkbox works for every login that finishes in the provider: one-time password, push, WebAuthn, passkey, and a passkey registration. The page reads the checkbox when it sends the result, so the box must be ticked before the WebAuthn or passkey prompt completes. If the server prefers WebAuthn, the prompt starts as soon as the page loads. To remember the device in that case, cancel the prompt, tick the box, and select **WebAuthn** again. For a passkey, tick the box before you select **Passkey** or **Retry Passkey Login**.
 
 #### Why the cookie is `SameSite=Lax`, not `Strict`
 The provider reads the device cookie only when AD FS asks for the second factor. In many sign-ins, that request is part of a navigation that started on another site:

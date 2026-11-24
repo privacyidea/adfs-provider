@@ -344,8 +344,17 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// Authenticate at /validate/check using a WebAuthn assertion.
         /// </summary>
         public PIResponse ValidateCheckWebAuthn(string user, string transactionid, string webAuthnSignResponse, string origin,
-            PIRequestContext context = null)
+            PIRequestContext context = null) =>
+            ValidateCheckWebAuthn(user, transactionid, webAuthnSignResponse, origin, context, false, out _);
+
+        /// <summary>
+        /// Authenticate at /validate/check using a WebAuthn assertion. With <paramref name="requestPersistentCookie"/>,
+        /// also ask the server to issue a "remember device" cookie, like <see cref="ValidateCheckRemember"/>.
+        /// </summary>
+        public PIResponse ValidateCheckWebAuthn(string user, string transactionid, string webAuthnSignResponse, string origin,
+            PIRequestContext context, bool requestPersistentCookie, out PICookie issuedCookie)
         {
+            issuedCookie = null;
             if (string.IsNullOrEmpty(user) || string.IsNullOrEmpty(transactionid) || string.IsNullOrEmpty(webAuthnSignResponse)
                 || string.IsNullOrEmpty(origin))
             {
@@ -359,29 +368,52 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                 { "user", user },
                 { "pass", "" }
             };
-            return FIDO2AuthenticationRequest(parameters, transactionid, webAuthnSignResponse, origin, context);
+            return FIDO2AuthenticationRequest(parameters, transactionid, webAuthnSignResponse, origin, context,
+                requestPersistentCookie, out issuedCookie);
         }
 
         /// <summary>
         /// Authenticate at /validate/check using a Passkey. Requires prior triggering of a challenge via ValidateInitialize.
         /// </summary>
-        public PIResponse ValidateCheckPasskey(string transactionid, string assertionResponse, string origin, PIRequestContext context = null)
+        public PIResponse ValidateCheckPasskey(string transactionid, string assertionResponse, string origin, PIRequestContext context = null) =>
+            ValidateCheckPasskey(transactionid, assertionResponse, origin, context, false, out _);
+
+        /// <summary>
+        /// Authenticate at /validate/check using a Passkey. With <paramref name="requestPersistentCookie"/>, also ask
+        /// the server to issue a "remember device" cookie, like <see cref="ValidateCheckRemember"/>. The server binds
+        /// the cookie to the owner of the passkey.
+        /// </summary>
+        public PIResponse ValidateCheckPasskey(string transactionid, string assertionResponse, string origin,
+            PIRequestContext context, bool requestPersistentCookie, out PICookie issuedCookie)
         {
+            issuedCookie = null;
             if (string.IsNullOrEmpty(transactionid) || string.IsNullOrEmpty(assertionResponse) || string.IsNullOrEmpty(origin))
             {
                 Log("ValidateCheckPasskey called with missing parameter: transactionid=" + transactionid
                     + ", assertionResponse=" + assertionResponse + ", origin=" + origin);
                 return null;
             }
-            return FIDO2AuthenticationRequest(new Dictionary<string, string>(), transactionid, assertionResponse, origin, context);
+            return FIDO2AuthenticationRequest(new Dictionary<string, string>(), transactionid, assertionResponse, origin, context,
+                requestPersistentCookie, out issuedCookie);
         }
 
         /// <summary>
         /// Completes the passkey registration at the /validate/check endpoint.
         /// </summary>
         public PIResponse ValidateCheckCompletePasskeyRegistration(string transactionid, string serial, string username,
-            string attestationResponse, string origin, PIRequestContext context = null)
+            string attestationResponse, string origin, PIRequestContext context = null) =>
+            ValidateCheckCompletePasskeyRegistration(transactionid, serial, username, attestationResponse, origin, context,
+                false, out _);
+
+        /// <summary>
+        /// Completes the passkey registration at the /validate/check endpoint. The registration finishes the login, so
+        /// with <paramref name="requestPersistentCookie"/> the server can also issue a "remember device" cookie.
+        /// </summary>
+        public PIResponse ValidateCheckCompletePasskeyRegistration(string transactionid, string serial, string username,
+            string attestationResponse, string origin, PIRequestContext context, bool requestPersistentCookie,
+            out PICookie issuedCookie)
         {
+            issuedCookie = null;
             if (string.IsNullOrEmpty(transactionid) || string.IsNullOrEmpty(serial) || string.IsNullOrEmpty(username)
                 || string.IsNullOrEmpty(attestationResponse) || string.IsNullOrEmpty(origin))
             {
@@ -407,9 +439,18 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                     map.Add(entry.Key, entry.Value);
                 }
             }
+            if (requestPersistentCookie)
+            {
+                map.Add("request_persistent_cookie", "1");
+            }
 
             var parameters = BuildParameters(map, context);
-            string response = SendRequest("/validate/check", parameters, HeadersWithOrigin(origin, context));
+            string response = SendRequestCore("/validate/check", parameters, HeadersWithOrigin(origin, context), "POST", null,
+                out string[] setCookie);
+            if (requestPersistentCookie)
+            {
+                issuedCookie = ParseSetCookie(setCookie);
+            }
             return PIResponse.FromJSON(response, this);
         }
 
@@ -417,10 +458,14 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// Builds the /validate/check call shared by ValidateCheckWebAuthn and ValidateCheckPasskey:
         /// merges the parsed assertion fields into the request body, sets the transaction id, applies the
         /// context's realm and custom parameters, and attaches the Origin header (required by FIDO2).
+        /// With <paramref name="requestPersistentCookie"/>, it adds request_persistent_cookie=1 and parses the
+        /// remember-device cookie from the Set-Cookie header of the response.
         /// </summary>
         private PIResponse FIDO2AuthenticationRequest(Dictionary<string, string> parameters, string transactionid,
-            string assertionResponse, string origin, PIRequestContext context)
+            string assertionResponse, string origin, PIRequestContext context, bool requestPersistentCookie,
+            out PICookie issuedCookie)
         {
+            issuedCookie = null;
             var parsed = ParseFIDO2AssertionResponse(assertionResponse);
             if (parsed == null)
             {
@@ -431,11 +476,20 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                 parameters.Add(entry.Key, entry.Value);
             }
             parameters.Add("transaction_id", transactionid);
+            if (requestPersistentCookie)
+            {
+                parameters.Add("request_persistent_cookie", "1");
+            }
 
             AddRealmForDomain(context?.Domain, parameters);
             AddCustomParameters(context?.CustomParameters, parameters);
 
-            string response = SendRequest("/validate/check", parameters, HeadersWithOrigin(origin, context));
+            string response = SendRequestCore("/validate/check", parameters, HeadersWithOrigin(origin, context), "POST", null,
+                out string[] setCookie);
+            if (requestPersistentCookie)
+            {
+                issuedCookie = ParseSetCookie(setCookie);
+            }
             return PIResponse.FromJSON(response, this);
         }
 
