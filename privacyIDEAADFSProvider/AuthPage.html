@@ -16,30 +16,32 @@
         background-color: rgb(120, 120, 120);
     }
 </style>
-<div id="loginArea" data-mode="#mode#" data-push-available="#pushAvailable#" data-disable-otp="#disableOTP#">
-    <!-- No-JavaScript fallback. The <noscript> content is applied ONLY when scripting is disabled, so it
-         never affects the normal JS path. One-time-password entry works without JavaScript: the server
-         treats an empty formResult as a plain OTP submit. These rules hide the controls that only work with
-         JavaScript (WebAuthn, Passkey, mode switch, copy-to-clipboard) and reveal the enrollment block that
-         the page JS would otherwise un-hide. Push has no auto-poll without JavaScript, so in push mode the
-         OTP input is hidden and a manual "I confirmed on my device" button is shown: each click re-posts the
-         form, which polls the transaction once. -->
+<div id="loginArea" class="pi-no-js" data-mode="#mode#" data-push-available="#pushAvailable#" data-disable-otp="#disableOTP#">
+    <!-- Fallback for clients where the page script does not run to the end: scripting is disabled, or the
+         engine cannot parse or run the script. The pi-no-js class on #loginArea switches these rules on. The
+         script removes the class as the last step of its setup, so with a working script they never apply.
+         (A <noscript> block would cover only "scripting disabled", not a script that fails.)
+         One-time-password entry works without JavaScript: the server treats an empty formResult as a plain OTP
+         submit. These rules hide the controls that only work with JavaScript (WebAuthn, passkey, mode switch,
+         copy-to-clipboard, skip enrollment) and reveal the enrollment block that the script would otherwise
+         un-hide. Push has no auto-poll without JavaScript, so in push mode the OTP input is hidden and a manual
+         "I confirmed on my device" button is shown: each click re-posts the form, which polls the transaction
+         once. The remember-device checkbox is not revealed: only JavaScript can store its cookie. -->
+    <style>
+        #loginArea.pi-no-js .pi-js-only { display: none !important; }
+        #loginArea.pi-no-js #enrollmentBlock[data-enrollment-mode="image"] .enrollment-image,
+        #loginArea.pi-no-js #enrollmentBlock[data-enrollment-mode="legacy"] .enrollment-legacy { display: block !important; }
+        /* The script removes the enrollment link when there is none. Without the script, hide an empty one. */
+        #loginArea.pi-no-js .enrollment-link[href=""] { display: none !important; }
+        #loginArea.pi-no-js[data-mode="push"] #otp,
+        #loginArea.pi-no-js[data-mode="push"] #submitButton { display: none !important; }
+        #loginArea.pi-no-js[data-mode="push"] #pushConfirmButtonNoJs { display: inline-block !important; }
+        /* Token-type switch without JavaScript: offer OTP while in push mode (unless OTP is disabled), and offer
+           push in every other mode (OTP, WebAuthn, an enrollment type) when a push token is available. */
+        #loginArea.pi-no-js[data-mode="push"]:not([data-disable-otp="1"]) #noJsSwitchToOtp { display: inline-block !important; }
+        #loginArea.pi-no-js:not([data-mode="push"])[data-push-available="1"] #noJsSwitchToPush { display: inline-block !important; }
+    </style>
     <noscript>
-        <style>
-            .pi-js-only { display: none !important; }
-            #enrollmentBlock[data-enrollment-mode="image"] .enrollment-image,
-            #enrollmentBlock[data-enrollment-mode="legacy"] .enrollment-legacy { display: block !important; }
-            #loginArea[data-mode="push"] #otp,
-            #loginArea[data-mode="push"] #submitButton { display: none !important; }
-            #loginArea[data-mode="push"] #pushConfirmButtonNoJs { display: inline-block !important; }
-            /* Token-type switch without JavaScript: offer OTP while in push mode (unless OTP is disabled),
-               and offer push while in OTP mode when a push token is available. */
-            #loginArea[data-mode="push"]:not([data-disable-otp="1"]) #noJsSwitchToOtp { display: inline-block !important; }
-            #loginArea[data-mode="otp"][data-push-available="1"] #noJsSwitchToPush { display: inline-block !important; }
-            /* The remember-device checkbox is intentionally not revealed without JavaScript. The cookie that
-               remembers the device is set only by JavaScript, so the feature cannot work without it. The
-               checkbox keeps its default hidden state when scripting is off, so it is never offered. */
-        </style>
         <p>JavaScript is disabled. Enter your one-time password and select Submit, or for push confirm on your
            device and select the button. Use the token-type buttons to switch between one-time password and
            push. Security key and passkey options need JavaScript and are hidden.</p>
@@ -106,7 +108,7 @@
              the page JS and the noscript rule un-hide it then. Posts a plain rememberDevice field (value 1
              when checked); the JS path also copies it into formResult. -->
         <div id="rememberDeviceDiv" data-enabled="#rememberDeviceEnabled#" style="display:none">
-            <label><input id="rememberDevice" name="rememberDevice" type="checkbox" value="1" /> Remember this device</label>
+            <label><input id="rememberDevice" name="rememberDevice" type="checkbox" value="1" #rememberDeviceChecked# /> Remember this device</label>
         </div>
 
         <!-- Carriers for the device cookie, read by the JS below (no name, so they are not posted back). -->
@@ -195,12 +197,20 @@
             };
 
             // Remember-device cookie handling. The adapter cannot set a response cookie from an AD FS
-            // adapter, so the cookie is managed here. It is Secure + SameSite=Strict; it is not HttpOnly,
-            // because only JavaScript can set it. The value is the opaque series:counter token.
+            // adapter, so the cookie is managed here. The value is the opaque series:counter token.
+            // - Secure: sent only over https.
+            // - Not HttpOnly: only JavaScript can set it here, and JavaScript cannot set HttpOnly.
+            // - SameSite=Lax, not Strict: the provider reads the cookie only when AD FS asks for the second
+            //   factor (BeginAuthentication). That request is often part of a navigation that started on
+            //   another site, for example a redirect from login.microsoftonline.com or a relying party, with
+            //   Windows Integrated Authentication or an AD FS SSO session as the first factor. Browsers do not
+            //   send a Strict cookie on such a navigation, so the device would never be recognized there. Lax
+            //   cookies are sent on top-level navigations from other sites, but not on cross-site POSTs or
+            //   embedded requests. README.md ("Remember this device") explains the trade-off.
             (function () {
                 // Internet Explorer ignores max-age, so each cookie also carries the equivalent expires date.
                 // Browsers that support max-age use it and ignore expires.
-                var deleteCookie = "pi_remember_device=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; secure; samesite=strict";
+                var deleteCookie = "pi_remember_device=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; secure; samesite=lax";
                 var clear = document.querySelector("#deviceCookieClear");
                 if (clear && clear.value === "1") {
                     document.cookie = deleteCookie;
@@ -212,7 +222,7 @@
                     if (isFinite(maxAge) && maxAge > 0) {
                         var expires = new Date(new Date().getTime() + maxAge * 1000).toUTCString();
                         document.cookie = "pi_remember_device=" + cv.value + "; path=/; max-age=" + maxAge +
-                            "; expires=" + expires + "; secure; samesite=strict";
+                            "; expires=" + expires + "; secure; samesite=lax";
                     } else {
                         // No usable Max-Age from the server. Do not invent a lifetime for a security token.
                         // Remove any existing cookie instead of storing one that cannot be aged correctly.
@@ -327,6 +337,14 @@
             }
 
             setLoginOptionsVisibility();
+
+            // The setup above ran to the end: switch off the fallback rules (pi-no-js, see the top of this
+            // file). Keep this the last statement of the setup, so that a script that fails earlier leaves the
+            // fallback in place.
+            var loginAreaElement = document.getElementById("loginArea");
+            if (loginAreaElement) {
+                loginAreaElement.className = loginAreaElement.className.replace(/(^|\s)pi-no-js(\s|$)/, " ");
+            }
 
             function doWebAuthn() {
                 // changeMode() re-renders/submits the form, so return immediately after calling it —

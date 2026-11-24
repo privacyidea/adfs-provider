@@ -220,7 +220,10 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             {
                 return false;
             }
-            string response = SendRequest("/validate/capabilities", new Dictionary<string, string>(), null, "GET");
+            // Short timeout: this call runs at provider load and, while the capability is off, during a sign-in.
+            // Without it, an unreachable server that drops packets holds the caller for the 100 s default.
+            string response = SendRequestCore("/validate/capabilities", new Dictionary<string, string>(), null, "GET",
+                null, out _, CapabilityTimeoutMs);
             if (string.IsNullOrEmpty(response))
             {
                 return false;
@@ -647,8 +650,11 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// to present a remember-device cookie), and <paramref name="setCookie"/> returns the raw Set-Cookie
         /// response header(s) so the caller can relay an issued or rotated cookie back to the browser.
         /// </summary>
+        private const int CapabilityTimeoutMs = 5000;
+
         private string SendRequestCore(string endpoint, Dictionary<string, string> parameters,
-            List<KeyValuePair<string, string>> headers, string method, string cookieToSend, out string[] setCookie)
+            List<KeyValuePair<string, string>> headers, string method, string cookieToSend, out string[] setCookie,
+            int timeoutMs = 0)
         {
             setCookie = null;
             // Guard the string-building: ParametersForLog allocates and iterates every parameter, and this
@@ -675,6 +681,11 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
 
             request.Method = method;
             request.UserAgent = _userAgent;
+            if (timeoutMs > 0)
+            {
+                request.Timeout = timeoutMs;
+                request.ReadWriteTimeout = timeoutMs;
+            }
             if (!_sslVerify)
             {
                 request.ServerCertificateValidationCallback = (s, c, ch, errs) => true;

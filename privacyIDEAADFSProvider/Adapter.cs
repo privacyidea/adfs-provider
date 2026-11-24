@@ -11,6 +11,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Security.Principal;
+using System.Threading;
 using Claim = System.Security.Claims.Claim;
 
 namespace privacyIDEAADFSProvider
@@ -22,9 +23,15 @@ namespace privacyIDEAADFSProvider
         private PrivacyIDEA _privacyIDEA;
         private Configuration _config;
         private bool _debugLog = false;
-        // Whether the server offers "remember device" to this client (cached at pipeline load). Gates the
-        // checkbox and the recognition attempt. The server still enforces its policy per user.
-        private bool _rememberDeviceEnabled = false;
+        // Whether the server offers "remember device" to this client. Gates the checkbox and the recognition
+        // attempt. The server still enforces its policy per user. volatile: concurrent sign-ins read it while a
+        // capability check (RefreshRememberDeviceCapability) can update it.
+        private volatile bool _rememberDeviceEnabled = false;
+        // True when the plugin switch and an api_key are set, so the server capability is worth asking for.
+        private bool _rememberDeviceConfigured = false;
+        // UTC ticks after which a sign-in asks the server again while the capability is off.
+        private long _capabilityCheckDueTicks = 0;
+        private static readonly TimeSpan s_capabilityRetryInterval = TimeSpan.FromMinutes(5);
         private AdapterMetadata _metadata;
 
         public IAuthenticationAdapterMetadata Metadata =>
@@ -62,6 +69,10 @@ namespace privacyIDEAADFSProvider
                 Headers = GetHeadersToForward(request),
                 CustomParameters = CollectCustomParams(request),
             };
+
+            // If the server did not offer remember-device so far (for example because it was not reachable when
+            // AD FS started), ask again now and then, so the feature turns on without an AD FS restart.
+            RefreshRememberDeviceCapability();
 
             // Remember-device recognition: if the browser presents a device cookie bound to this user, skip
             // the second factor. Runs before any challenge is triggered. The result is decided server-side;
@@ -323,6 +334,10 @@ namespace privacyIDEAADFSProvider
             // the feature. When set, the final validate/check below asks the server to issue a device cookie.
             bool wantRemember = _rememberDeviceEnabled
                 && (fr.RememberDevice || GetString(proofDict, "rememberDevice") == "1");
+            // Keep the box ticked on every form that this request renders again: a push poll that is not
+            // confirmed yet, a wrong one-time password, a mode switch. Otherwise the tick is lost, and the
+            // request that finally succeeds (for push, the poll that sees the confirmation) asks for no cookie.
+            form.RememberDeviceChecked = wantRemember;
             PICookie issuedCookie = null;
 
             // Optional enroll-via-multichallenge: user clicked "Not Now"
@@ -690,19 +705,21 @@ namespace privacyIDEAADFSProvider
             if (_config.EnableRememberDevice && !string.IsNullOrEmpty(_config.ApiKey))
             {
                 _privacyIDEA.ApiKey = _config.ApiKey;
+                _rememberDeviceConfigured = true;
                 // Cache whether the server offers remember-device to this client. It is a UX hint (whether
                 // to show the checkbox and attempt recognition); the server still enforces its policy per
-                // user. A failure here must never abort provider load, so default to off.
-                try
+                // user. While the answer is "off", sign-ins ask again at most once per retry interval
+                // (RefreshRememberDeviceCapability), so an unreachable server at AD FS start does not keep the
+                // feature off until the next restart.
+                QueryRememberDeviceCapability();
+                if (!_rememberDeviceEnabled)
                 {
-                    _rememberDeviceEnabled = _privacyIDEA.GetRememberDeviceCapability();
-                    Log("Remember-device capability from the server: " + _rememberDeviceEnabled);
+                    EventWarn("Remember-device is configured (enable_remember_device=1 and an api_key), but the " +
+                        "privacyIDEA server does not offer it, or the server could not be reached. Check the " +
+                        "remember_device policy on the server. The provider asks the server again every " +
+                        s_capabilityRetryInterval.TotalMinutes + " minutes, on the next sign-in.");
                 }
-                catch (Exception e)
-                {
-                    Error("Could not query the remember-device capability: " + e.Message);
-                    _rememberDeviceEnabled = false;
-                }
+                Interlocked.Exchange(ref _capabilityCheckDueTicks, DateTime.UtcNow.Add(s_capabilityRetryInterval).Ticks);
             }
             else if (!_config.EnableRememberDevice && !string.IsNullOrEmpty(_config.ApiKey))
             {
@@ -713,6 +730,44 @@ namespace privacyIDEAADFSProvider
         public void OnAuthenticationPipelineUnload()
         {
             _privacyIDEA?.Dispose();
+        }
+
+        // Asks the server whether it offers remember-device to this client and caches the answer. A failure
+        // must never abort the provider load or a sign-in, so it counts as "off".
+        private void QueryRememberDeviceCapability()
+        {
+            bool enabled = false;
+            try
+            {
+                enabled = _privacyIDEA.GetRememberDeviceCapability();
+            }
+            catch (Exception e)
+            {
+                Error("Could not query the remember-device capability: " + e.Message);
+            }
+            _rememberDeviceEnabled = enabled;
+            Log("Remember-device capability from the server: " + enabled);
+        }
+
+        // While the capability is off, asks the server again at most once per retry interval. Concurrent
+        // sign-ins claim the check with a compare-and-swap on the due time, so only one of them asks.
+        private void RefreshRememberDeviceCapability()
+        {
+            if (!_rememberDeviceConfigured || _rememberDeviceEnabled || _privacyIDEA == null)
+            {
+                return;
+            }
+            long now = DateTime.UtcNow.Ticks;
+            long due = Interlocked.Read(ref _capabilityCheckDueTicks);
+            if (now < due)
+            {
+                return;
+            }
+            if (Interlocked.CompareExchange(ref _capabilityCheckDueTicks, now + s_capabilityRetryInterval.Ticks, due) != due)
+            {
+                return;
+            }
+            QueryRememberDeviceCapability();
         }
 
         public IAdapterPresentation OnError(HttpListenerRequest request, ExternalAuthenticationException ex)
@@ -802,9 +857,9 @@ namespace privacyIDEAADFSProvider
         private List<KeyValuePair<string, string>> GetHeadersToForward(HttpListenerRequest request)
         {
             List<KeyValuePair<string, string>> headersToForward = new List<KeyValuePair<string, string>>();
-            // Nothing configured to forward: return without reading request. This is the common case (no
-            // forward_headers set), and it means request is only dereferenced when there is a header to read.
-            if (_config.ForwardHeaders == null || _config.ForwardHeaders.Count == 0)
+            // In production the list is never empty: Configuration always adds Accept-Language. The request is
+            // null only in unit tests, and ForwardHeaders is null only with an uninitialized Configuration.
+            if (request == null || _config.ForwardHeaders == null || _config.ForwardHeaders.Count == 0)
             {
                 return headersToForward;
             }
