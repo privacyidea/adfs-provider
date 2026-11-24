@@ -36,7 +36,7 @@ DPAPI encryption is bound to the machine, so an encrypted value cannot be decryp
 | forward_headers | If you want to forward specific headers to the privacyIDEA server, you can set them here. If the header does not exist or has no value, it will be ignored. The headers names should be separated with ','. |
 | ~~preferred_token_type~~ | ~~Set the token type for which the UI should be first shown. This only matters if such token was triggered before. Possible values are `otp`, `push` or `webauthn`. The default is OTP mode.~~ **!!! This feature has been removed in v1.3.0 in favor of the preferred_client_mode policy in the privacyIDEA Server. !!!** |
 | auto_submit_otp_length | Set an OTP digit count for which to automatically submit the form. Off by default. A form that submits itself while the user types fails the accessibility criterion WCAG 3.2.2 (On Input) and can surprise users. In privacyIDEA the field often holds the token PIN followed by the OTP, so a fixed length can also submit too early. |
-| push_poll_interval | The number of seconds between two push checks of the login page, a whole number from 1 to 3600. The default is 3. Each check sends one request to AD FS and one to privacyIDEA for every user who waits for a push, so a small value adds load. See [Push login](#push-login). |
+| push_poll_interval | The number of seconds between two push checks of the login page, a whole number from 1 to 60. The default is 3. Each check sends one request to AD FS and one to privacyIDEA for every user who waits for a push, so a small value adds load. See [Push login](#push-login). |
 | disable_passkey | Disable the "Passkey Login" button |
 | otp_hint | The hint that is shown in the input field. If the server sends no challenge message, the field also shows it as its label. The default is "One-Time-Password" in the language of the login page. A value that you set here is not translated. |
 | forward_client_ip | Set to `1` to forward the client IP to privacyIDEA (as the `client` parameter), so server-side policies can use it. See the security note below on `trusted_proxies`. |
@@ -102,8 +102,8 @@ AD FS calls the provider only when the login page posts its form. So the page ca
 * The page checks every `push_poll_interval` seconds, 3 by default.
 * After each check, the keyboard focus goes back to the control that had it, so a keyboard user can continue to another login option.
 * The user can select **Stop automatic check**. The page then shows **I confirmed on my device**, which checks once per press.
-* The page stops the automatic checks by itself after 5 minutes. An expired push never becomes confirmed, and an abandoned page would otherwise post forever.
-* If the user declines the push on the device, or cancels it, the page says so and stops checking. The other login options stay available. This needs privacyIDEA 3.10 or later for a declined push, and 3.14 or later for a cancelled push. With an older server the page keeps checking until the time limit.
+* The page stops the automatic checks by itself 5 minutes after the first check. An expired push never becomes confirmed, and an abandoned page would otherwise post forever.
+* If the user declines the push on the device, or cancels it, the page says so and stops checking. The other login options stay available. If the user has push tokens on more than one device, the page keeps checking after a decline, because the user can still confirm on another device. This needs privacyIDEA 3.10 or later for a declined push, and 3.14 or later for a cancelled push. With an older server the page keeps checking until the time limit.
 
 ## Client JavaScript requirements
 The login page uses JavaScript for the modern token types and for convenience features. One-time-password and push login do not need it.

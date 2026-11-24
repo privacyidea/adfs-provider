@@ -33,6 +33,7 @@ namespace PrivacyIDEAADFSProvider
         public const string PushDeclined = "PushDeclined";
         public const string PushCancelled = "PushCancelled";
         public const string RegistrationCancelled = "RegistrationCancelled";
+        public const string PushRefusedOnOneDevice = "PushRefusedOnOneDevice";
         public const string UseOtp = "UseOtp";
         public const string UsePush = "UsePush";
         public const string RememberDevice = "RememberDevice";
@@ -86,6 +87,8 @@ namespace PrivacyIDEAADFSProvider
                     [PushDeclined] = "The login request was declined on your device. Use another login option, or sign in again.",
                     [PushCancelled] = "The login request was cancelled on your device. Use another login option, or sign in again.",
                     [RegistrationCancelled] = "The registration was cancelled on your device.",
+                    [PushRefusedOnOneDevice] = "The login request was declined on one of your devices. You can still " +
+                        "confirm it on another device.",
                     [UseOtp] = "Use one-time password",
                     [UsePush] = "Use push",
                     [RememberDevice] = "Remember this device",
@@ -137,6 +140,8 @@ namespace PrivacyIDEAADFSProvider
                     [PushCancelled] = "Die Anmeldeanfrage wurde auf Ihrem Gerät abgebrochen. Verwenden Sie eine andere " +
                         "Anmeldeoption oder melden Sie sich erneut an.",
                     [RegistrationCancelled] = "Die Registrierung wurde auf Ihrem Gerät abgebrochen.",
+                    [PushRefusedOnOneDevice] = "Die Anmeldeanfrage wurde auf einem Ihrer Geräte abgelehnt. Sie können " +
+                        "sie noch auf einem anderen Gerät bestätigen.",
                     [UseOtp] = "Einmalpasswort verwenden",
                     [UsePush] = "Push verwenden",
                     [RememberDevice] = "Dieses Gerät merken",
@@ -194,6 +199,8 @@ namespace PrivacyIDEAADFSProvider
                     [PushCancelled] = "La demande de connexion a été annulée sur votre appareil. Utilisez une autre option " +
                         "de connexion ou reconnectez-vous.",
                     [RegistrationCancelled] = "L'enregistrement a été annulé sur votre appareil.",
+                    [PushRefusedOnOneDevice] = "La demande de connexion a été refusée sur l'un de vos appareils. Vous " +
+                        "pouvez encore la confirmer sur un autre appareil.",
                     [UseOtp] = "Utiliser un mot de passe à usage unique",
                     [UsePush] = "Utiliser Push",
                     [RememberDevice] = "Mémoriser cet appareil",

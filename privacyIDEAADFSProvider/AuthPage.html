@@ -305,7 +305,12 @@
                 removeElement(enrollmentBlock);
             }
 
-            if (value("autoSubmit") === "1") {
+            // The page that only stores a remember-device cookie, or that finishes a recognised device, posts itself
+            // at once. The adapter keeps the mode and the challenge data of the login on it. The setup below must
+            // then start no prompt and no push check: a WebAuthn or passkey prompt would open again, and a push
+            // check could send the form a second time.
+            var autoSubmitting = value("autoSubmit") === "1";
+            if (autoSubmitting) {
                 submitForm();
             }
 
@@ -326,7 +331,7 @@
 
             if (value("passkeyChallenge") != "") {
                 disable("passkeyLoginButton");
-                if (webAuthnSupported) {
+                if (webAuthnSupported && !autoSubmitting) {
                     enable("retryPasskeyLogin");
                     passkeyAuthentication();
                 }
@@ -338,7 +343,7 @@
                 disable("submitButton");
                 disable("otp");
 
-                if (webAuthnSupported) {
+                if (webAuthnSupported && !autoSubmitting) {
                     enable("retryPasskeyRegistration");
                     registerPasskey();
                 }
@@ -365,7 +370,9 @@
                     disable("otp");
                     disable("usePushButton");
                     disable("submitButton");
-                    startPushPolling();
+                    if (!autoSubmitting) {
+                        startPushPolling();
+                    }
                     break;
                 case MODE.OTP:
                     disable("useOTPButton");
@@ -373,7 +380,9 @@
                 case MODE.WEBAUTHN:
                     disable("otp");
                     disable("submitButton");
-                    doWebAuthn();
+                    if (!autoSubmitting) {
+                        doWebAuthn();
+                    }
                     break;
             }
 

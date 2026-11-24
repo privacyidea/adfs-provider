@@ -406,6 +406,18 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// the cookie to the owner of the passkey.
         /// </summary>
         public PIResponse ValidateCheckPasskey(string transactionid, string assertionResponse, string origin,
+            PIRequestContext context, bool requestPersistentCookie, out PICookie issuedCookie) =>
+            ValidateCheckPasskey(null, transactionid, assertionResponse, origin, context, requestPersistentCookie,
+                out issuedCookie);
+
+        /// <summary>
+        /// Like the overload above, but names the user who signs in. From privacyIDEA 3.14 on, the server then
+        /// rejects a passkey of another user before anything else, so it also issues no "remember device" cookie
+        /// for that other user. Up to 3.13 the server ignores the name and authenticates the owner of the passkey,
+        /// so the caller must still compare the user in the response. Without a user (null or empty), the request
+        /// is a usernameless passkey login.
+        /// </summary>
+        public PIResponse ValidateCheckPasskey(string user, string transactionid, string assertionResponse, string origin,
             PIRequestContext context, bool requestPersistentCookie, out PICookie issuedCookie)
         {
             issuedCookie = null;
@@ -415,7 +427,12 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                     + ", assertionResponse=" + assertionResponse + ", origin=" + origin);
                 return null;
             }
-            return FIDO2AuthenticationRequest(new Dictionary<string, string>(), transactionid, assertionResponse, origin, context,
+            var parameters = new Dictionary<string, string>();
+            if (!string.IsNullOrEmpty(user))
+            {
+                parameters.Add("user", user);
+            }
+            return FIDO2AuthenticationRequest(parameters, transactionid, assertionResponse, origin, context,
                 requestPersistentCookie, out issuedCookie);
         }
 

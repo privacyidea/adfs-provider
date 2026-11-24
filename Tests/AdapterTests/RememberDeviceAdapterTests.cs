@@ -342,7 +342,11 @@ namespace Tests.AdapterTests
             Assert.AreEqual(0, claims.Length);
             Assert.AreEqual("1", ctx.Data["authSuccess"]);
             StringAssert.Contains(((IAdapterPresentationForm)result).GetFormHtml(1033), "fido-series:1");
-            StringAssert.Contains(SingleCheckRequestBody(), "request_persistent_cookie=1");
+            string body = SingleCheckRequestBody();
+            StringAssert.Contains(body, "request_persistent_cookie=1");
+            // The user who signs in is named, so a 3.14 server rejects a passkey of another user before it issues a
+            // cookie for that user.
+            StringAssert.Contains(body, "user=alice");
         }
 
         [TestMethod]

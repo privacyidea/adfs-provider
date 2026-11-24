@@ -26,6 +26,30 @@ namespace Tests.Fixtures
             ""result"": {""authentication"": ""CHALLENGE"", ""status"": true, ""value"": false}
         }";
 
+        /// A user with push tokens on two phones: one transaction with a poll challenge for each.
+        public const string PushChallengeTwoPhones = @"{
+            ""detail"": {
+                ""client_mode"": ""poll"",
+                ""message"": ""Please confirm the authentication on your mobile device!"",
+                ""multi_challenge"": [{
+                    ""client_mode"": ""poll"",
+                    ""message"": ""Please confirm the authentication on your mobile device!"",
+                    ""serial"": ""PIPU0001F75E"",
+                    ""transaction_id"": ""03295577291276216161"",
+                    ""type"": ""push""
+                }, {
+                    ""client_mode"": ""poll"",
+                    ""message"": ""Please confirm the authentication on your mobile device!"",
+                    ""serial"": ""PIPU0002AA3E"",
+                    ""transaction_id"": ""03295577291276216161"",
+                    ""type"": ""push""
+                }],
+                ""preferred_client_mode"": ""poll"",
+                ""transaction_id"": ""03295577291276216161""
+            },
+            ""result"": {""authentication"": ""CHALLENGE"", ""status"": true, ""value"": false}
+        }";
+
         /// push_code_to_phone challenge — type=push but client_mode=interactive: the smartphone shows a
         /// short code after the user confirms, which the user types into the OTP input. It can never be
         /// answered by polling, so the client must NOT offer the push-poll option for it.

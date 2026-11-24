@@ -318,6 +318,28 @@ namespace Tests.AdapterTests
         }
 
         [TestMethod]
+        [DataRow(PushFixtures.PollDeclined)]
+        [DataRow(PushFixtures.PollCancelled)]
+        public void PushRefusedOnOneOfTwoPhones_KeepsChecking(string pollBody)
+        {
+            // The server reports "declined" as soon as one challenge of the transaction is refused, also while the
+            // second phone can still confirm (checked on a privacyIDEA dev server). So the page must keep checking.
+            StubPoll(pollBody);
+            var adapter = NewAdapter();
+            IAdapterPresentation result = adapter.TryEndAuthentication(
+                new FakeAuthContext(PushContext(PushFixtures.PushChallengeTwoPhones)),
+                new FakeProofData(new Dictionary<string, object> { ["formResult"] = "", ["mode"] = "push" }), null,
+                out Claim[] claims);
+
+            Assert.AreEqual(0, claims.Length);
+            var form = (IAdapterPresentationForm)result;
+            Assert.AreEqual("The login request was declined on one of your devices. You can still confirm it on another device.",
+                GetProperty(form, "ErrorMessage"));
+            Assert.AreEqual("", GetProperty(form, "PushPollState"), "The page must keep checking.");
+            StringAssert.Contains(form.GetFormHtml(English), "data-push-state=\"\"");
+        }
+
+        [TestMethod]
         public void RegistrationCancelledOnTheDevice_SaysSo()
         {
             // Poll-mode enrollment (smartphone or push registration): the page carries the QR image.

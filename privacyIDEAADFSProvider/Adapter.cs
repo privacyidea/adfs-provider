@@ -403,8 +403,11 @@ namespace privacyIDEAADFSProvider
                 }
                 else
                 {
-                    response = _privacyIDEA.ValidateCheckPasskey(passkeyTransactionid, fr.PasskeySignResponse, fr.Origin, context,
-                        wantRemember, out issuedCookie);
+                    // Name the user, so that a privacyIDEA 3.14 server rejects a passkey of another user before it
+                    // issues a remember-device cookie for that user. Older servers ignore the name, so the user
+                    // check after the response stays.
+                    response = _privacyIDEA.ValidateCheckPasskey(user, passkeyTransactionid, fr.PasskeySignResponse, fr.Origin,
+                        context, wantRemember, out issuedCookie);
                 }
             }
             // Passkey Registration (enroll_via_multichallenge)
@@ -439,13 +442,25 @@ namespace privacyIDEAADFSProvider
                 }
                 else if (pollStatus == PIPollStatus.Declined || pollStatus == PIPollStatus.Cancelled)
                 {
-                    // The user refused the push on the device. Another check cannot succeed, so the page stops
-                    // checking and says why. The other login options stay available.
-                    Log("Push " + pollStatus + " on the device for transaction " + transactionid + ".");
-                    form.PushPollState = "refused";
-                    form.SetError(enrollment ? Texts.RegistrationCancelled
-                        : pollStatus == PIPollStatus.Declined ? Texts.PushDeclined
-                        : Texts.PushCancelled);
+                    // The server reports a refusal as soon as one challenge of the transaction is refused, also
+                    // while the push challenge of a second phone is still open, and that phone can still finish
+                    // the login. So stop only when the transaction has a single challenge that waits for a phone.
+                    int pollChallenges = previousResponse?.Challenges.Count(c => c.ClientMode == PIClientMode.Poll) ?? 0;
+                    Log("Push " + pollStatus + " on a device for transaction " + transactionid + " (" + pollChallenges +
+                        " poll challenge(s)).");
+                    if (pollChallenges > 1)
+                    {
+                        form.SetError(Texts.PushRefusedOnOneDevice);
+                    }
+                    else
+                    {
+                        // Another check cannot succeed, so the page stops checking and says why. The other login
+                        // options stay available.
+                        form.PushPollState = "refused";
+                        form.SetError(enrollment ? Texts.RegistrationCancelled
+                            : pollStatus == PIPollStatus.Declined ? Texts.PushDeclined
+                            : Texts.PushCancelled);
+                    }
                 }
                 else
                 {
