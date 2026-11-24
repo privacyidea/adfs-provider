@@ -1,5 +1,6 @@
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using PrivacyIDEAADFSProvider.PrivacyIDEA_Client;
 using Tests.Fixtures;
 using WireMock.RequestBuilders;
 using WireMock.ResponseBuilders;
@@ -61,6 +62,33 @@ namespace Tests.IntegrationTests
 
             var pi = TestHelpers.PIPointedAt(_server);
             Assert.IsTrue(pi.PollTransaction("tx-poll-1"));
+        }
+
+        [TestMethod]
+        [DataRow(PushFixtures.PollAccepted, PIPollStatus.Accept)]
+        [DataRow(PushFixtures.PollPending, PIPollStatus.Pending)]
+        [DataRow(PushFixtures.PollDeclined, PIPollStatus.Declined)]
+        [DataRow(PushFixtures.PollCancelled, PIPollStatus.Cancelled)]
+        [DataRow(PushFixtures.PollPendingNoDetail, PIPollStatus.Pending)]
+        public void PollTransactionStatus_ReadsChallengeStatus(string body, PIPollStatus expected)
+        {
+            _server.Given(Request.Create().WithPath("/validate/polltransaction").UsingGet())
+                .RespondWith(Response.Create().WithStatusCode(200).WithBody(body));
+
+            var pi = TestHelpers.PIPointedAt(_server);
+            Assert.AreEqual(expected, pi.PollTransactionStatus("02659936574063359702"));
+            // The boolean method stays true only for an accepted push.
+            Assert.AreEqual(expected == PIPollStatus.Accept, pi.PollTransaction("02659936574063359702"));
+        }
+
+        [TestMethod]
+        public void PollTransactionStatus_MalformedResponse_IsPending()
+        {
+            _server.Given(Request.Create().WithPath("/validate/polltransaction").UsingGet())
+                .RespondWith(Response.Create().WithStatusCode(200).WithBody("{\"result\": {}}"));
+
+            var pi = TestHelpers.PIPointedAt(_server);
+            Assert.AreEqual(PIPollStatus.Pending, pi.PollTransactionStatus("02659936574063359702"));
         }
 
         [TestMethod]

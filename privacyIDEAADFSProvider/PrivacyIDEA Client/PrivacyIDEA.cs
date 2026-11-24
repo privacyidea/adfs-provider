@@ -82,12 +82,19 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// <summary>
         /// Check if the challenge for the given transaction id has been answered yet via /validate/polltransaction.
         /// </summary>
-        public bool PollTransaction(string transactionid, PIRequestContext context = null)
+        public bool PollTransaction(string transactionid, PIRequestContext context = null) =>
+            PollTransactionStatus(transactionid, context) == PIPollStatus.Accept;
+
+        /// <summary>
+        /// Like PollTransaction, but also tells a declined or cancelled challenge apart from one that is still
+        /// open. An empty transaction id, no response or a response in the wrong format count as Pending.
+        /// </summary>
+        public PIPollStatus PollTransactionStatus(string transactionid, PIRequestContext context = null)
         {
             if (string.IsNullOrEmpty(transactionid))
             {
                 Error("PollTransaction called with empty transaction id!");
-                return false;
+                return PIPollStatus.Pending;
             }
 
             // Poll is keyed by transaction_id alone; do not scope it to a realm (matches the pre-refactor shape).
@@ -98,16 +105,31 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             if (string.IsNullOrEmpty(response))
             {
                 Error("/validate/polltransaction did not respond!");
-                return false;
+                return PIPollStatus.Pending;
             }
             try
             {
-                return (bool)JObject.Parse(response)["result"]["value"];
+                JObject json = JObject.Parse(response);
+                if ((bool)json["result"]["value"])
+                {
+                    return PIPollStatus.Accept;
+                }
+                // detail.challenge_status exists from privacyIDEA 3.10 on ("declined"); 3.14 added "cancelled".
+                // Older servers send no detail, so the challenge counts as still open.
+                switch ((string)json["detail"]?["challenge_status"])
+                {
+                    case "declined":
+                        return PIPollStatus.Declined;
+                    case "cancelled":
+                        return PIPollStatus.Cancelled;
+                    default:
+                        return PIPollStatus.Pending;
+                }
             }
             catch (Exception)
             {
                 Error("/validate/polltransaction response has wrong format or does not contain 'value'.\n" + response);
-                return false;
+                return PIPollStatus.Pending;
             }
         }
 
@@ -384,6 +406,18 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
         /// the cookie to the owner of the passkey.
         /// </summary>
         public PIResponse ValidateCheckPasskey(string transactionid, string assertionResponse, string origin,
+            PIRequestContext context, bool requestPersistentCookie, out PICookie issuedCookie) =>
+            ValidateCheckPasskey(null, transactionid, assertionResponse, origin, context, requestPersistentCookie,
+                out issuedCookie);
+
+        /// <summary>
+        /// Like the overload above, but names the user who signs in. From privacyIDEA 3.14 on, the server then
+        /// rejects a passkey of another user before anything else, so it also issues no "remember device" cookie
+        /// for that other user. Up to 3.13 the server ignores the name and authenticates the owner of the passkey,
+        /// so the caller must still compare the user in the response. Without a user (null or empty), the request
+        /// is a usernameless passkey login.
+        /// </summary>
+        public PIResponse ValidateCheckPasskey(string user, string transactionid, string assertionResponse, string origin,
             PIRequestContext context, bool requestPersistentCookie, out PICookie issuedCookie)
         {
             issuedCookie = null;
@@ -393,7 +427,12 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
                     + ", assertionResponse=" + assertionResponse + ", origin=" + origin);
                 return null;
             }
-            return FIDO2AuthenticationRequest(new Dictionary<string, string>(), transactionid, assertionResponse, origin, context,
+            var parameters = new Dictionary<string, string>();
+            if (!string.IsNullOrEmpty(user))
+            {
+                parameters.Add("user", user);
+            }
+            return FIDO2AuthenticationRequest(parameters, transactionid, assertionResponse, origin, context,
                 requestPersistentCookie, out issuedCookie);
         }
 

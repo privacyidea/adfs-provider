@@ -35,9 +35,10 @@ DPAPI encryption is bound to the machine, so an encrypted value cannot be decryp
 | tls_version | If you want to pin the TLS version, set it to `tls12` or `tls13`. TLS 1.2 is the minimum; deprecated values (`tls11` and older) are rejected — the provider logs a warning to the event log and uses the system-default negotiation (TLS 1.2/1.3) instead. Other/unrecognized values are ignored and the TLS version stays at the system default. |
 | forward_headers | If you want to forward specific headers to the privacyIDEA server, you can set them here. If the header does not exist or has no value, it will be ignored. The headers names should be separated with ','. |
 | ~~preferred_token_type~~ | ~~Set the token type for which the UI should be first shown. This only matters if such token was triggered before. Possible values are `otp`, `push` or `webauthn`. The default is OTP mode.~~ **!!! This feature has been removed in v1.3.0 in favor of the preferred_client_mode policy in the privacyIDEA Server. !!!** |
-| auto_submit_otp_length | Set an OTP digit count for which to automatically submit the form |
+| auto_submit_otp_length | Set an OTP digit count for which to automatically submit the form. Off by default. A form that submits itself while the user types fails the accessibility criterion WCAG 3.2.2 (On Input) and can surprise users. In privacyIDEA the field often holds the token PIN followed by the OTP, so a fixed length can also submit too early. |
+| push_poll_interval | The number of seconds between two push checks of the login page, a whole number from 1 to 60. The default is 3. Each check sends one request to AD FS and one to privacyIDEA for every user who waits for a push, so a small value adds load. See [Push login](#push-login). |
 | disable_passkey | Disable the "Passkey Login" button |
-| otp_hint | The hint that is shown in the input field. The default is 'One-Time-Password' |
+| otp_hint | The hint that is shown in the input field. If the server sends no challenge message, the field also shows it as its label. The default is "One-Time-Password" in the language of the login page. A value that you set here is not translated. |
 | forward_client_ip | Set to `1` to forward the client IP to privacyIDEA (as the `client` parameter), so server-side policies can use it. See the security note below on `trusted_proxies`. |
 | forward_client_user_agent | Set to `1` to forward the client's `User-Agent` header to privacyIDEA. |
 | trusted_proxies | Comma-separated list of reverse-proxy IPs or CIDR ranges (e.g. `10.0.0.5, 192.168.10.0/24`) that are allowed to set `X-Forwarded-For`. When set, the forwarded client IP is only trusted if the request actually arrived from one of these proxies. **Strongly recommended whenever `forward_client_ip` is enabled** — see the note below. |
@@ -90,6 +91,20 @@ What this means:
 
 If you do not want a remembered device to skip the second factor in sign-ins that AD FS completes without user interaction, do not enable the feature for the users or realms concerned. The `remember_device` policy on the server controls who can use it.
 
+## Languages of the login page
+The login page is available in English, German and French. AD FS chooses the language of the sign-in page from the browser language and passes it to the provider. Every German and French regional variant uses the German or French texts. Any other language gets the English texts.
+
+The messages that the privacyIDEA server sends, for example the challenge text of a token, come from the server. The provider forwards the browser's `Accept-Language` header, so the server translates them. A value that you set in `otp_hint` is shown as it is.
+
+## Push login
+AD FS calls the provider only when the login page posts its form. So the page cannot wait for a push confirmation in the background: it posts itself on a timer, and each post asks privacyIDEA once whether the user confirmed the push.
+
+* The page checks every `push_poll_interval` seconds, 3 by default.
+* After each check, the keyboard focus goes back to the control that had it, so a keyboard user can continue to another login option.
+* The user can select **Stop automatic check**. The page then shows **I confirmed on my device**, which checks once per press.
+* The page stops the automatic checks by itself 5 minutes after the first check. An expired push never becomes confirmed, and an abandoned page would otherwise post forever.
+* If the user declines the push on the device, or cancels it, the page says so and stops checking. The other login options stay available. If the user has push tokens on more than one device, the page keeps checking after a decline, because the user can still confirm on another device. This needs privacyIDEA 3.10 or later for a declined push, and 3.14 or later for a cancelled push. With an older server the page keeps checking until the time limit.
+
 ## Client JavaScript requirements
 The login page uses JavaScript for the modern token types and for convenience features. One-time-password and push login do not need it.
 
@@ -99,7 +114,7 @@ The page falls back to the no-JavaScript form described below in two cases: when
 
 Works without JavaScript:
 * One-time-password entry. The user types the OTP and selects Submit. This covers HOTP, TOTP, and any challenge-response token whose answer is an OTP (email, SMS).
-* Push login, through a manual "I confirmed on my device" button. With JavaScript the page polls automatically. Without it, each button press polls the transaction once.
+* Push login, through a manual "I confirmed on my device" button. With JavaScript the page polls automatically (see [Push login](#push-login)). Without it, each button press polls the transaction once.
 * Switching between one-time password and push. When both are offered, the page shows a "Use push" or "Use one-time password" button, so the user can change token type without JavaScript. "Use push" is shown in every mode other than push (one-time password, WebAuthn, an enrollment), so no-JavaScript push works whenever a push token is triggered, not only when the server sets `preferred_client_mode=poll`.
 * The enrollment QR code shown by `enroll_via_multichallenge`. The user scans it, then enters the resulting OTP.
 

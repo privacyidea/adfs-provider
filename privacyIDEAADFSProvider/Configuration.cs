@@ -1,6 +1,7 @@
 using PrivacyIDEAADFSProvider.PrivacyIDEA_Client;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 
@@ -18,7 +19,8 @@ namespace PrivacyIDEAADFSProvider
         // source IP and bypass IP-based privacyIDEA policies). Empty preserves the legacy trust-XFF behavior.
         public List<string> TrustedProxies { get; set; } = new List<string>();
         public bool DebugLog { get; set; } = false;
-        public string OtpHint { get; set; } = "One-Time-Password";
+        // Empty means the translated default of the login page (Texts.OtpLabel).
+        public string OtpHint { get; set; } = "";
         public bool UseUPN { get; set; } = false;
         public bool TriggerChallenge { get; set; } = false;
         public bool SendEmptyPassword { get; set; } = false;
@@ -36,6 +38,10 @@ namespace PrivacyIDEAADFSProvider
         public bool EnableRememberDevice { get; set; } = false;
         public Dictionary<string, string> RealmMap { get; set; } = new Dictionary<string, string>();
         public int AutoSubmitLength { get; set; } = 0; // 0 indicates that auto-submit is disabled
+        // Seconds between two push checks of the login page (push_poll_interval). 0 means the default of the
+        // form (AdapterPresentationForm.DefaultPushPollInterval).
+        public int PushPollInterval { get; set; } = 0;
+        public const int MaxPushPollInterval = 60;
         public bool DisablePasskey { get; set; } = false;
         // Where Adapter.LogImpl appends when DebugLog is on. Default keeps backward compat with the previous hardcoded path.
         public string LogPath { get; set; } = @"C:\PrivacyIDEA-ADFS log.txt";
@@ -94,7 +100,7 @@ namespace PrivacyIDEAADFSProvider
             // encrypted-at-rest. Returns "" when unset.
             ApiKey = registryReader.ReadSecret("api_key");
 
-            OtpHint = Get("otp_hint", "One-Time-Password");
+            OtpHint = Get("otp_hint");
             UseUPN = GetBool("use_upn");
             EnrollmentEnabled = GetBool("enable_enrollment");
             TriggerChallenge = GetBool("trigger_challenges");
@@ -159,6 +165,24 @@ namespace PrivacyIDEAADFSProvider
             if (int.TryParse(Get("auto_submit_otp_length"), out int autoSubmitLength))
             {
                 AutoSubmitLength = autoSubmitLength;
+            }
+
+            // The login page stops the automatic checks 5 minutes after the first one, and it looks at that limit
+            // only when it loads. 60 seconds as the upper limit leaves at least 5 checks before the page stops.
+            string pushPollInterval = Get("push_poll_interval");
+            if (!string.IsNullOrEmpty(pushPollInterval))
+            {
+                if (int.TryParse(pushPollInterval.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out int seconds)
+                    && seconds >= 1 && seconds <= MaxPushPollInterval)
+                {
+                    PushPollInterval = seconds;
+                }
+                else
+                {
+                    eventLogFunction?.Invoke($"push_poll_interval '{pushPollInterval}' is not a whole number of seconds " +
+                        $"from 1 to {MaxPushPollInterval}. The login page uses the default of " +
+                        AdapterPresentationForm.DefaultPushPollInterval + " seconds.");
+                }
             }
 
             DisablePasskey = GetBool("disable_passkey");

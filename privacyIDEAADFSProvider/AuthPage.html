@@ -1,6 +1,10 @@
 ﻿<style>
+    /* The submit button of the AD FS default theme is #0067b8 with white text (contrast 5.8:1). Use the same
+       color, so the buttons match the theme and meet the 4.5:1 minimum. The secondary buttons use the lightest
+       gray that meets 4.5:1 with white text (#767676, 4.54:1). Error texts use the theme's "error" class, so
+       they follow a custom theme. */
     .pi-button {
-        background-color: rgb(38, 114, 236);
+        background-color: #0067b8;
         border: none;
         border-style: solid;
         border-width: 1px;
@@ -13,10 +17,11 @@
         padding: 8px 25px 12px 25px;
     }
     .pi-button-secondary {
-        background-color: rgb(120, 120, 120);
+        background-color: #767676;
     }
 </style>
-<div id="loginArea" class="pi-no-js" data-mode="#mode#" data-push-available="#pushAvailable#" data-disable-otp="#disableOTP#">
+<div id="loginArea" class="pi-no-js" data-mode="#mode#" data-push-available="#pushAvailable#" data-disable-otp="#disableOTP#"
+     data-push-state="#pushPollState#">
     <!-- Fallback for clients where the page script does not run to the end: scripting is disabled, or the
          engine cannot parse or run the script. The pi-no-js class on #loginArea switches these rules on. The
          script removes the class as the last step of its setup, so with a working script they never apply.
@@ -26,7 +31,9 @@
          copy-to-clipboard, skip enrollment) and reveal the enrollment block that the script would otherwise
          un-hide. Push has no auto-poll without JavaScript, so in push mode the OTP input is hidden and a manual
          "I confirmed on my device" button is shown: each click re-posts the form, which polls the transaction
-         once. The remember-device checkbox is not revealed: only JavaScript can store its cookie. -->
+         once. The button is not shown after the user declined the push on the device (data-push-state=refused),
+         because another check cannot succeed. The remember-device checkbox is not revealed: only JavaScript can
+         store its cookie. -->
     <style>
         #loginArea.pi-no-js .pi-js-only { display: none !important; }
         #loginArea.pi-no-js #enrollmentBlock[data-enrollment-mode="image"] .enrollment-image,
@@ -35,26 +42,24 @@
         #loginArea.pi-no-js .enrollment-link[href=""] { display: none !important; }
         #loginArea.pi-no-js[data-mode="push"] #otp,
         #loginArea.pi-no-js[data-mode="push"] #submitButton { display: none !important; }
-        #loginArea.pi-no-js[data-mode="push"] #pushConfirmButtonNoJs { display: inline-block !important; }
+        #loginArea.pi-no-js[data-mode="push"]:not([data-push-state="refused"]) #pushConfirmButton { display: inline-block !important; }
         /* Token-type switch without JavaScript: offer OTP while in push mode (unless OTP is disabled), and offer
            push in every other mode (OTP, WebAuthn, an enrollment type) when a push token is available. */
         #loginArea.pi-no-js[data-mode="push"]:not([data-disable-otp="1"]) #noJsSwitchToOtp { display: inline-block !important; }
         #loginArea.pi-no-js:not([data-mode="push"])[data-push-available="1"] #noJsSwitchToPush { display: inline-block !important; }
     </style>
     <noscript>
-        <p>JavaScript is disabled. Enter your one-time password and select Submit, or for push confirm on your
-           device and select the button. Use the token-type buttons to switch between one-time password and
-           push. Security key and passkey options need JavaScript and are hidden.</p>
+        <p>#txtNoScript#</p>
     </noscript>
     <!-- Enrollment Message -->
     <div id="enrollmentBlock" data-enrollment-mode="#enrollmentMode#">
         <!-- mode=legacy: full instructions (driven by deprecated enable_enrollment registry flag) -->
         <div class="enrollment-legacy" style="display:none">
-            <p style="color:red"><i>It appears your account has not previously setup Multi-Factor Authentication (MFA). <b>Please carefully follow the below instructions - they will only be shown once!</b></i></p>
+            <p class="error"><i>#txtLegacyIntro# <b>#txtLegacyWarning#</b></i></p>
             <br/>
             <ol>
                 <li>
-                    Download and/or install a TOTP compliant MFA app or Password Manager if you haven't already. Here are some recommendations:
+                    #txtLegacyStep1#
                     <ul>
                         <li>privacyIDEA Authenticator <a target="_blank" rel="noopener noreferrer" href="https://play.google.com/store/apps/details?id=it.netknights.piauthenticator&hl=en_US&gl=US">(Android)</a> <a target="_blank" rel="noopener noreferrer" href="https://apps.apple.com/us/app/privacyidea-authenticator/id1445401301">(iOS)</a></li>
                         <li>Google Authenticator <a target="_blank" rel="noopener noreferrer" href="https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2&hl=en_US&gl=US">(Android)</a> <a target="_blank" rel="noopener noreferrer" href="https://apps.apple.com/us/app/google-authenticator/id388497605">(iOS)</a></li>
@@ -62,18 +67,20 @@
                     </ul>
                 </li>
                 <li>
-                    Scan the following QR code or copy the text below into your MFA app of choice
-                    <img class="enrollment-img" src="#enrollmentImg#" width="325px" alt="Enrollment QR code">
-                    <input id="enrollmentValue" value="#enrollmentUrl#" class="text" size="30" readonly/>
-                    <button onclick="copyTOTP()" class="pi-js-only" style="background-color: #4CAF50; border: none; color: white; padding: 8px 10px; text-align: center; text-decoration: none; display: inline-block;">Copy text</button>
+                    #txtLegacyStep2#
+                    <img class="enrollment-img" src="#enrollmentImg#" width="325px" alt="#txtEnrollmentQrAlt#">
+                    <input id="enrollmentValue" value="#enrollmentUrl#" class="text" size="30" readonly aria-label="#txtLegacyLinkLabel#"/>
+                    <!-- type=button: a <button> without a type inside a form would submit it. This one is outside the
+                         form, but the type keeps it safe if the markup moves. -->
+                    <button type="button" onclick="copyTOTP()" class="pi-button pi-js-only">#txtLegacyCopy#</button>
                 </li>
-                <li>Please paste the code generated by your application into the box below.</li>
+                <li>#txtLegacyStep3#</li>
             </ol>
         </div>
         <!-- mode=image: QR from server-driven enroll_via_multichallenge + optional fallback link -->
         <div class="enrollment-image" style="display:none">
-            <img class="enrollment-img" src="#enrollmentImg#" width="325px" alt="Enrollment QR code">
-            <a class="enrollment-link" href="#enrollmentLink#" target="_blank" rel="noopener noreferrer">Alternatively, click on this link to enroll the new token.</a>
+            <img class="enrollment-img" src="#enrollmentImg#" width="325px" alt="#txtEnrollmentQrAlt#">
+            <a class="enrollment-link" href="#enrollmentLink#" target="_blank" rel="noopener noreferrer">#txtEnrollmentLinkText#</a>
         </div>
     </div>
    
@@ -83,32 +90,40 @@
         <input id="context" type="hidden" name="Context" value="%Context%" />
         <!-- End inputs are required by the presentation framework. -->
 
-        <p id="pageIntroductionText" style="color:red">#ERROR#</p>
+        <p id="pageIntroductionText" class="error">#ERROR#</p>
+        <!-- Messages that the page script shows without a reload: a failed WebAuthn or passkey prompt, or the
+             stop of the automatic push check. role=status makes screen readers announce a new text. -->
+        <p id="clientMessage" role="status"></p>
         <br />
-        <label for="otp" class="block" aria-label="#MESSAGE#">#MESSAGE#</label>
+        <label for="otp" class="block">#otpLabel#</label>
         <input id="otp" name="otp" type="password" value="" class="text" placeholder="#OTPTEXT#" size="35" autocomplete="one-time-code" autofocus />
         <!-- The click handler only fills formResult. The browser then submits the form itself, because calling
              form.submit() from the click handler of a submit button can send the form twice in Internet Explorer. -->
-        <input id="submitButton" type="submit" name="Submit" value="#SUBMIT#" onclick="prepareSubmit()" />
-        <!-- No-JavaScript push: a manual poll button. Hidden by default (with JavaScript the page auto-polls);
-             the noscript rules reveal it only in push mode. It is placed after the normal submit button so
-             that stays the implicit submitter. type=submit re-posts the form, which polls the transaction once. -->
-        <input id="pushConfirmButtonNoJs" type="submit" name="Submit" value="#pushButtonLabel#" class="pi-button" style="display:none" />
+        <input id="submitButton" type="submit" name="Submit" value="#txtSubmit#" onclick="prepareSubmit()" />
+        <!-- Manual push check. Each press re-posts the form, which polls the transaction once. Without JavaScript
+             the fallback rules show it in push mode. With JavaScript the page checks on a timer and shows this
+             button after the user or the time limit stopped the timer. It is placed after the normal submit
+             button so that stays the implicit submitter. -->
+        <input id="pushConfirmButton" type="submit" name="Submit" value="#pushButtonLabel#" class="pi-button" style="display:none"
+               onclick="prepareSubmit()" />
+        <!-- Stops the automatic push check (JS-only). The page script shows it while the timer runs. -->
+        <input id="pushStopButton" type="button" value="#txtPushStop#" onclick="stopPushPolling()"
+               class="pi-button pi-button-secondary pi-js-only" style="display:none" />
         <!-- No-JavaScript token-type switch. The noscript rules reveal only the one that applies: "Use
              one-time password" in push mode, "Use push" in OTP mode when push is available. Each posts
              noJsModeSwitch, which the adapter treats as a mode change and re-renders the form. A <button>
              keeps the posted value ("otp"/"push") separate from the visible label, and type=submit needs
              no script. Placed after the normal submit so that stays the implicit submitter. -->
         <button id="noJsSwitchToOtp" type="submit" name="noJsModeSwitch" value="otp"
-                class="pi-button pi-button-secondary" style="display:none">Use one-time password</button>
+                class="pi-button pi-button-secondary" style="display:none">#txtUseOtp#</button>
         <button id="noJsSwitchToPush" type="submit" name="noJsModeSwitch" value="push"
-                class="pi-button pi-button-secondary" style="display:none">Use push</button>
+                class="pi-button pi-button-secondary" style="display:none">#txtUsePush#</button>
 
         <!-- Remember this device. Hidden unless the server offers the feature (rememberDeviceEnabled=1);
              the page JS and the noscript rule un-hide it then. Posts a plain rememberDevice field (value 1
              when checked); the JS path also copies it into formResult. -->
         <div id="rememberDeviceDiv" data-enabled="#rememberDeviceEnabled#" style="display:none">
-            <label><input id="rememberDevice" name="rememberDevice" type="checkbox" value="1" #rememberDeviceChecked# /> Remember this device</label>
+            <label><input id="rememberDevice" name="rememberDevice" type="checkbox" value="1" #rememberDeviceChecked# /> #txtRememberDevice#</label>
         </div>
 
         <!-- Carriers for the device cookie, read by the JS below (no name, so they are not posted back). -->
@@ -128,38 +143,53 @@
         <input id="formResult" type="hidden" name="formResult" value="" />
         <input id="disableOTP" type="hidden" name="disableOTP" value="#disableOTP#" />
         <input id="enrollmentOptional" type="hidden" name="enrollmentOptional" value="#enrollmentOptional#" />
+        <!-- Push check state, posted back so that it survives the reload (see startPushPolling). -->
+        <input id="pushPollState" type="hidden" name="pushPollState" value="#pushPollState#" />
+        <input id="pushPollStarted" type="hidden" name="pushPollStarted" value="#pushPollStarted#" />
+        <input id="focusId" type="hidden" name="focusId" value="#focusId#" />
+
+        <!-- Carriers for the page script (no name, so they are not posted back): the push check interval and
+             the translated texts that the script shows. -->
+        <input id="pushPollInterval" type="hidden" value="#pushPollInterval#" />
+        <input id="txtPushStopped" type="hidden" value="#txtPushStopped#" />
+        <input id="txtWebAuthnFailed" type="hidden" value="#txtWebAuthnFailed#" />
+        <input id="txtPasskeyFailed" type="hidden" value="#txtPasskeyFailed#" />
+        <input id="txtPasskeyRegistrationFailed" type="hidden" value="#txtPasskeyRegistrationFailed#" />
 
         <!-- Extra inputs to persist some data -->
         <input id="message" type="hidden" name="message" value="#MESSAGE#" />
         <input id="enrollmentLink" type="hidden" name="enrollmentLink" value="#enrollmentLink#" />
         <input id="enrollmentImg" type="hidden" name="enrollmentImg" value="#enrollmentImg#" />
 
+        <!-- The buttons have no aria-label: the accessible name is the visible text, so speech input that says
+             the visible text reaches the button (WCAG 2.5.3). The group name "Other Login Options" gives the
+             short labels their context. -->
         <!-- Retry Passkey Registration (JS-only) -->
-        <input id="retryPasskeyRegistration" name="retryPasskeyRegistration" type="button" value="Retry Passkey Registration" onclick="registerPasskey()"
-               aria-label="Retry Passkey Registration" class="pi-button pi-js-only" />
+        <input id="retryPasskeyRegistration" name="retryPasskeyRegistration" type="button" value="#txtRetryPasskeyRegistration#"
+               onclick="registerPasskey()" class="pi-button pi-js-only" />
 
         <!-- Skip optional enroll-via-multichallenge (JS-only) -->
-        <input id="skipEnrollmentButton" name="skipEnrollmentButton" type="button" value="Not Now" onclick="skipEnrollment()"
-               aria-label="Skip enrollment" class="pi-button pi-button-secondary pi-js-only" />
+        <input id="skipEnrollmentButton" name="skipEnrollmentButton" type="button" value="#txtNotNow#" onclick="skipEnrollment()"
+               class="pi-button pi-button-secondary pi-js-only" />
 
         <!-- Alternate login options are all JS-driven (WebAuthn, Passkey, Push, mode switch); hide for no-JS. -->
-        <div id="alternateTokenDiv" class="groupMargin pi-js-only">
-            Other Login Options
+        <div id="alternateTokenDiv" class="groupMargin pi-js-only" role="group" aria-labelledby="alternateTokenLabel">
+            <span id="alternateTokenLabel">#txtOtherLoginOptions#</span>
             <br />
             <!-- Passkey -->
-            <input id="passkeyLoginButton" name="passkeyLoginButton" type="button" value="Passkey" onclick="requestPasskeyLogin()"
-                   aria-label="Passkey Login" class="pi-button" />
+            <input id="passkeyLoginButton" name="passkeyLoginButton" type="button" value="#txtPasskey#" onclick="requestPasskeyLogin()"
+                   class="pi-button" />
             <!-- Retry Passkey Login -->
-            <input id="retryPasskeyLogin" name="retryPasskeyLogin" type="button" value="Retry Passkey Login" onclick="passkeyAuthentication()"
-                   aria-label="Retry Passkey Login" class="pi-button" />
+            <input id="retryPasskeyLogin" name="retryPasskeyLogin" type="button" value="#txtRetryPasskeyLogin#" onclick="passkeyAuthentication()"
+                   class="pi-button" />
             <!-- WebAuthn -->
-            <input id="useWebAuthnButton" name="useWebAuthnButton" type="button" value="WebAuthn" onclick="doWebAuthn()" aria-label="Use WebAuthn"
+            <input id="useWebAuthnButton" name="useWebAuthnButton" type="button" value="#txtWebAuthn#" onclick="doWebAuthn()"
                    class="pi-button" />
             <!-- Push-->
-            <input id="usePushButton" name="usePushButton" type="button" value="Push" onclick="changeMode('push')" aria-label="Use Push Token"
+            <input id="usePushButton" name="usePushButton" type="button" value="#txtPush#" onclick="changeMode('push')"
                    class="pi-button" />
             <!-- OTP -->
-            <input id="useOTPButton" name="useOTPButton" type="button" value="OTP" onclick="changeMode('otp')" aria-label="Use One-Time-Password"
+            <input id="useOTPButton" name="useOTPButton" type="button" value="#txtOtp#" onclick="changeMode('otp')"
                    class="pi-button" />
         </div>
 
@@ -183,6 +213,21 @@
             // Security keys and passkeys need WebAuthn. Internet Explorer 11 does not have it.
             var webAuthnSupported = !!(window.PublicKeyCredential && navigator.credentials
                 && typeof navigator.credentials.get === "function" && typeof window.Promise === "function");
+
+            // Push check. AD FS calls the adapter only when the page posts the form, so the page posts itself on
+            // a timer, and each post asks the server once whether the push is confirmed. To keep this usable with
+            // a keyboard, speech input or a screen reader:
+            // - The interval is push_poll_interval (default 3 seconds), the same for every check.
+            // - After each reload, the focus goes back to the control that had it (focusId).
+            // - The user can stop the automatic check (pushStopButton). Then the "I confirmed on my device"
+            //   button checks once per press. The page also stops by itself after PUSH_POLL_LIMIT_MS, because an
+            //   expired challenge never becomes confirmed, and an abandoned page would post forever.
+            // - After the user declined or cancelled the push on the device, the adapter sets pushPollState to
+            //   "refused", and the page does not check again.
+            var PUSH_POLL_LIMIT_MS = 5 * 60 * 1000;
+            var pushTimer = null;
+            // The element that gets the focus when the setup is done. A push check sets it (see above).
+            var initialFocusId = value("focusId");
 
             var formResult = {
                 passkeyLoginRequested: false,
@@ -260,7 +305,12 @@
                 removeElement(enrollmentBlock);
             }
 
-            if (value("autoSubmit") === "1") {
+            // The page that only stores a remember-device cookie, or that finishes a recognised device, posts itself
+            // at once. The adapter keeps the mode and the challenge data of the login on it. The setup below must
+            // then start no prompt and no push check: a WebAuthn or passkey prompt would open again, and a push
+            // check could send the form a second time.
+            var autoSubmitting = value("autoSubmit") === "1";
+            if (autoSubmitting) {
                 submitForm();
             }
 
@@ -281,7 +331,7 @@
 
             if (value("passkeyChallenge") != "") {
                 disable("passkeyLoginButton");
-                if (webAuthnSupported) {
+                if (webAuthnSupported && !autoSubmitting) {
                     enable("retryPasskeyLogin");
                     passkeyAuthentication();
                 }
@@ -293,7 +343,7 @@
                 disable("submitButton");
                 disable("otp");
 
-                if (webAuthnSupported) {
+                if (webAuthnSupported && !autoSubmitting) {
                     enable("retryPasskeyRegistration");
                     registerPasskey();
                 }
@@ -316,23 +366,23 @@
             }
 
             switch (value("mode")) {
-                case MODE.PUSH: {
-                    // authCounter is 0 on the first render and increments each poll.
-                    var pollingIntervals = [3, 2, 2, 1];
+                case MODE.PUSH:
                     disable("otp");
                     disable("usePushButton");
                     disable("submitButton");
-                    var idx = Math.min(Number(value("authCounter")) || 0, pollingIntervals.length - 1);
-                    setTimeout(function () { submitForm(); }, pollingIntervals[idx] * 1000);
+                    if (!autoSubmitting) {
+                        startPushPolling();
+                    }
                     break;
-                }
                 case MODE.OTP:
                     disable("useOTPButton");
                     break;
                 case MODE.WEBAUTHN:
                     disable("otp");
                     disable("submitButton");
-                    doWebAuthn();
+                    if (!autoSubmitting) {
+                        doWebAuthn();
+                    }
                     break;
             }
 
@@ -344,6 +394,108 @@
             var loginAreaElement = document.getElementById("loginArea");
             if (loginAreaElement) {
                 loginAreaElement.className = loginAreaElement.className.replace(/(^|\s)pi-no-js(\s|$)/, " ");
+            }
+            // After the fallback rules are off, so that the visibility check sees the final page.
+            focusElement(initialFocusId);
+
+            function startPushPolling() {
+                var state = value("pushPollState");
+                if (state === "refused") {
+                    return;
+                }
+                if (state === "stopped") {
+                    showManualPushCheck();
+                    if (initialFocusId === "") {
+                        initialFocusId = "pushConfirmButton";
+                    }
+                    return;
+                }
+                var now = new Date().getTime();
+                var started = parseInt(value("pushPollStarted"), 10);
+                if (!isFinite(started) || started <= 0 || started > now) {
+                    // The first check of this push, or the clock of the device changed.
+                    set("pushPollStarted", String(now));
+                } else if (now - started >= PUSH_POLL_LIMIT_MS) {
+                    stopPushPolling();
+                    initialFocusId = "pushConfirmButton";
+                    return;
+                }
+                var interval = parseInt(value("pushPollInterval"), 10);
+                if (!isFinite(interval) || interval < 1) {
+                    interval = 3;
+                }
+                enable("pushStopButton");
+                pushTimer = setTimeout(function () {
+                    pushTimer = null;
+                    prepareSubmit();
+                    set("focusId", focusedElementId());
+                    sendForm();
+                }, interval * 1000);
+            }
+
+            // Called by the "Stop automatic check" button and by the time limit.
+            function stopPushPolling() {
+                cancelPushTimer();
+                set("pushPollState", "stopped");
+                showManualPushCheck();
+                var confirmButton = document.getElementById("pushConfirmButton");
+                var label = confirmButton ? confirmButton.value : "";
+                showClientMessage(value("txtPushStopped").replace("{0}", label), false);
+                // The stop button is hidden now. Move the focus to the button that checks the push.
+                focusElement("pushConfirmButton");
+            }
+
+            function showManualPushCheck() {
+                disable("pushStopButton");
+                enable("pushConfirmButton");
+            }
+
+            function cancelPushTimer() {
+                if (pushTimer !== null) {
+                    clearTimeout(pushTimer);
+                    pushTimer = null;
+                }
+            }
+
+            // The id of the focused control in the login area, or "" (only ids made of letters, which the
+            // adapter accepts back).
+            function focusedElementId() {
+                var active = document.activeElement;
+                var area = document.getElementById("loginArea");
+                if (active && active !== area && area && area.contains(active) && /^[A-Za-z]+$/.test(active.id || "")) {
+                    return active.id;
+                }
+                return "";
+            }
+
+            function focusElement(id) {
+                if (!id) {
+                    return;
+                }
+                var element = document.getElementById(id);
+                if (!element) {
+                    return;
+                }
+                for (var node = element; node && node.nodeType === 1; node = node.parentNode) {
+                    if (window.getComputedStyle(node).display === "none") {
+                        return;
+                    }
+                }
+                try {
+                    element.focus();
+                } catch (e) {
+                    // Internet Explorer throws when the element cannot take the focus.
+                }
+            }
+
+            // Shows a message without a reload. isError uses the "error" class of the AD FS theme.
+            function showClientMessage(text, isError) {
+                var element = document.getElementById("clientMessage");
+                if (!element) {
+                    return;
+                }
+                element.className = isError ? "error" : "";
+                element.textContent = text;
             }
 
             function doWebAuthn() {
@@ -383,9 +535,14 @@
                         var response = JSON.stringify(webauthnresponse);
                         formResult.webAuthnSignResponse = response;
                         submitForm();
+                    }, function (error) {
+                        // The user cancelled the prompt, the key is not registered, or the prompt timed out.
+                        console.log("WebAuthn authentication error: " + error);
+                        showClientMessage(value("txtWebAuthnFailed"), true);
                     });
                 } catch (err) {
                     console.log("Error while signing WebAuthnSignRequest: " + err);
+                    showClientMessage(value("txtWebAuthnFailed"), true);
                 }
             }
 
@@ -433,11 +590,19 @@
                     formResult.rememberDevice = rememberBox.checked;
                 }
                 set("formResult", JSON.stringify(formResult));
+                // Only the timed push check keeps the focus across the reload. It sets focusId after this call.
+                set("focusId", "");
             }
 
-            // Prepares and submits the form from script (timers, mode changes, WebAuthn and passkey results).
+            // Prepares and submits the form from script (mode changes, WebAuthn and passkey results, auto-submit).
             function submitForm() {
+                // The page unloads now. A push check that fires in between would send the form a second time.
+                cancelPushTimer();
                 prepareSubmit();
+                sendForm();
+            }
+
+            function sendForm() {
                 var form = document.forms["loginForm"];
                 if (typeof form.requestSubmit === "function") {
                     form.requestSubmit();
@@ -585,6 +750,7 @@
                     submitForm();
                 }, function (error) {
                     console.log("Passkey authentication error: " + error);
+                    showClientMessage(value("txtPasskeyFailed"), true);
                 });
             }
 
@@ -650,6 +816,7 @@
                 }, function (error) {
                     console.log("Error while registering passkey:");
                     console.log(error);
+                    showClientMessage(value("txtPasskeyRegistrationFailed"), true);
                     return null;
                 });
             }

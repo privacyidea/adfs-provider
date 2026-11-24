@@ -26,6 +26,30 @@ namespace Tests.Fixtures
             ""result"": {""authentication"": ""CHALLENGE"", ""status"": true, ""value"": false}
         }";
 
+        /// A user with push tokens on two phones: one transaction with a poll challenge for each.
+        public const string PushChallengeTwoPhones = @"{
+            ""detail"": {
+                ""client_mode"": ""poll"",
+                ""message"": ""Please confirm the authentication on your mobile device!"",
+                ""multi_challenge"": [{
+                    ""client_mode"": ""poll"",
+                    ""message"": ""Please confirm the authentication on your mobile device!"",
+                    ""serial"": ""PIPU0001F75E"",
+                    ""transaction_id"": ""03295577291276216161"",
+                    ""type"": ""push""
+                }, {
+                    ""client_mode"": ""poll"",
+                    ""message"": ""Please confirm the authentication on your mobile device!"",
+                    ""serial"": ""PIPU0002AA3E"",
+                    ""transaction_id"": ""03295577291276216161"",
+                    ""type"": ""push""
+                }],
+                ""preferred_client_mode"": ""poll"",
+                ""transaction_id"": ""03295577291276216161""
+            },
+            ""result"": {""authentication"": ""CHALLENGE"", ""status"": true, ""value"": false}
+        }";
+
         /// push_code_to_phone challenge — type=push but client_mode=interactive: the smartphone shows a
         /// short code after the user confirms, which the user types into the OTP input. It can never be
         /// answered by polling, so the client must NOT offer the push-poll option for it.
@@ -60,6 +84,23 @@ namespace Tests.Fixtures
         public const string PollAccepted = @"{
             ""detail"": {""challenge_status"": ""accept""},
             ""result"": {""status"": true, ""value"": true}
+        }";
+
+        /// /validate/polltransaction response after the user selected "not me" on the device (3.10 and later).
+        public const string PollDeclined = @"{
+            ""detail"": {""challenge_status"": ""declined""},
+            ""result"": {""status"": true, ""value"": false}
+        }";
+
+        /// /validate/polltransaction response after the user aborted the push on the device (3.14 and later).
+        public const string PollCancelled = @"{
+            ""detail"": {""challenge_status"": ""cancelled""},
+            ""result"": {""status"": true, ""value"": false}
+        }";
+
+        /// /validate/polltransaction response of a server older than 3.10: no detail.challenge_status.
+        public const string PollPendingNoDetail = @"{
+            ""result"": {""status"": true, ""value"": false}
         }";
 
         /// Final /validate/check ACCEPT after a confirmed push (empty pass + transaction id).
