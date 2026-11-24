@@ -820,10 +820,16 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             }
         }
 
+        // Header names whose values are secrets and must never reach the debug log: the service JWT
+        // (Authorization), the remember-device API key (X-API-Key), and a presented remember-device cookie
+        // (Cookie). Compared case-insensitively.
+        private static readonly HashSet<string> s_maskedLogHeaders =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Authorization", "X-API-Key", "Cookie" };
+
         /// <summary>
-        /// Same shape as the old HttpRequestMessage.Headers.ToString(), but redacts Authorization so the JWT
-        /// doesn't end up in the debug log (HttpClient kept Authorization on DefaultRequestHeaders, which the
-        /// per-request log line did not cover — preserve that masking behavior).
+        /// Same shape as the old HttpRequestMessage.Headers.ToString(), but redacts secret headers so they do
+        /// not end up in the debug log. The deny-set covers the service JWT (Authorization), the remember-device
+        /// API key (X-API-Key), and a presented remember-device cookie (Cookie).
         /// </summary>
         private static string FormatHeadersForLog(WebHeaderCollection headers)
         {
@@ -831,7 +837,7 @@ namespace PrivacyIDEAADFSProvider.PrivacyIDEA_Client
             foreach (string key in headers)
             {
                 sb.Append(key).Append(": ");
-                sb.Append(key.Equals("Authorization", StringComparison.OrdinalIgnoreCase) ? "***" : headers[key]);
+                sb.Append(s_maskedLogHeaders.Contains(key) ? "***" : headers[key]);
                 sb.Append("\r\n");
             }
             return sb.ToString();

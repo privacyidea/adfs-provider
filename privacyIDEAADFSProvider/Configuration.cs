@@ -78,8 +78,9 @@ namespace PrivacyIDEAADFSProvider
                 // alerted on and audited. Without this, an estate could run with TLS verification off and
                 // leave no trace — which defeats any "transport security is enforced" control.
                 eventLogFunction?.Invoke("SSL/TLS certificate validation is DISABLED (disable_ssl=1). The connection " +
-                    "to the privacyIDEA server is NOT authenticated and is vulnerable to interception. This must not " +
-                    "be used in production — remove the disable_ssl setting to restore certificate verification.");
+                    "to the privacyIDEA server is NOT authenticated and is open to interception. Secrets sent to the " +
+                    "server, including the service account password and the api_key, cross this unverified channel. " +
+                    "Do not use disable_ssl in production. Remove the disable_ssl setting to restore certificate verification.");
             }
             Realm = Get("realm");
 
